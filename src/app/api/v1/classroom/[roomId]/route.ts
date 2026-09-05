@@ -14,6 +14,14 @@ export async function GET(
 
     const { searchParams } = new URL(req.url);
     const requesterId = searchParams.get('requesterId');
+    const requesterName = searchParams.get('requesterName') || 'Participant';
+    const requesterRole = (searchParams.get('requesterRole') as any) || 'user';
+
+    // Edge Self-Healing: if participant is known by client but missing in this worker isolate, auto-register
+    if (requesterId && !room.participants[requesterId]) {
+      ClassroomRoomManager.joinRoom(roomId, requesterName, requesterRole, requesterId);
+    }
+
     const requester = requesterId ? room.participants[requesterId] : null;
     const isAdmin = requester?.role === 'admin';
 

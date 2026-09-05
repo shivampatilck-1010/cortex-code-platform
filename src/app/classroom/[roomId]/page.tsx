@@ -83,19 +83,28 @@ export default function ClassroomLivePage() {
       setParticipantId(savedId);
       setParticipantName(savedName);
       setParticipantRole(savedRole);
-      fetchRoomState(savedId);
+      fetchRoomState(savedId, savedName, savedRole);
     } else {
       setIsJoinNeeded(true);
       setIsLoading(false);
+      fetchRoomState();
     }
   }, [roomId]);
 
   // 2. Fetch Room State
-  const fetchRoomState = async (pId?: string) => {
+  const fetchRoomState = async (pId?: string, pName?: string, pRole?: ClassroomRole) => {
     try {
       const activeId = pId || participantId;
-      const pidQuery = activeId ? `?requesterId=${activeId}` : '';
-      const res = await fetch(`/api/v1/classroom/${roomId}${pidQuery}`);
+      const activeName = pName || participantName;
+      const activeRole = pRole || participantRole;
+
+      const queryParams = new URLSearchParams();
+      if (activeId) queryParams.set('requesterId', activeId);
+      if (activeName) queryParams.set('requesterName', activeName);
+      if (activeRole) queryParams.set('requesterRole', activeRole);
+      const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+      const res = await fetch(`/api/v1/classroom/${roomId}${queryStr}`);
       const data = await res.json();
 
       if (!res.ok || !data.success) {
@@ -141,6 +150,9 @@ export default function ClassroomLivePage() {
 
       setError(null);
     } catch (err: any) {
+      if (!participantId && !pId) {
+        setIsJoinNeeded(true);
+      }
       setError(err?.message || 'Error loading classroom');
     } finally {
       setIsLoading(false);
@@ -603,6 +615,8 @@ export default function ClassroomLivePage() {
   const handleLeaveClassroom = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(`cortex_participant_${roomId}`);
+      localStorage.removeItem(`cortex_name_${roomId}`);
+      localStorage.removeItem(`cortex_role_${roomId}`);
     }
     router.push('/classroom');
   };
@@ -613,25 +627,53 @@ export default function ClassroomLivePage() {
         <ClassroomLobbyModal
           isOpen={true}
           defaultRoomId={roomId}
-          onCreateRoom={async () => {}}
-          onJoinRoom={async (rid, name) => {
+          onClose={() => {
+            router.push('/classroom');
+          }}
+          onCreateRoom={async (adminName: string) => {
             const res = await fetch('/api/v1/classroom', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'join', roomId: rid, name }),
+              body: JSON.stringify({ action: 'create', name: adminName }),
             });
             const data = await res.json();
-            if (!res.ok || !data.success) throw new Error(data.error);
+            if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create classroom');
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`cortex_participant_${data.roomId}`, data.participantId);
+              localStorage.setItem(`cortex_name_${data.roomId}`, data.participantName);
+              localStorage.setItem(`cortex_role_${data.roomId}`, data.role);
+            }
+            router.push(`/classroom/${data.roomId}`);
+            return data;
+          }}
+          onEnterRoom={(newRoomId) => {
+            router.push(`/classroom/${newRoomId}`);
+          }}
+          onJoinRoom={async (rid, name) => {
+            const targetId = rid.toUpperCase().trim() || roomId;
+            const res = await fetch('/api/v1/classroom', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'join', roomId: targetId, name }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Failed to join classroom');
 
-            localStorage.setItem(`cortex_participant_${data.roomId}`, data.participantId);
-            localStorage.setItem(`cortex_name_${data.roomId}`, data.participantName);
-            localStorage.setItem(`cortex_role_${data.roomId}`, data.role);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`cortex_participant_${data.roomId}`, data.participantId);
+              localStorage.setItem(`cortex_name_${data.roomId}`, data.participantName);
+              localStorage.setItem(`cortex_role_${data.roomId}`, data.role);
+            }
 
             setParticipantId(data.participantId);
             setParticipantName(data.participantName);
             setParticipantRole(data.role);
             setIsJoinNeeded(false);
-            fetchRoomState(data.participantId);
+            if (targetId !== roomId) {
+              router.push(`/classroom/${targetId}`);
+            } else {
+              fetchRoomState(data.participantId, data.participantName, data.role);
+            }
           }}
         />
       </div>
@@ -771,7 +813,7 @@ export default function ClassroomLivePage() {
       </header>
 
       {/* 2. Error Notice if any */}
-      {error && (
+      {error && !isJoinNeeded && (
         <div className="bg-rose-950/60 border-b border-rose-800/60 p-2 text-center text-xs text-rose-300 font-medium flex items-center justify-center space-x-2">
           <AlertTriangle className="w-4 h-4 text-rose-400" />
           <span>{error}</span>

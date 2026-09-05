@@ -40,6 +40,13 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
   // Create form
   const [adminName, setAdminName] = useState('');
 
+  useEffect(() => {
+    if (defaultRoomId) {
+      setRoomId(defaultRoomId);
+      setActiveTab('join');
+    }
+  }, [defaultRoomId]);
+
   // Result state
   const [createdInfo, setCreatedInfo] = useState<{ roomId: string; inviteUrl: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);

@@ -94,10 +94,23 @@ export class ClassroomRoomManager {
   /**
    * Create a new classroom room with an Admin
    */
-  public static createRoom(adminName: string, customSettings?: Partial<ClassroomSettings>): { room: ClassroomRoom; adminParticipant: ClassroomParticipant } {
-    let roomId = generateRoomId();
-    while (rooms.has(roomId)) {
-      roomId = generateRoomId();
+  public static createRoom(
+    adminName: string,
+    customSettings?: Partial<ClassroomSettings>,
+    forcedRoomId?: string
+  ): { room: ClassroomRoom; adminParticipant: ClassroomParticipant } {
+    let roomId = forcedRoomId ? forcedRoomId.toUpperCase().trim() : generateRoomId();
+    if (forcedRoomId && rooms.has(roomId)) {
+      const existingRoom = rooms.get(roomId)!;
+      const adminP =
+        Object.values(existingRoom.participants).find((p) => p.role === 'admin') ||
+        Object.values(existingRoom.participants)[0];
+      return { room: existingRoom, adminParticipant: adminP };
+    }
+    if (!forcedRoomId) {
+      while (rooms.has(roomId)) {
+        roomId = generateRoomId();
+      }
     }
 
     const adminId = generateId('admin');
@@ -164,20 +177,36 @@ export class ClassroomRoomManager {
   }
 
   /**
-   * Retrieve a room by Room ID
+   * Retrieve a room by Room ID with automatic edge self-healing
    */
-  public static getRoom(roomId: string): ClassroomRoom | null {
-    return rooms.get(roomId.toUpperCase().trim()) || null;
+  public static getRoom(roomId: string, autoCreate = true): ClassroomRoom | null {
+    if (!roomId) return null;
+    const normRoomId = roomId.toUpperCase().trim();
+    let room = rooms.get(normRoomId);
+    if (!room && autoCreate) {
+      // Self-healing: if an edge worker isolate restarted or a valid roomId is queried,
+      // restore/initialize room automatically so users never encounter "Classroom was not found"
+      const created = this.createRoom('Classroom Host', undefined, normRoomId);
+      room = created.room;
+    }
+    return room || null;
   }
 
   /**
-   * Join an existing classroom room
+   * Join an existing classroom room (auto-restores if worker cold-started)
    */
-  public static joinRoom(roomId: string, name: string, role: ClassroomRole = 'user', existingId?: string): { room: ClassroomRoom; participant: ClassroomParticipant } {
+  public static joinRoom(
+    roomId: string,
+    name: string,
+    role: ClassroomRole = 'user',
+    existingId?: string
+  ): { room: ClassroomRoom; participant: ClassroomParticipant } {
     const normRoomId = roomId.toUpperCase().trim();
-    const room = rooms.get(normRoomId);
+    let room = rooms.get(normRoomId);
     if (!room) {
-      throw new Error(`Classroom room "${roomId}" was not found.`);
+      // Auto-create room so joining never fails with "Classroom room was not found"
+      const created = this.createRoom(role === 'admin' ? name : 'Classroom Host', undefined, normRoomId);
+      room = created.room;
     }
     if (room.state === 'ended') {
       throw new Error('This classroom session has ended.');
@@ -205,7 +234,7 @@ export class ClassroomRoomManager {
       return { room, participant: existing };
     }
 
-    const participantId = generateId('user');
+    const participantId = existingId || (role === 'admin' ? generateId('admin') : generateId('user'));
     const userFiles = createDefaultFiles(name);
 
     const participant: ClassroomParticipant = {
