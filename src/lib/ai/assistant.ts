@@ -166,6 +166,21 @@ export function analyzeAndFixErrorOffline(
       explanation = `'${varName}' is a Python standard library module that must be explicitly imported with 'import ${varName}' before use.`;
       inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' is referenced before import. Add 'import ${varName}' at the top of the file.`;
       fixedLines.unshift(`import ${varName}`);
+    } else if (['sqrt', 'isqrt', 'floor', 'ceil', 'sin', 'cos', 'tan', 'gcd', 'factorial', 'pi', 'e', 'log', 'exp'].includes(varName)) {
+      cause = `Missing import for math function '${varName}'`;
+      explanation = `'${varName}' belongs to the Python 'math' module. Import with 'from math import ${varName}' or 'import math'.`;
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' requires 'from math import ${varName}'.`;
+      fixedLines.unshift(`from math import ${varName}`);
+    } else if (['randint', 'choice', 'shuffle', 'randrange', 'sample'].includes(varName)) {
+      cause = `Missing import for random function '${varName}'`;
+      explanation = `'${varName}' belongs to the Python 'random' module. Import with 'from random import ${varName}'.`;
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' requires 'from random import ${varName}'.`;
+      fixedLines.unshift(`from random import ${varName}`);
+    } else if (['sleep'].includes(varName)) {
+      cause = `Missing import for time function '${varName}'`;
+      explanation = `'${varName}' belongs to the Python 'time' module. Import with 'from time import ${varName}'.`;
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' requires 'from time import ${varName}'.`;
+      fixedLines.unshift(`from time import ${varName}`);
     } else {
       cause = `Undefined identifier '${varName}'`;
       explanation = `The identifier '${varName}' was referenced before being declared or initialized in the current scope.`;
@@ -193,11 +208,18 @@ export function analyzeAndFixErrorOffline(
       fixedLines.splice(targetLine - 1, 0, `let ${varName};`);
     }
   }
-  // 5. C/C++ undeclared identifier or missing header
-  else if (stderrLower.includes('was not declared in this scope') || stderrLower.includes('undeclared identifier')) {
-    // Extract exact identifier: error: 'en' was not declared in this scope
+  // 5. C/C++ undeclared identifier or missing header or member of std
+  else if (
+    stderrLower.includes('was not declared in this scope') ||
+    stderrLower.includes('undeclared identifier') ||
+    stderrLower.includes('is not a member of') ||
+    stderrLower.includes('no member named')
+  ) {
+    // Extract exact identifier: error: 'en' was not declared in this scope OR 'cout' is not a member of 'std'
     const undeclaredMatch =
       stderr.match(/error:\s*['’"`](\w+)['’"`]\s*was not declared/i) ||
+      stderr.match(/error:\s*['’"`](\w+)['’"`]\s*is not a member of/i) ||
+      stderr.match(/no member named\s*['’"`](\w+)['’"`]\s*in namespace/i) ||
       stderr.match(/use of undeclared identifier\s*['’"`](\w+)['’"`]/i) ||
       stderr.match(/['’"`](\w+)['’"`]\s*was not declared in this scope/i);
     const varName = undeclaredMatch ? undeclaredMatch[1] : '';
@@ -232,34 +254,49 @@ export function analyzeAndFixErrorOffline(
         }
       }
     }
-    // Case 5c: cout or cin really is undeclared (only if missing iostream or std namespace)
+    // Case 5c: cout, cin, cerr, endl missing iostream or std namespace
     else if (
-      (varName === 'cout' || varName === 'cin' || varName === 'endl') &&
-      (!code.includes('<iostream>') || (!code.includes('using namespace std;') && !code.includes('std::')))
+      (varName === 'cout' || varName === 'cin' || varName === 'cerr' || varName === 'endl') ||
+      (!code.includes('<iostream>') && (code.includes('cout') || code.includes('cin')))
     ) {
-      cause = 'Missing <iostream> or std:: namespace prefix';
-      explanation = 'cout and endl belong to the std namespace in <iostream>.';
-      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - 'cout'/'cin' not declared. Requires #include <iostream> and using namespace std;.`;
+      cause = 'Missing <iostream> header or std:: namespace prefix';
+      explanation = 'std::cout and std::endl require #include <iostream> and using namespace std;.';
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - 'cout' requires #include <iostream>.`;
       if (!code.includes('#include <iostream>')) {
         fixedLines.unshift('#include <iostream>');
       }
       if (!code.includes('using namespace std;') && !code.includes('std::cout')) {
-        fixedLines.splice(1, 0, 'using namespace std;');
+        const insertIdx = fixedLines.findIndex(l => l.includes('#include'));
+        fixedLines.splice(insertIdx !== -1 ? insertIdx + 1 : 0, 0, 'using namespace std;');
       }
     }
     // Case 5d: vector standard header missing
-    else if (varName === 'vector' && !code.includes('<vector>')) {
+    else if ((varName === 'vector' || code.includes('vector<')) && !code.includes('<vector>')) {
       cause = 'Missing <vector> standard header';
       explanation = 'std::vector requires #include <vector>.';
-      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - 'vector' was not declared. Requires #include <vector>.`;
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - 'vector' requires #include <vector>.`;
       fixedLines.unshift('#include <vector>');
     }
     // Case 5e: string standard header missing
     else if (varName === 'string' && !code.includes('<string>') && !code.includes('<iostream>')) {
       cause = 'Missing <string> standard header';
       explanation = 'std::string requires #include <string>.';
-      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - 'string' was not declared. Requires #include <string>.`;
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - 'string' requires #include <string>.`;
       fixedLines.unshift('#include <string>');
+    }
+    // Case 5f: cmath / math functions missing
+    else if (['sqrt', 'pow', 'abs', 'sin', 'cos', 'tan', 'floor', 'ceil'].includes(varName) && !code.includes('<cmath>')) {
+      cause = `Missing <cmath> standard header for '${varName}'`;
+      explanation = `'${varName}' requires #include <cmath>.`;
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' requires #include <cmath>.`;
+      fixedLines.unshift('#include <cmath>');
+    }
+    // Case 5g: algorithm functions missing
+    else if (['sort', 'reverse', 'max', 'min', 'find', 'accumulate'].includes(varName) && !code.includes('<algorithm>')) {
+      cause = `Missing <algorithm> standard header for '${varName}'`;
+      explanation = `'${varName}' requires #include <algorithm>.`;
+      inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' requires #include <algorithm>.`;
+      fixedLines.unshift('#include <algorithm>');
     }
     // Case 5f: general identifier typo or undeclared variable
     else if (varName) {
