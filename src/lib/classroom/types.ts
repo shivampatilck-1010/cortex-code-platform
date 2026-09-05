@@ -146,6 +146,7 @@ export type ClassroomEventType =
   | 'leave'
   | 'presence'
   | 'user_updated'
+  | 'code_update'
   | 'select_workspaces'
   | 'collaboration_request'
   | 'collaboration_response'

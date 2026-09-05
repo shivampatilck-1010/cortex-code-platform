@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { 
   Users, 
   Crown, 
@@ -44,6 +45,25 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (createdInfo) {
+      const fullUrl = createdInfo.inviteUrl?.startsWith('http')
+        ? createdInfo.inviteUrl
+        : `${typeof window !== 'undefined' ? window.location.origin : ''}/classroom/${createdInfo.roomId}`;
+      QRCode.toDataURL(fullUrl, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      })
+        .then((url) => setQrDataUrl(url))
+        .catch((err) => console.error('Failed to generate QR code', err));
+    }
+  }, [createdInfo]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -209,23 +229,22 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                 </div>
 
                 {showQR && (
-                  <div className="p-3 bg-white rounded-lg flex flex-col items-center justify-center mx-auto w-40 h-40 mt-2">
-                    {/* Clean SVG QR Placeholder */}
-                    <svg viewBox="0 0 100 100" className="w-full h-full">
-                      <rect width="100" height="100" fill="white" />
-                      <rect x="10" y="10" width="30" height="30" fill="black" />
-                      <rect x="15" y="15" width="20" height="20" fill="white" />
-                      <rect x="20" y="20" width="10" height="10" fill="black" />
-                      <rect x="60" y="10" width="30" height="30" fill="black" />
-                      <rect x="65" y="15" width="20" height="20" fill="white" />
-                      <rect x="70" y="20" width="10" height="10" fill="black" />
-                      <rect x="10" y="60" width="30" height="30" fill="black" />
-                      <rect x="15" y="65" width="20" height="20" fill="white" />
-                      <rect x="20" y="70" width="10" height="10" fill="black" />
-                      <rect x="50" y="50" width="10" height="10" fill="black" />
-                      <rect x="65" y="65" width="20" height="10" fill="black" />
-                      <rect x="75" y="80" width="15" height="10" fill="black" />
-                    </svg>
+                  <div className="p-4 bg-white rounded-xl flex flex-col items-center justify-center mx-auto w-56 mt-2 shadow-xl border border-gray-300 animate-in zoom-in-95">
+                    {qrDataUrl ? (
+                      <img
+                        src={qrDataUrl}
+                        alt="Scan QR code with Google Lens or camera to join classroom"
+                        className="w-48 h-48 object-contain rounded"
+                      />
+                    ) : (
+                      <div className="w-48 h-48 flex items-center justify-center text-xs text-gray-500 font-medium">
+                        Generating QR Code...
+                      </div>
+                    )}
+                    <div className="mt-2 text-center">
+                      <span className="text-xs font-bold text-gray-900 block">Scan to Join on Mobile</span>
+                      <span className="text-[10px] text-gray-500">Compatible with Google Lens &amp; Phone Camera</span>
+                    </div>
                   </div>
                 )}
               </div>

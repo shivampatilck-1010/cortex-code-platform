@@ -69,6 +69,7 @@ export default function ClassroomLivePage() {
   };
 
   const collabClientRef = useRef<CollaborationClient | null>(null);
+  const codeSaveTimersRef = useRef<{ [key: string]: any }>({});
 
   // 1. Restore participant from localStorage or prompt to join
   useEffect(() => {
@@ -169,9 +170,52 @@ export default function ClassroomLivePage() {
         break;
 
       case 'join':
-      case 'user_updated':
         fetchRoomState(participantId);
         break;
+
+      case 'code_update': {
+        const { participantId: updatedId, code, language } = event.payload || {};
+        if (updatedId && updatedId !== participantId) {
+          setRoom((prev) => {
+            if (!prev || !prev.participants[updatedId]) return prev;
+            return {
+              ...prev,
+              participants: {
+                ...prev.participants,
+                [updatedId]: {
+                  ...prev.participants[updatedId],
+                  ...(code !== undefined ? { activeCode: code } : {}),
+                  ...(language !== undefined ? { currentLanguage: language } : {}),
+                },
+              },
+            };
+          });
+        }
+        break;
+      }
+
+      case 'user_updated': {
+        const { participantId: updatedId, activeCode, currentLanguage, activeFileName, status } = event.payload || {};
+        if (updatedId && updatedId !== participantId) {
+          setRoom((prev) => {
+            if (!prev || !prev.participants[updatedId]) return prev;
+            return {
+              ...prev,
+              participants: {
+                ...prev.participants,
+                [updatedId]: {
+                  ...prev.participants[updatedId],
+                  ...(activeCode !== undefined ? { activeCode } : {}),
+                  ...(currentLanguage !== undefined ? { currentLanguage } : {}),
+                  ...(activeFileName !== undefined ? { activeFileName } : {}),
+                  ...(status !== undefined ? { status } : {}),
+                },
+              },
+            };
+          });
+        }
+        break;
+      }
 
       case 'presence':
         if (event.senderId !== participantId) {
@@ -261,8 +305,8 @@ export default function ClassroomLivePage() {
     }
   };
 
-  // Actions
-  const handleCodeChangeA = async (code: string) => {
+  // Actions with low-latency typing & debounced persistence
+  const handleCodeChangeA = (code: string) => {
     if (!slotAUserId) return;
     setRoom((prev) => {
       if (!prev || !prev.participants[slotAUserId]) return prev;
@@ -279,19 +323,32 @@ export default function ClassroomLivePage() {
     });
 
     if (slotAUserId === participantId) {
-      await fetch(`/api/v1/classroom/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_code',
-          participantId,
-          code,
-        }),
-      });
+      // 1. Ultra low-latency broadcast via WebSocket
+      collabClientRef.current?.sendCodeUpdate(code);
+
+      // 2. Debounce HTTP persistence write by 400ms to eliminate network congestion
+      if (codeSaveTimersRef.current['slotA']) {
+        clearTimeout(codeSaveTimersRef.current['slotA']);
+      }
+      codeSaveTimersRef.current['slotA'] = setTimeout(async () => {
+        try {
+          await fetch(`/api/v1/classroom/${roomId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update_code',
+              participantId,
+              code,
+            }),
+          });
+        } catch (e) {
+          console.error('Code save error', e);
+        }
+      }, 400);
     }
   };
 
-  const handleCodeChangeB = async (code: string) => {
+  const handleCodeChangeB = (code: string) => {
     if (!slotBUserId) return;
     setRoom((prev) => {
       if (!prev || !prev.participants[slotBUserId]) return prev;
@@ -308,15 +365,28 @@ export default function ClassroomLivePage() {
     });
 
     if (slotBUserId === participantId) {
-      await fetch(`/api/v1/classroom/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_code',
-          participantId,
-          code,
-        }),
-      });
+      // 1. Ultra low-latency broadcast via WebSocket
+      collabClientRef.current?.sendCodeUpdate(code);
+
+      // 2. Debounce HTTP persistence write by 400ms to eliminate network congestion
+      if (codeSaveTimersRef.current['slotB']) {
+        clearTimeout(codeSaveTimersRef.current['slotB']);
+      }
+      codeSaveTimersRef.current['slotB'] = setTimeout(async () => {
+        try {
+          await fetch(`/api/v1/classroom/${roomId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update_code',
+              participantId,
+              code,
+            }),
+          });
+        } catch (e) {
+          console.error('Code save error', e);
+        }
+      }, 400);
     }
   };
 

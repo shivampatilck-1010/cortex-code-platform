@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Play, 
   Lock, 
@@ -14,7 +14,10 @@ import {
   ShieldAlert, 
   Eye, 
   AlertCircle,
-  Users
+  Users,
+  Maximize2,
+  Minimize2,
+  GripVertical
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { ClassroomParticipant, ClassroomRole, CollaborationSession } from '@/lib/classroom/types';
@@ -60,6 +63,58 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
 
   const [copiedA, setCopiedA] = useState(false);
   const [copiedB, setCopiedB] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [splitPercent, setSplitPercent] = useState<number>(50);
+  const [isDragging, setIsDragging] = useState(false);
+  const [fullscreenSlot, setFullscreenSlot] = useState<'none' | 'slotA' | 'slotB'>('none');
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleTouchStart = () => {
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const rawPercent = ((e.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(Math.max(rawPercent, 15), 85);
+      setSplitPercent(clamped);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!containerRef.current || !e.touches[0]) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const rawPercent = ((e.touches[0].clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(Math.max(rawPercent, 15), 85);
+      setSplitPercent(clamped);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isDragging]);
 
   const handleRunA = async () => {
     if (!userA || isRunningA) return;
@@ -123,60 +178,116 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
   );
 
   return (
-    <div className="h-full w-full flex flex-col sm:flex-row overflow-hidden divide-y sm:divide-y-0 sm:divide-x divide-[#1f2026] bg-[#0c0d10]">
+    <div
+      ref={containerRef}
+      className={`h-full w-full flex flex-col sm:flex-row overflow-hidden bg-[#0c0d10] relative ${
+        isDragging ? 'select-none cursor-col-resize' : ''
+      }`}
+    >
       {/* ================= WORKSPACE A ================= */}
-      <WorkspaceColumn
-        slotLabel="Workspace A"
-        slotColor="cyan"
-        user={userA}
-        currentUserId={currentUserId}
-        currentUserRole={currentUserRole}
-        isSharedCollab={isSharedCollab}
-        activeSession={activeSession}
-        isRunning={isRunningA}
-        result={resultA}
-        copied={copiedA}
-        onRun={handleRunA}
-        onCodeChange={onCodeChangeA}
-        onLanguageChange={onLanguageChangeA}
-        onEndCollaboration={onEndCollaboration}
-        onRequestViewAccess={onRequestViewAccess}
-        onDownloadFile={onDownloadFile}
-        onCopyOutput={() => {
-          if (resultA?.stdout) {
-            navigator.clipboard.writeText(resultA.stdout);
-            setCopiedA(true);
-            setTimeout(() => setCopiedA(false), 1200);
-          }
+      <div
+        className={`h-full flex flex-col min-w-0 overflow-hidden transition-[width] duration-75 ${
+          fullscreenSlot === 'slotB' ? 'hidden' : 'flex'
+        }`}
+        style={{
+          width: fullscreenSlot === 'slotA' ? '100%' : `${splitPercent}%`,
+          flexShrink: 0,
         }}
-      />
+      >
+        <WorkspaceColumn
+          slotLabel="Workspace A"
+          slotColor="cyan"
+          user={userA}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          isSharedCollab={isSharedCollab}
+          activeSession={activeSession}
+          isRunning={isRunningA}
+          result={resultA}
+          copied={copiedA}
+          isFullscreen={fullscreenSlot === 'slotA'}
+          onToggleFullscreen={() => setFullscreenSlot((prev) => (prev === 'slotA' ? 'none' : 'slotA'))}
+          onRun={handleRunA}
+          onCodeChange={onCodeChangeA}
+          onLanguageChange={onLanguageChangeA}
+          onEndCollaboration={onEndCollaboration}
+          onRequestViewAccess={onRequestViewAccess}
+          onDownloadFile={onDownloadFile}
+          onCopyOutput={() => {
+            if (resultA?.stdout) {
+              navigator.clipboard.writeText(resultA.stdout);
+              setCopiedA(true);
+              setTimeout(() => setCopiedA(false), 1200);
+            }
+          }}
+        />
+      </div>
+
+      {/* ================= DRAGGABLE SLIDER BAR ================= */}
+      {fullscreenSlot === 'none' && (
+        <div
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          className={`relative z-20 flex-shrink-0 w-2.5 hover:w-3 group flex flex-col items-center justify-center cursor-col-resize transition-all select-none border-x ${
+            isDragging
+              ? 'bg-[#ff9100] border-[#ff9100] shadow-[0_0_12px_rgba(255,145,0,0.6)]'
+              : 'bg-[#15161d] hover:bg-[#ff9100]/30 border-[#232532] hover:border-[#ff9100]/50'
+          }`}
+          title="Drag to resize workspaces • Double click for 50/50"
+          onDoubleClick={() => setSplitPercent(50)}
+        >
+          {/* Grip Indicator */}
+          <div className="flex flex-col space-y-1 items-center justify-center pointer-events-none opacity-60 group-hover:opacity-100">
+            <span className="w-1 h-1 rounded-full bg-gray-400 group-hover:bg-[#ff9100]" />
+            <span className="w-1 h-1 rounded-full bg-gray-400 group-hover:bg-[#ff9100]" />
+            <span className="w-1 h-1 rounded-full bg-gray-400 group-hover:bg-[#ff9100]" />
+          </div>
+
+          {/* Quick Percent Tooltip on hover/drag */}
+          <div className="absolute top-2 z-30 px-1.5 py-0.5 rounded bg-[#101116] border border-[#2b2d3c] text-[10px] font-mono text-gray-300 opacity-0 group-hover:opacity-100 transition shadow pointer-events-none whitespace-nowrap">
+            {Math.round(splitPercent)}% : {Math.round(100 - splitPercent)}%
+          </div>
+        </div>
+      )}
 
       {/* ================= WORKSPACE B ================= */}
-      <WorkspaceColumn
-        slotLabel="Workspace B"
-        slotColor="purple"
-        user={userB}
-        currentUserId={currentUserId}
-        currentUserRole={currentUserRole}
-        isSharedCollab={isSharedCollab}
-        activeSession={activeSession}
-        isRunning={isRunningB}
-        result={resultB}
-        copied={copiedB}
-        onRun={handleRunB}
-        onCodeChange={onCodeChangeB}
-        onLanguageChange={onLanguageChangeB}
-        onEndCollaboration={onEndCollaboration}
-        onRequestViewAccess={onRequestViewAccess}
-        onDownloadFile={onDownloadFile}
-        onCopyOutput={() => {
-          if (resultB?.stdout) {
-            navigator.clipboard.writeText(resultB.stdout);
-            setCopiedB(true);
-            setTimeout(() => setCopiedB(false), 1200);
-          }
+      <div
+        className={`h-full flex flex-col min-w-0 overflow-hidden transition-[width] duration-75 ${
+          fullscreenSlot === 'slotA' ? 'hidden' : 'flex'
+        }`}
+        style={{
+          width: fullscreenSlot === 'slotB' ? '100%' : `${100 - splitPercent}%`,
+          flexShrink: 0,
         }}
-      />
+      >
+        <WorkspaceColumn
+          slotLabel="Workspace B"
+          slotColor="purple"
+          user={userB}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          isSharedCollab={isSharedCollab}
+          activeSession={activeSession}
+          isRunning={isRunningB}
+          result={resultB}
+          copied={copiedB}
+          isFullscreen={fullscreenSlot === 'slotB'}
+          onToggleFullscreen={() => setFullscreenSlot((prev) => (prev === 'slotB' ? 'none' : 'slotB'))}
+          onRun={handleRunB}
+          onCodeChange={onCodeChangeB}
+          onLanguageChange={onLanguageChangeB}
+          onEndCollaboration={onEndCollaboration}
+          onRequestViewAccess={onRequestViewAccess}
+          onDownloadFile={onDownloadFile}
+          onCopyOutput={() => {
+            if (resultB?.stdout) {
+              navigator.clipboard.writeText(resultB.stdout);
+              setCopiedB(true);
+              setTimeout(() => setCopiedB(false), 1200);
+            }
+          }}
+        />
+      </div>
     </div>
   );
 };
@@ -192,6 +303,8 @@ interface WorkspaceColumnProps {
   isRunning: boolean;
   result: ExecutionResult | null;
   copied: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
   onRun: () => void;
   onCodeChange?: (code: string) => void;
   onLanguageChange?: (lang: string) => void;
@@ -212,6 +325,8 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   isRunning,
   result,
   copied,
+  isFullscreen,
+  onToggleFullscreen,
   onRun,
   onCodeChange,
   onLanguageChange,
@@ -220,6 +335,18 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   onDownloadFile,
   onCopyOutput,
 }) => {
+  const editorRef = useRef<any>(null);
+
+  // Sync external changes into editor without disrupting local typing
+  useEffect(() => {
+    if (editorRef.current && user?.activeCode !== undefined) {
+      const currentVal = editorRef.current.getValue();
+      if (currentVal !== user.activeCode) {
+        editorRef.current.setValue(user.activeCode);
+      }
+    }
+  }, [user?.activeCode]);
+
   if (!user) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-500 bg-[#0c0d10] space-y-3">
@@ -263,9 +390,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
             className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
               user.online
                 ? user.status === 'coding'
-                  ? 'bg-emerald-400 animate-pulse'
-                  : 'bg-emerald-400'
-                : 'bg-gray-600'
+                : 'bg-emerald-400'
             }`}
           />
 
@@ -292,8 +417,8 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
           </div>
         </div>
 
-        {/* Right Header: Language, Files & Run */}
-        <div className="flex items-center space-x-2">
+        {/* Right Header: Language, Files, Fullscreen & Run */}
+        <div className="flex items-center space-x-1.5 sm:space-x-2">
           {/* Language Selector */}
           <select
             value={lang}
@@ -305,6 +430,31 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
               <option key={l.id} value={l.id}>{l.name}</option>
             ))}
           </select>
+
+          {/* Full Screen View Toggle */}
+          {onToggleFullscreen && (
+            <button
+              onClick={onToggleFullscreen}
+              className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition border ${
+                isFullscreen
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                  : 'bg-[#181920] hover:bg-[#252834] text-gray-400 hover:text-white border-[#2b2d38]'
+              }`}
+              title={isFullscreen ? 'Restore side-by-side split view' : `Expand ${slotLabel} to Full Screen`}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[10px] font-semibold hidden md:inline">Restore</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="text-[10px] hidden lg:inline">Full Screen</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* File Download (Own or Permitted) */}
           {user.files && user.files.length > 0 && (
@@ -360,8 +510,11 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
           <Editor
             height="100%"
             language={monacoLang}
-            value={user.activeCode}
+            defaultValue={user.activeCode}
             theme="vs-dark"
+            onMount={(editor) => {
+              editorRef.current = editor;
+            }}
             onChange={(v) => onCodeChange && onCodeChange(v || '')}
             options={{
               readOnly: !canEdit,
@@ -371,6 +524,12 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
               lineNumbers: 'on',
               scrollBeyondLastLine: false,
               automaticLayout: true,
+              cursorBlinking: 'smooth',
+              cursorSmoothCaretAnimation: 'on',
+              smoothScrolling: true,
+              renderLineHighlight: 'all',
+              wordWrap: 'on',
+              tabSize: 4,
             }}
           />
         ) : (

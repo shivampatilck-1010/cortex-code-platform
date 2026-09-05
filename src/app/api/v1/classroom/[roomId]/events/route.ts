@@ -54,7 +54,7 @@ export async function GET(
       server.addEventListener('message', (event: any) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'crdt_sync' || data.type === 'cursor_update') {
+          if (data.type === 'crdt_sync' || data.type === 'cursor_update' || data.type === 'code_update') {
             ClassroomRoomManager.broadcast(normRoomId, {
               ...data,
               roomId: normRoomId,

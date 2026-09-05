@@ -289,6 +289,24 @@ export class CollaborationClient {
   }
 
   /**
+   * Ultra low-latency broadcast of code changes over WebSocket
+   */
+  public sendCodeUpdate(code: string, language?: string) {
+    this.sendEvent({
+      type: 'code_update',
+      roomId: this.roomId,
+      senderId: this.participantId,
+      senderName: this.participantName,
+      payload: {
+        participantId: this.participantId,
+        code,
+        language,
+      },
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
    * Send an event over WebSocket or POST fallback
    */
   public async sendEvent(event: Partial<ClassroomEventMessage>) {
