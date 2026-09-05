@@ -1,433 +1,592 @@
-import * as Y from 'yjs';
-import { ClassroomEventMessage, LiveCursor } from './types';
+'use client';
 
+import * as Y from 'yjs';
+import { Awareness } from 'y-protocols/awareness';
+import { ClassroomEventMessage, LiveCursor } from './types';
+import {
+  RealtimeMessage,
+  parseRealtimeMessage,
+  serializeRealtimeMessage,
+  uint8ArrayToBase64,
+  base64ToUint8Array,
+  toClassroomEventMessage,
+} from './protocol';
+
+export type ConnectionLifecycle = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 export type ConnectionStatus = 'online' | 'syncing' | 'offline';
 
 export class CollaborationClient {
-  private roomId: string;
-  private participantId: string;
-  private participantName: string;
-  private participantRole: string;
-  private lastRoomState: string = 'created';
-  private lastAdminEntered: boolean = false;
+  public readonly roomId: string;
+  public readonly participantId: string;
+  public readonly participantName: string;
+  public readonly participantRole: string;
+
+  private lifecycle: ConnectionLifecycle = 'connecting';
   private ws: WebSocket | null = null;
   private sse: EventSource | null = null;
-  private listeners: Set<(event: ClassroomEventMessage) => void> = new Set();
-  private cursorListeners: Set<(cursor: LiveCursor) => void> = new Set();
-  private statusListeners: Set<(status: ConnectionStatus) => void> = new Set();
-  
-  private isConnected = false;
-  private currentStatus: ConnectionStatus = 'syncing';
-  private wsAttemptFailed = false;
-  private pollTimer: any = null;
   private isDestroyed = false;
 
-  private ydoc: Y.Doc | null = null;
-  private ytext: Y.Text | null = null;
-  private isApplyingRemoteUpdate = false;
+  // Reconnection backoff state
+  private reconnectAttempts = 0;
+  private reconnectTimer: any = null;
+  private heartbeatTimer: any = null;
+  private lastPingSent = 0;
+  private roundTripTimeMs = 0;
 
-  constructor(roomId: string, participantId: string, participantName: string, participantRole: string = 'user') {
+  // Multi-document Yjs state
+  private ydocs: Map<string, Y.Doc> = new Map();
+  private awarenessMap: Map<string, Awareness> = new Map();
+  private docListeners: Map<string, Set<(text: string) => void>> = new Map();
+
+  // Throttled cursor state
+  private lastCursorSentTime = 0;
+  private pendingCursorUpdate: any = null;
+  private cursorThrottleTimer: any = null;
+
+  // Listeners
+  private eventListeners: Set<(event: ClassroomEventMessage) => void> = new Set();
+  private cursorListeners: Set<(cursor: LiveCursor) => void> = new Set();
+  private statusListeners: Set<(status: ConnectionStatus) => void> = new Set();
+  private lifecycleListeners: Set<(lifecycle: ConnectionLifecycle) => void> = new Set();
+
+  // Gossip & room tracking
+  private lastKnownParticipants: any[] = [];
+  private lastRoomSig = '';
+  private lastRoomState = 'created';
+  private lastAdminEntered = false;
+
+  constructor(roomId: string, participantId: string, participantName: string, participantRole = 'user') {
     this.roomId = roomId.toUpperCase().trim();
     this.participantId = participantId;
     this.participantName = participantName;
     this.participantRole = participantRole;
+
     if (participantRole === 'admin') {
       this.lastAdminEntered = true;
       this.lastRoomState = 'active';
     }
-    this.connect();
-    this.startBackgroundHeartbeat();
+
+    this.initConnection();
+    this.startHeartbeat();
   }
 
-  public connect() {
+  // =========================================================================
+  // CONNECTION MANAGEMENT & WEBSOCKET LIFECYCLE
+  // =========================================================================
+
+  private async initConnection() {
     if (typeof window === 'undefined' || this.isDestroyed) return;
 
-    // If WebSocket previously failed or closed with an error on this device/network, directly use robust SSE
-    if (this.wsAttemptFailed) {
-      this.connectSSE();
-      return;
+    this.setLifecycle('connecting');
+
+    // 1. Discover active WebSocket endpoint
+    let wsUrl: string | null = null;
+    try {
+      const res = await fetch(`/api/v1/classroom/${this.roomId}/events?info=true`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        if (data.wsPort) {
+          // Node.js development or standalone WebSocket hub
+          wsUrl = `${protocol}//${window.location.hostname}:${data.wsPort}`;
+        } else if (data.hasCloudflareWs) {
+          // Cloudflare Workers Native WebSocket
+          wsUrl = `${protocol}//${window.location.host}/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}&participantName=${encodeURIComponent(this.participantName)}&participantRole=${this.participantRole}`;
+        }
+      }
+    } catch {
+      // Ignore discovery error, fallback to standard path
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}`;
+    if (!wsUrl) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}&participantName=${encodeURIComponent(this.participantName)}&participantRole=${this.participantRole}`;
+    }
 
-    let wsHandshakeTimeout: any = null;
+    this.connectWebSocket(wsUrl);
+  }
+
+  private connectWebSocket(wsUrl: string) {
+    if (this.isDestroyed) return;
 
     try {
       this.ws = new WebSocket(wsUrl);
 
-      // Fast handshake timeout: if WS doesn't open within 2s, switch to SSE immediately
-      wsHandshakeTimeout = setTimeout(() => {
-        if (!this.isConnected && this.ws?.readyState !== WebSocket.OPEN) {
-          this.wsAttemptFailed = true;
+      const connectTimeout = setTimeout(() => {
+        if (this.lifecycle === 'connecting' && this.ws?.readyState !== WebSocket.OPEN) {
           try { this.ws?.close(); } catch {}
-          this.ws = null;
-          this.connectSSE();
+          this.fallbackToSSE();
         }
-      }, 2000);
+      }, 3000);
 
       this.ws.onopen = () => {
-        if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
-        this.isConnected = true;
-        this.setStatus('online');
+        clearTimeout(connectTimeout);
+        this.reconnectAttempts = 0;
+        this.setLifecycle('connected');
+
+        // Send Join handshake
+        this.sendRaw({
+          type: 'join',
+          roomId: this.roomId,
+          clientId: this.participantId,
+          senderName: this.participantName,
+          payload: { role: this.participantRole },
+          timestamp: Date.now(),
+        });
+
+        // Resynchronize all active Yjs documents immediately upon connection/reconnection
+        this.resyncAllDocs();
       };
 
       this.ws.onmessage = (event) => {
-        try {
-          const msg: ClassroomEventMessage = JSON.parse(event.data);
-          this.handleIncoming(msg);
-        } catch (e) {
-          console.error('[CollabClient] WS parse error', e);
-        }
+        this.handleMessageData(event.data);
       };
 
       this.ws.onerror = () => {
-        if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
-        if (!this.isConnected) {
-          this.wsAttemptFailed = true;
-          try { this.ws?.close(); } catch {}
-          this.ws = null;
-          this.connectSSE();
+        clearTimeout(connectTimeout);
+        if (this.lifecycle === 'connecting') {
+          this.fallbackToSSE();
         }
       };
 
       this.ws.onclose = () => {
-        if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
+        clearTimeout(connectTimeout);
         if (this.isDestroyed) return;
-        this.isConnected = false;
-        this.wsAttemptFailed = true;
-        this.ws = null;
-        // Fallback to SSE immediately without flapping
-        this.connectSSE();
+        this.setLifecycle('reconnecting');
+        this.scheduleReconnect();
       };
     } catch {
-      if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
-      this.wsAttemptFailed = true;
-      this.connectSSE();
+      this.fallbackToSSE();
     }
   }
 
-  private connectSSE() {
-    if (typeof window === 'undefined' || this.isDestroyed || this.sse) return;
+  private fallbackToSSE() {
+    if (this.isDestroyed || this.sse) return;
 
     try {
       const sseUrl = `/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}`;
       this.sse = new EventSource(sseUrl);
 
       this.sse.onopen = () => {
-        this.isConnected = true;
-        this.setStatus('online');
+        this.setLifecycle('connected');
+        this.resyncAllDocs();
       };
 
       this.sse.onmessage = (event) => {
-        try {
-          const msg: ClassroomEventMessage = JSON.parse(event.data);
-          this.handleIncoming(msg);
-        } catch (e) {
-          console.error('[CollabClient] SSE parse error', e);
-        }
+        this.handleMessageData(event.data);
       };
 
       this.sse.onerror = () => {
-        // EventSource will automatically reconnect in the browser
-        this.isConnected = false;
-        this.setStatus('syncing');
+        if (!this.isDestroyed) {
+          this.setLifecycle('reconnecting');
+        }
       };
-    } catch (err) {
-      console.error('[CollabClient] SSE initialization failed', err);
-      this.setStatus('syncing');
+    } catch (e) {
+      console.error('[CollabClient] SSE fallback failed', e);
+      this.setLifecycle('disconnected');
     }
   }
 
-  private lastKnownParticipants: any[] = [];
+  private scheduleReconnect() {
+    if (this.isDestroyed || this.reconnectTimer) return;
 
-  public updateKnownParticipants(participants: any[]) {
-    this.lastKnownParticipants = participants;
+    this.reconnectAttempts++;
+    // Exponential backoff with random jitter: min(1000 * 2^attempts, 16000) + random(500)
+    const baseDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 16000);
+    const jitter = Math.floor(Math.random() * 500);
+    const delay = baseDelay + jitter;
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.isDestroyed) {
+        this.initConnection();
+      }
+    }, delay);
   }
 
-  public getKnownParticipants(): any[] {
-    return this.lastKnownParticipants;
-  }
-
-  private lastRoomSig = '';
-
-  private computeRoomSig(r: any): string {
-    if (!r) return '';
-    const pList = Object.values(r.participants || {})
-      .map((p: any) => `${p.id}:${p.online}:${p.status}:${p.name}:${p.activeCode?.length || 0}`)
-      .sort()
-      .join('|');
-    const sA = r.activeWorkspaces?.slotAUserId || '';
-    const sB = r.activeWorkspaces?.slotBUserId || '';
-    const cLen = r.chatMessages?.length || 0;
-    const colReq = Object.keys(r.collaborationRequests || {}).length;
-    const colSess = Object.keys(r.collaborationSessions || {}).length;
-    const dlReq = Object.keys(r.downloadRequests || {}).length;
-    const state = r.state || '';
-    const arena = r.admin?.enteredArena ? '1' : '0';
-    return `${state}:${arena}:${sA}:${sB}:${cLen}:${colReq}:${colSess}:${dlReq}#${pList}`;
-  }
-
-  /**
-   * Resilient Background Polling Heartbeat
-   * 1500ms cadence provides smooth, zero-flicker real-time sync across Cloudflare edge isolates
-   */
-  private startBackgroundHeartbeat() {
-    if (typeof window === 'undefined' || this.isDestroyed) return;
-
-    const poll = async () => {
+  private startHeartbeat() {
+    this.heartbeatTimer = setInterval(() => {
       if (this.isDestroyed) return;
-      try {
-        const query = new URLSearchParams({
-          requesterId: this.participantId,
-          requesterName: this.participantName,
-          requesterRole: this.participantRole,
+
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.lastPingSent = Date.now();
+        this.sendRaw({
+          type: 'ping',
+          roomId: this.roomId,
+          clientId: this.participantId,
+          timestamp: this.lastPingSent,
         });
-        if (this.lastRoomState === 'active') {
-          query.set('clientRoomState', 'active');
-        }
-        if (this.lastAdminEntered) {
-          query.set('clientAdminEntered', 'true');
-        }
-        if (this.lastKnownParticipants.length > 0) {
-          const compact = this.lastKnownParticipants.map((p) => ({
-            id: p.id,
-            name: p.name,
-            role: p.role,
-            online: p.online,
-            lastActive: p.lastActive,
-            status: p.status,
-            currentLanguage: p.currentLanguage,
-            activeFileName: p.activeFileName,
-            privacy: p.privacy || {
-              workspaceVisibility: p.role === 'admin' ? 'public' : 'private',
-              allowCollaboration: true,
-              requireDownloadPermission: p.role !== 'admin',
-            },
-          }));
-          query.set('clientParticipants', JSON.stringify(compact));
-        }
-        const res = await fetch(`/api/v1/classroom/${this.roomId}?${query.toString()}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.room) {
-            if (data.room.state === 'active') {
-              this.lastRoomState = 'active';
-            }
-            if (data.room.admin?.enteredArena) {
-              this.lastAdminEntered = true;
-            }
-            this.lastKnownParticipants = Object.values(data.room.participants || {});
-            const sig = this.computeRoomSig(data.room);
-            if (sig !== this.lastRoomSig) {
-              this.lastRoomSig = sig;
-              this.handleIncoming({
-                type: 'room_state',
-                roomId: this.roomId,
-                senderId: 'server',
-                payload: { room: data.room },
-                timestamp: Date.now(),
-              });
-            }
-            this.setStatus('online');
-          }
-        }
-      } catch {
-        if (!this.isConnected) {
-          this.setStatus('syncing');
-        }
       }
+    }, 15000);
+  }
+
+  private setLifecycle(newLifecycle: ConnectionLifecycle) {
+    if (this.lifecycle === newLifecycle) return;
+    this.lifecycle = newLifecycle;
+    this.lifecycleListeners.forEach((cb) => cb(newLifecycle));
+
+    const statusMap: Record<ConnectionLifecycle, ConnectionStatus> = {
+      connecting: 'syncing',
+      connected: 'online',
+      reconnecting: 'syncing',
+      disconnected: 'offline',
     };
-
-    // Poll every 1500ms for stable, flicker-free background sync
-    this.pollTimer = setInterval(poll, 1500);
-  }
-
-  /**
-   * Immediately trigger an out-of-band sync (0ms latency after actions)
-   */
-  public triggerImmediateSync() {
-    if (typeof window === 'undefined' || this.isDestroyed) return;
-    this.lastRoomSig = ''; // Force update on next payload
-    const query = new URLSearchParams({
-      requesterId: this.participantId,
-      requesterName: this.participantName,
-      requesterRole: this.participantRole,
-    });
-    if (this.lastRoomState === 'active') {
-      query.set('clientRoomState', 'active');
-    }
-    if (this.lastAdminEntered) {
-      query.set('clientAdminEntered', 'true');
-    }
-    if (this.lastKnownParticipants.length > 0) {
-      const compact = this.lastKnownParticipants.map((p) => ({
-        id: p.id,
-        name: p.name,
-        role: p.role,
-        online: p.online,
-        lastActive: p.lastActive,
-        status: p.status,
-        currentLanguage: p.currentLanguage,
-        activeFileName: p.activeFileName,
-        privacy: p.privacy,
-      }));
-      query.set('clientParticipants', JSON.stringify(compact));
-    }
-    fetch(`/api/v1/classroom/${this.roomId}?${query.toString()}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.room) {
-          if (data.room.state === 'active') {
-            this.lastRoomState = 'active';
-          }
-          if (data.room.admin?.enteredArena) {
-            this.lastAdminEntered = true;
-          }
-          this.lastKnownParticipants = Object.values(data.room.participants || {});
-          this.lastRoomSig = this.computeRoomSig(data.room);
-          this.handleIncoming({
-            type: 'room_state',
-            roomId: this.roomId,
-            senderId: 'server',
-            payload: { room: data.room },
-            timestamp: Date.now(),
-          });
-        }
-      })
-      .catch(() => {});
-  }
-
-  private handleIncoming(msg: ClassroomEventMessage) {
-    // 1. CRDT synchronization updates
-    if (msg.type === 'crdt_sync' && msg.senderId !== this.participantId) {
-      if (this.ydoc && msg.payload?.update) {
-        try {
-          this.isApplyingRemoteUpdate = true;
-          const binary = Uint8Array.from(atob(msg.payload.update), (c) => c.charCodeAt(0));
-          Y.applyUpdate(this.ydoc, binary);
-        } catch (e) {
-          console.error('[CollabClient] CRDT update error', e);
-        } finally {
-          this.isApplyingRemoteUpdate = false;
-        }
-      }
-    }
-
-    // 2. Cursor updates
-    if (msg.type === 'cursor_update' && msg.senderId !== this.participantId) {
-      this.cursorListeners.forEach((cb) => cb(msg.payload));
-    }
-
-    // 3. General message bus
-    this.listeners.forEach((listener) => {
-      try {
-        listener(msg);
-      } catch (err) {
-        console.error('[CollabClient] listener error', err);
-      }
-    });
-  }
-
-  private setStatus(status: ConnectionStatus) {
-    if (this.currentStatus === status) return;
-    this.currentStatus = status;
-    this.statusListeners.forEach((cb) => cb(status));
-    this.emitStatus(status);
-  }
-
-  private emitStatus(status: ConnectionStatus) {
-    this.listeners.forEach((listener) => {
-      listener({
-        type: 'presence',
-        roomId: this.roomId,
-        senderId: this.participantId,
-        senderName: this.participantName,
-        payload: { participantId: this.participantId, status, online: status === 'online' },
-        timestamp: Date.now(),
-      });
-    });
+    const mapped = statusMap[newLifecycle];
+    this.statusListeners.forEach((cb) => cb(mapped));
   }
 
   public getStatus(): ConnectionStatus {
-    return this.currentStatus;
+    return this.lifecycle === 'connected' ? 'online' : this.lifecycle === 'disconnected' ? 'offline' : 'syncing';
+  }
+
+  public getLifecycle(): ConnectionLifecycle {
+    return this.lifecycle;
   }
 
   public onStatusChange(callback: (status: ConnectionStatus) => void): () => void {
     this.statusListeners.add(callback);
-    callback(this.currentStatus);
+    callback(this.getStatus());
     return () => this.statusListeners.delete(callback);
   }
 
-  /**
-   * Initialize or attach Yjs CRDT document for a collaboration session
-   */
-  public initSharedDocument(initialContent: string, onTextChange: (newText: string) => void): Y.Doc {
-    if (this.ydoc) {
-      this.ydoc.destroy();
+  public onLifecycleChange(callback: (lifecycle: ConnectionLifecycle) => void): () => void {
+    this.lifecycleListeners.add(callback);
+    callback(this.lifecycle);
+    return () => this.lifecycleListeners.delete(callback);
+  }
+
+  // =========================================================================
+  // MESSAGE PROCESSING & PROTOCOL PARSER
+  // =========================================================================
+
+  private handleMessageData(data: any) {
+    try {
+      const raw = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      const msg = parseRealtimeMessage(raw);
+      if (!msg) return;
+
+      this.handleIncoming(msg);
+    } catch (err) {
+      console.error('[CollabClient] Parse error', err);
     }
+  }
 
-    this.ydoc = new Y.Doc();
-    this.ytext = this.ydoc.getText('monaco');
-
-    if (this.ytext.length === 0 && initialContent) {
-      this.ytext.insert(0, initialContent);
-    }
-
-    // Listen to local CRDT changes
-    this.ydoc.on('update', (update: Uint8Array, origin: any) => {
-      if (!this.isApplyingRemoteUpdate) {
-        // Encode binary update to base64 for network transport
-        let binaryStr = '';
-        for (let i = 0; i < update.length; i++) {
-          binaryStr += String.fromCharCode(update[i]);
+  private handleIncoming(msg: RealtimeMessage) {
+    switch (msg.type) {
+      case 'pong': {
+        if (this.lastPingSent) {
+          this.roundTripTimeMs = Date.now() - this.lastPingSent;
         }
-        const b64 = btoa(binaryStr);
-
-        this.sendEvent({
-          type: 'crdt_sync',
-          roomId: this.roomId,
-          senderId: this.participantId,
-          senderName: this.participantName,
-          payload: { update: b64 },
-          timestamp: Date.now(),
-        });
+        break;
       }
 
-      onTextChange(this.ytext?.toString() || '');
-    });
+      case 'doc_sync_step1': {
+        // Server or peer requests our document delta
+        const docId = msg.documentId || 'default';
+        const ydoc = this.ydocs.get(docId);
+        if (ydoc) {
+          const clientVector = msg.payload?.vector ? base64ToUint8Array(msg.payload.vector) : undefined;
+          const update = Y.encodeStateAsUpdate(ydoc, clientVector);
+          const localVector = Y.encodeStateVector(ydoc);
 
-    return this.ydoc;
+          this.sendRaw({
+            type: 'doc_sync_step2',
+            roomId: this.roomId,
+            documentId: docId,
+            clientId: this.participantId,
+            payload: {
+              update: uint8ArrayToBase64(update),
+              vector: uint8ArrayToBase64(localVector),
+            },
+            timestamp: Date.now(),
+          });
+        }
+        break;
+      }
+
+      case 'doc_sync_step2':
+      case 'doc_update': {
+        const docId = msg.documentId || 'default';
+        const ydoc = this.ydocs.get(docId);
+        if (ydoc && msg.payload?.update) {
+          try {
+            const binary = base64ToUint8Array(msg.payload.update);
+            // Apply with 'remote' origin so local listeners never re-broadcast back!
+            Y.applyUpdate(ydoc, binary, 'remote');
+          } catch (e) {
+            console.error('[CollabClient] Failed to apply CRDT delta', e);
+          }
+        }
+        break;
+      }
+
+      case 'awareness_update': {
+        const docId = msg.documentId || 'default';
+        const awareness = this.awarenessMap.get(docId);
+        if (awareness && msg.payload?.update) {
+          try {
+            // Forward cursor awareness
+            if (msg.payload.cursor && msg.clientId !== this.participantId) {
+              this.cursorListeners.forEach((cb) => cb(msg.payload.cursor));
+            }
+          } catch (e) {
+            console.error('[CollabClient] Awareness error', e);
+          }
+        }
+        break;
+      }
+
+      case 'cursor_update': {
+        if (msg.clientId !== this.participantId && msg.payload) {
+          this.cursorListeners.forEach((cb) => cb(msg.payload));
+        }
+        break;
+      }
+
+      default: {
+        // Convert to ClassroomEventMessage and notify listeners
+        const eventMsg = toClassroomEventMessage(msg);
+        this.eventListeners.forEach((cb) => {
+          try {
+            cb(eventMsg);
+          } catch (e) {
+            console.error('[CollabClient] Event listener error', e);
+          }
+        });
+        break;
+      }
+    }
+  }
+
+  // =========================================================================
+  // MULTI-DOCUMENT YJS SYNCHRONIZATION
+  // =========================================================================
+
+  /**
+   * Retrieves or initializes a synchronized Y.Doc for a workspace or session file
+   */
+  public getOrCreateDoc(docId: string, initialContent?: string): { doc: Y.Doc; ytext: Y.Text; awareness: Awareness } {
+    if (!this.ydocs.has(docId)) {
+      const ydoc = new Y.Doc();
+      const ytext = ydoc.getText('monaco');
+      const awareness = new Awareness(ydoc);
+
+      // Seed initial content if brand new
+      if (ytext.length === 0 && initialContent) {
+        ydoc.transact(() => {
+          ytext.insert(0, initialContent);
+        }, 'init');
+      }
+
+      // 1. Broadcast local Yjs CRDT changes asynchronously
+      ydoc.on('update', (update: Uint8Array, origin: any) => {
+        // PREVENT ECHO LOOPS: Only broadcast if change originated locally (not from 'remote' or 'init')
+        if (origin !== 'remote' && origin !== 'init') {
+          const b64 = uint8ArrayToBase64(update);
+          this.sendRaw({
+            type: 'doc_update',
+            roomId: this.roomId,
+            documentId: docId,
+            clientId: this.participantId,
+            senderName: this.participantName,
+            payload: { update: b64 },
+            timestamp: Date.now(),
+          });
+        }
+
+        // Notify text listeners
+        const text = ytext.toString();
+        const listeners = this.docListeners.get(docId);
+        if (listeners) {
+          listeners.forEach((cb) => cb(text));
+        }
+      });
+
+      // 2. Broadcast local awareness / cursor changes
+      awareness.on('update', ({ added, updated, removed }: any, origin: any) => {
+        if (origin !== 'remote') {
+          const localState = awareness.getLocalState();
+          this.sendRaw({
+            type: 'awareness_update',
+            roomId: this.roomId,
+            documentId: docId,
+            clientId: this.participantId,
+            senderName: this.participantName,
+            payload: { localState },
+            timestamp: Date.now(),
+          });
+        }
+      });
+
+      this.ydocs.set(docId, ydoc);
+      this.awarenessMap.set(docId, awareness);
+
+      // Request authoritative server updates for this document
+      this.requestDocSync(docId, initialContent);
+    }
+
+    const doc = this.ydocs.get(docId)!;
+    const ytext = doc.getText('monaco');
+    const awareness = this.awarenessMap.get(docId)!;
+
+    return { doc, ytext, awareness };
   }
 
   /**
-   * Send live cursor coordinates
+   * Performs Yjs Step 1 handshake: sends local state vector to server
    */
-  public sendCursor(lineNumber: number, column: number, color = '#ff9100') {
-    this.sendEvent({
-      type: 'cursor_update',
+  private requestDocSync(docId: string, initialContent?: string) {
+    const ydoc = this.ydocs.get(docId);
+    if (!ydoc) return;
+
+    const vector = Y.encodeStateVector(ydoc);
+    this.sendRaw({
+      type: 'doc_sync_step1',
       roomId: this.roomId,
-      senderId: this.participantId,
-      senderName: this.participantName,
+      documentId: docId,
+      clientId: this.participantId,
       payload: {
-        participantId: this.participantId,
-        name: this.participantName,
-        color,
-        lineNumber,
-        column,
+        vector: uint8ArrayToBase64(vector),
+        initialContent,
       },
       timestamp: Date.now(),
     });
   }
 
+  private resyncAllDocs() {
+    this.ydocs.forEach((_, docId) => {
+      this.requestDocSync(docId);
+    });
+  }
+
+  public subscribeToDocText(docId: string, callback: (text: string) => void): () => void {
+    if (!this.docListeners.has(docId)) {
+      this.docListeners.set(docId, new Set());
+    }
+    const set = this.docListeners.get(docId)!;
+    set.add(callback);
+
+    const doc = this.ydocs.get(docId);
+    if (doc) {
+      callback(doc.getText('monaco').toString());
+    }
+
+    return () => set.delete(callback);
+  }
+
+  // =========================================================================
+  // THROTTLED LIVE CURSOR & PRESENCE
+  // =========================================================================
+
   /**
-   * Ultra low-latency broadcast of code changes over WebSocket
+   * Transmits live cursor position with strict 25ms throttling (~40fps max)
    */
+  public sendCursor(docIdOrLine: string | number, lineOrCol?: number, colOrColor?: number | string) {
+    let documentId: string | undefined;
+    let lineNumber: number;
+    let column: number;
+    let color = '#ff9100';
+
+    if (typeof docIdOrLine === 'string') {
+      documentId = docIdOrLine;
+      lineNumber = typeof lineOrCol === 'number' ? lineOrCol : 1;
+      column = typeof colOrColor === 'number' ? colOrColor : 1;
+    } else {
+      lineNumber = docIdOrLine;
+      column = typeof lineOrCol === 'number' ? lineOrCol : 1;
+      if (typeof colOrColor === 'string') color = colOrColor;
+    }
+
+    if (documentId) {
+      const awareness = this.awarenessMap.get(documentId);
+      if (awareness) {
+        awareness.setLocalStateField('cursor', {
+          lineNumber,
+          column,
+          user: { name: this.participantName, id: this.participantId, role: this.participantRole },
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    const now = Date.now();
+    const cursorData: LiveCursor = {
+      participantId: this.participantId,
+      name: this.participantName,
+      color,
+      lineNumber,
+      column,
+    };
+
+    if (now - this.lastCursorSentTime >= 25) {
+      this.lastCursorSentTime = now;
+      this.sendRaw({
+        type: 'cursor_update',
+        roomId: this.roomId,
+        documentId,
+        clientId: this.participantId,
+        senderName: this.participantName,
+        payload: cursorData,
+        timestamp: now,
+      });
+    } else {
+      this.pendingCursorUpdate = cursorData;
+      if (!this.cursorThrottleTimer) {
+        this.cursorThrottleTimer = setTimeout(() => {
+          this.cursorThrottleTimer = null;
+          if (this.pendingCursorUpdate) {
+            this.lastCursorSentTime = Date.now();
+            this.sendRaw({
+              type: 'cursor_update',
+              roomId: this.roomId,
+              documentId,
+              clientId: this.participantId,
+              senderName: this.participantName,
+              payload: this.pendingCursorUpdate,
+              timestamp: this.lastCursorSentTime,
+            });
+            this.pendingCursorUpdate = null;
+          }
+        }, 25);
+      }
+    }
+  }
+
+  // =========================================================================
+  // SENDER & EVENT HELPERS
+  // =========================================================================
+
+  private async sendRaw(msg: RealtimeMessage) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(serializeRealtimeMessage(msg));
+        return;
+      } catch (e) {
+        console.error('[CollabClient] WS send error', e);
+      }
+    }
+
+    // Low-latency HTTP fallback if WebSocket is not open
+    try {
+      await fetch(`/api/v1/classroom/${this.roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: msg.type,
+          participantId: this.participantId,
+          ...msg.payload,
+          documentId: msg.documentId,
+          workspaceId: msg.workspaceId,
+        }),
+      });
+    } catch {}
+  }
+
   public sendCodeUpdate(code?: string, language?: string, targetUserId?: string) {
-    this.sendEvent({
+    this.sendRaw({
       type: 'code_update',
       roomId: this.roomId,
-      senderId: this.participantId,
+      clientId: this.participantId,
       senderName: this.participantName,
       payload: {
         participantId: targetUserId || this.participantId,
@@ -439,45 +598,20 @@ export class CollaborationClient {
     });
   }
 
-  /**
-   * Send an event over WebSocket or POST fallback
-   */
   public async sendEvent(event: Partial<ClassroomEventMessage>) {
-    const fullMsg: ClassroomEventMessage = {
-      type: event.type || 'presence',
+    await this.sendRaw({
+      type: (event.type || 'presence') as any,
       roomId: this.roomId,
-      senderId: this.participantId,
+      clientId: this.participantId,
       senderName: this.participantName,
       payload: event.payload,
       timestamp: Date.now(),
-    };
-
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        this.ws.send(JSON.stringify(fullMsg));
-        return;
-      } catch {}
-    }
-
-    // HTTP POST fallback
-    try {
-      await fetch(`/api/v1/classroom/${this.roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: fullMsg.type,
-          participantId: this.participantId,
-          ...fullMsg.payload,
-        }),
-      });
-    } catch (e) {
-      console.error('[CollabClient] fallback send error', e);
-    }
+    });
   }
 
   public onEvent(callback: (event: ClassroomEventMessage) => void): () => void {
-    this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
+    this.eventListeners.add(callback);
+    return () => this.eventListeners.delete(callback);
   }
 
   public onCursor(callback: (cursor: LiveCursor) => void): () => void {
@@ -485,12 +619,39 @@ export class CollaborationClient {
     return () => this.cursorListeners.delete(callback);
   }
 
+  public updateKnownParticipants(participants: any[]) {
+    this.lastKnownParticipants = participants;
+  }
+
+  public getKnownParticipants(): any[] {
+    return this.lastKnownParticipants;
+  }
+
+  public triggerImmediateSync() {
+    if (typeof window === 'undefined' || this.isDestroyed) return;
+    this.resyncAllDocs();
+    fetch(`/api/v1/classroom/${this.roomId}?requesterId=${this.participantId}&requesterName=${encodeURIComponent(this.participantName)}&requesterRole=${this.participantRole}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.room) {
+          this.handleIncoming({
+            type: 'room_state',
+            roomId: this.roomId,
+            clientId: 'server',
+            payload: { room: data.room },
+            timestamp: Date.now(),
+          });
+        }
+      })
+      .catch(() => {});
+  }
+
   public cleanup() {
     this.isDestroyed = true;
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.cursorThrottleTimer) clearTimeout(this.cursorThrottleTimer);
+
     if (this.ws) {
       try { this.ws.close(); } catch {}
       this.ws = null;
@@ -499,9 +660,12 @@ export class CollaborationClient {
       try { this.sse.close(); } catch {}
       this.sse = null;
     }
-    if (this.ydoc) {
-      try { this.ydoc.destroy(); } catch {}
-      this.ydoc = null;
-    }
+
+    this.ydocs.forEach((doc) => {
+      try { doc.destroy(); } catch {}
+    });
+    this.ydocs.clear();
+    this.awarenessMap.clear();
+    this.docListeners.clear();
   }
 }

@@ -63,6 +63,7 @@ export default function ClassroomLivePage() {
   const [incomingCollabReq, setIncomingCollabReq] = useState<CollaborationRequest | null>(null);
   const [incomingDownloadReq, setIncomingDownloadReq] = useState<FileDownloadRequest | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'syncing' | 'offline'>('syncing');
+  const [collabClient, setCollabClient] = useState<CollaborationClient | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -307,6 +308,7 @@ export default function ClassroomLivePage() {
 
     const client = new CollaborationClient(roomId, participantId, participantName, participantRole);
     collabClientRef.current = client;
+    setCollabClient(client);
 
     const unsubscribeEvents = client.onEvent((event) => {
       handleIncomingRealtimeEvent(event);
@@ -320,6 +322,8 @@ export default function ClassroomLivePage() {
       unsubscribeEvents();
       unsubscribeStatus();
       client.cleanup();
+      collabClientRef.current = null;
+      setCollabClient(null);
     };
   }, [roomId, participantId, participantName, participantRole]);
 
@@ -1272,6 +1276,7 @@ export default function ClassroomLivePage() {
               activeSession={
                 room ? Object.values(room.collaborationSessions).find(s => s.participantIds.includes(participantId)) : null
               }
+              collabClient={collabClient}
               onCodeChangeA={handleCodeChangeA}
               onCodeChangeB={handleCodeChangeB}
               onLanguageChangeA={handleLanguageChangeA}

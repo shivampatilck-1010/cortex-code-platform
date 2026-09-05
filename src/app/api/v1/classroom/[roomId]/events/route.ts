@@ -1,6 +1,14 @@
 import { NextRequest } from 'next/server';
 import { ClassroomRoomManager } from '@/lib/classroom/room-manager';
 import { ClassroomEventMessage } from '@/lib/classroom/types';
+import { ensureNodeWsServer, getNodeWsPort, getServerYDoc } from '@/lib/classroom/node-ws-server';
+import {
+  parseRealtimeMessage,
+  serializeRealtimeMessage,
+  base64ToUint8Array,
+  uint8ArrayToBase64,
+} from '@/lib/classroom/protocol';
+import * as Y from 'yjs';
 
 export async function GET(
   req: NextRequest,
@@ -17,25 +25,48 @@ export async function GET(
     });
   }
 
+  const url = new URL(req.url);
+
+  // 0. WebSocket Discovery Endpoint
+  if (url.searchParams.get('info') === 'true') {
+    let wsPort: number | null = null;
+    try {
+      wsPort = await ensureNodeWsServer();
+    } catch {}
+
+    // @ts-ignore
+    const hasCloudflareWs = typeof WebSocketPair !== 'undefined';
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        wsPort,
+        hasCloudflareWs,
+        roomId: normRoomId,
+      }),
+      {
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
   // 1. Cloudflare Workers Native WebSocket Upgrade
   const upgradeHeader = req.headers.get('Upgrade');
   if (upgradeHeader === 'websocket') {
-    // Check if WebSocketPair is available in the Cloudflare runtime
     // @ts-ignore
     if (typeof WebSocketPair !== 'undefined') {
       // @ts-ignore
       const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
       
-      // Accept websocket on the server end
       // @ts-ignore
       server.accept();
 
       // Send initial snapshot
       server.send(
-        JSON.stringify({
+        serializeRealtimeMessage({
           type: 'room_state',
           roomId: normRoomId,
-          senderId: 'server',
+          clientId: 'server',
           payload: { room },
           timestamp: Date.now(),
         })
@@ -50,28 +81,78 @@ export async function GET(
         }
       });
 
-      // Handle incoming messages from client
       server.addEventListener('message', (event: any) => {
         try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'code_update') {
-            const targetId = data.payload?.participantId || data.payload?.targetUserId || data.senderId;
-            if (targetId && data.payload?.code !== undefined) {
+          const raw = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data);
+          const msg = parseRealtimeMessage(raw);
+          if (!msg) return;
+
+          if (msg.type === 'doc_sync_step1') {
+            const docId = msg.documentId || 'default';
+            const ydoc = getServerYDoc(normRoomId, docId, msg.payload?.initialContent);
+            const clientVector = msg.payload?.vector ? base64ToUint8Array(msg.payload.vector) : undefined;
+            const update = Y.encodeStateAsUpdate(ydoc, clientVector);
+            const vector = Y.encodeStateVector(ydoc);
+
+            server.send(
+              serializeRealtimeMessage({
+                type: 'doc_sync_step2',
+                roomId: normRoomId,
+                documentId: docId,
+                clientId: 'server',
+                payload: {
+                  update: uint8ArrayToBase64(update),
+                  vector: uint8ArrayToBase64(vector),
+                },
+                timestamp: Date.now(),
+              })
+            );
+            return;
+          }
+
+          if (msg.type === 'doc_update' || msg.type === 'doc_sync_step2') {
+            const docId = msg.documentId || 'default';
+            const ydoc = getServerYDoc(normRoomId, docId);
+            if (msg.payload?.update) {
+              const bin = base64ToUint8Array(msg.payload.update);
+              Y.applyUpdate(ydoc, bin, msg.clientId);
+
+              const text = ydoc.getText('monaco').toString();
+              if (room && msg.clientId && room.participants[msg.clientId]) {
+                room.participants[msg.clientId].activeCode = text;
+              }
+
+              ClassroomRoomManager.broadcast(normRoomId, {
+                type: 'crdt_sync',
+                roomId: normRoomId,
+                senderId: msg.clientId,
+                payload: { update: msg.payload.update, documentId: docId },
+                timestamp: Date.now(),
+              });
+            }
+            return;
+          }
+
+          if (msg.type === 'code_update') {
+            const targetId = msg.payload?.participantId || msg.payload?.targetUserId || msg.clientId;
+            if (targetId && msg.payload?.code !== undefined) {
               ClassroomRoomManager.updateParticipantCode(normRoomId, targetId, {
-                code: data.payload.code,
-                language: data.payload.language,
+                code: msg.payload.code,
+                language: msg.payload.language,
               });
             }
           }
-          if (data.type === 'crdt_sync' || data.type === 'cursor_update' || data.type === 'code_update') {
-            ClassroomRoomManager.broadcast(normRoomId, {
-              ...data,
-              roomId: normRoomId,
-              timestamp: Date.now(),
-            });
-          }
+
+          ClassroomRoomManager.broadcast(normRoomId, {
+            type: msg.type as any,
+            roomId: normRoomId,
+            senderId: msg.clientId,
+            senderName: msg.senderName,
+            payload: msg.payload,
+            timestamp: Date.now(),
+          });
         } catch (err) {
-          console.error('[WS Server message parse error]', err);
+          console.error('[Cloudflare WS Message parse error]', err);
         }
       });
 
@@ -79,7 +160,6 @@ export async function GET(
         unsubscribe();
       });
 
-      // Return 101 Switching Protocols response
       return new Response(null, {
         status: 101,
         // @ts-ignore
@@ -88,8 +168,12 @@ export async function GET(
     }
   }
 
+  // Ensure Node WS server is started if running in Node.js environment
+  try {
+    await ensureNodeWsServer();
+  } catch {}
+
   // 2. Universal Server-Sent Events (SSE) Stream
-  // Works flawlessly in local development (next dev / vinext dev) & cloud proxies
   let unsubscribe: (() => void) | null = null;
   let keepAliveTimer: any = null;
 

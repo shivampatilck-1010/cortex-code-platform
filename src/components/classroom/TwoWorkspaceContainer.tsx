@@ -24,6 +24,8 @@ import { ClassroomParticipant, ClassroomRole, CollaborationSession } from '@/lib
 import { SUPPORTED_LANGUAGES, getLanguageConfig } from '@/config/languages';
 import { executeInCloudSandbox } from '@/lib/execution/engine';
 import { ExecutionResult } from '@/lib/execution/types';
+import { CollaborationClient } from '@/lib/classroom/collab-sync';
+import { bindMonacoToYDoc, ActiveBinding } from '@/lib/classroom/yjs-binding';
 
 interface TwoWorkspaceContainerProps {
   userA?: ClassroomParticipant | null;
@@ -31,6 +33,7 @@ interface TwoWorkspaceContainerProps {
   currentUserId: string;
   currentUserRole: ClassroomRole;
   activeSession?: CollaborationSession | null;
+  collabClient?: CollaborationClient | null;
   onCodeChangeA?: (code: string) => void;
   onCodeChangeB?: (code: string) => void;
   onLanguageChangeA?: (lang: string) => void;
@@ -46,6 +49,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
   currentUserId,
   currentUserRole,
   activeSession,
+  collabClient,
   onCodeChangeA,
   onCodeChangeB,
   onLanguageChangeA,
@@ -65,6 +69,8 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
   const [copiedB, setCopiedB] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const editorARef = useRef<any>(null);
+  const editorBRef = useRef<any>(null);
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [isDragging, setIsDragging] = useState(false);
   const [fullscreenSlot, setFullscreenSlot] = useState<'none' | 'slotA' | 'slotB'>('none');
@@ -130,10 +136,11 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
     setIsRunningA(true);
     try {
       const activeFileName = userA.activeFileName || 'main.py';
+      const liveCode = editorARef.current ? editorARef.current.getValue() : (userA.activeCode || '');
       const fileList =
         userA.files && userA.files.length > 0
-          ? userA.files.map((f) => (f.name === activeFileName ? { ...f, content: userA.activeCode || '' } : f))
-          : [{ id: '1', name: activeFileName, path: `/${activeFileName}`, content: userA.activeCode || '' }];
+          ? userA.files.map((f) => (f.name === activeFileName ? { ...f, content: liveCode } : f))
+          : [{ id: '1', name: activeFileName, path: `/${activeFileName}`, content: liveCode }];
       const res = await executeInCloudSandbox({
         language: userA.currentLanguage || 'python',
         files: fileList,
@@ -160,10 +167,11 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
     setIsRunningB(true);
     try {
       const activeFileName = userB.activeFileName || 'main.py';
+      const liveCode = editorBRef.current ? editorBRef.current.getValue() : (userB.activeCode || '');
       const fileList =
         userB.files && userB.files.length > 0
-          ? userB.files.map((f) => (f.name === activeFileName ? { ...f, content: userB.activeCode || '' } : f))
-          : [{ id: '2', name: activeFileName, path: `/${activeFileName}`, content: userB.activeCode || '' }];
+          ? userB.files.map((f) => (f.name === activeFileName ? { ...f, content: liveCode } : f))
+          : [{ id: '2', name: activeFileName, path: `/${activeFileName}`, content: liveCode }];
       const res = await executeInCloudSandbox({
         language: userB.currentLanguage || 'python',
         files: fileList,
@@ -251,6 +259,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           currentUserRole={currentUserRole}
           isSharedCollab={isSharedCollab}
           activeSession={activeSession}
+          collabClient={collabClient}
           isRunning={isRunningA}
           result={resultA}
           copied={copiedA}
@@ -262,6 +271,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           onEndCollaboration={onEndCollaboration}
           onRequestViewAccess={onRequestViewAccess}
           onDownloadFile={onDownloadFile}
+          onEditorReady={(ed) => { editorARef.current = ed; }}
           onCopyOutput={() => {
             if (resultA?.stdout) {
               navigator.clipboard.writeText(resultA.stdout);
@@ -321,6 +331,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           currentUserRole={currentUserRole}
           isSharedCollab={isSharedCollab}
           activeSession={activeSession}
+          collabClient={collabClient}
           isRunning={isRunningB}
           result={resultB}
           copied={copiedB}
@@ -332,6 +343,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           onEndCollaboration={onEndCollaboration}
           onRequestViewAccess={onRequestViewAccess}
           onDownloadFile={onDownloadFile}
+          onEditorReady={(ed) => { editorBRef.current = ed; }}
           onCopyOutput={() => {
             if (resultB?.stdout) {
               navigator.clipboard.writeText(resultB.stdout);
@@ -353,6 +365,7 @@ interface WorkspaceColumnProps {
   currentUserRole: ClassroomRole;
   isSharedCollab: boolean;
   activeSession?: CollaborationSession | null;
+  collabClient?: CollaborationClient | null;
   isRunning: boolean;
   result: ExecutionResult | null;
   copied: boolean;
@@ -365,6 +378,7 @@ interface WorkspaceColumnProps {
   onRequestViewAccess?: (targetUserId: string) => void;
   onDownloadFile?: (ownerId: string, fileId: string) => void;
   onCopyOutput: () => void;
+  onEditorReady?: (editor: any) => void;
 }
 
 const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
@@ -375,6 +389,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   currentUserRole,
   isSharedCollab,
   activeSession,
+  collabClient,
   isRunning,
   result,
   copied,
@@ -387,10 +402,13 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   onRequestViewAccess,
   onDownloadFile,
   onCopyOutput,
+  onEditorReady,
 }) => {
   const editorRef = useRef<any>(null);
-  const localEmittedCodeRef = useRef<string>(user?.activeCode || '');
+  const bindingRef = useRef<ActiveBinding | null>(null);
+  const cleanupsRef = useRef<Array<() => void>>([]);
   const loadedUserFileKeyRef = useRef<string>('');
+  const localEmittedCodeRef = useRef<string>(user?.activeCode || '');
 
   const isSelf = Boolean(user && user.id === currentUserId);
   const isAdmin = currentUserRole === 'admin';
@@ -403,65 +421,102 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
     activeSession.participantIds.includes(user.id)
   );
 
-  const currentKey = user ? `${user.id}:${user.activeFileName || 'main.py'}` : '';
+  const hasAccess = isSelf || isAdmin || isPublic || isSharedCollab || isCollaboratingWithUser;
+  const isLocked = Boolean(user?.isLocked);
+  const canEdit = Boolean(hasAccess && (isSelf || isSharedCollab || isCollaboratingWithUser) && !isLocked);
 
-  // Synchronize editor buffer safely without EVER shifting the cursor to line 1
+  // Authoritative document identifier: shared for mutual collaboration session, individual for personal workspace
+  const docId = isSharedCollab && activeSession
+    ? `shared_${activeSession.id}_${user?.activeFileName || 'main.py'}`
+    : user
+    ? `user_${user.id}_${user?.activeFileName || 'main.py'}`
+    : '';
+
+  const currentKey = user ? `${user.id}:${user.activeFileName || 'main.py'}:${docId}` : '';
+
+  // Synchronize Monaco read-only state whenever permissions or lock status change
   useEffect(() => {
-    if (!editorRef.current || !user) return;
+    if (editorRef.current) {
+      editorRef.current.updateOptions({ readOnly: !canEdit });
+    }
+  }, [canEdit]);
 
-    // 1. Initial mount or user/file switch -> load new content
-    if (loadedUserFileKeyRef.current !== currentKey) {
-      loadedUserFileKeyRef.current = currentKey;
-      localEmittedCodeRef.current = user.activeCode || '';
-      editorRef.current.setValue(user.activeCode || '');
-      return;
+  // Establish authoritative CRDT binding to Monaco
+  const setupYjsBinding = async (editor: any) => {
+    if (!editor || !user || !docId) return;
+
+    // Clean up existing binding and listeners
+    cleanupsRef.current.forEach((fn) => {
+      try { fn(); } catch {}
+    });
+    cleanupsRef.current = [];
+
+    if (bindingRef.current) {
+      try { bindingRef.current.destroy(); } catch {}
+      bindingRef.current = null;
     }
 
-    // 2. If this update matches what was just typed locally, DO NOT touch Monaco!
-    if (user.activeCode === localEmittedCodeRef.current) {
-      return;
-    }
-
-    // 3. If local user is solely editing their own workspace alone, ignore laggy echoes
-    if (editorRef.current.hasTextFocus() && isSelf && !isCollaboratingWithUser) {
-      return;
-    }
-
-    // 4. Remote change arrived: update value smoothly while strictly preserving cursor & scroll position
-    const currentVal = editorRef.current.getValue();
-    if (currentVal !== user.activeCode) {
-      localEmittedCodeRef.current = user.activeCode || '';
-      const model = editorRef.current.getModel();
-      const position = editorRef.current.getPosition();
-      const selection = editorRef.current.getSelection();
-      const scrollTop = editorRef.current.getScrollTop();
-      const scrollLeft = editorRef.current.getScrollLeft();
-
-      if (model) {
-        editorRef.current.executeEdits('remote-sync', [
-          {
-            range: model.getFullModelRange(),
-            text: user.activeCode || '',
-            forceMoveMarkers: true,
-          },
-        ]);
-        editorRef.current.pushUndoStop();
-      } else {
-        editorRef.current.setValue(user.activeCode || '');
-      }
-
-      if (position) {
-        try { editorRef.current.setPosition(position); } catch {}
-      }
-      if (selection) {
-        try { editorRef.current.setSelection(selection); } catch {}
-      }
+    if (collabClient) {
       try {
-        editorRef.current.setScrollTop(scrollTop);
-        editorRef.current.setScrollLeft(scrollLeft);
-      } catch {}
+        const { doc, ytext, awareness } = collabClient.getOrCreateDoc(docId, user.activeCode || '');
+        const binding = await bindMonacoToYDoc(editor, doc, ytext, awareness, canEdit);
+        if (!binding) return;
+
+        bindingRef.current = binding;
+
+        // Observe CRDT changes and propagate to local state/parent
+        const handleDocChange = () => {
+          const latest = ytext.toString();
+          localEmittedCodeRef.current = latest;
+          onCodeChange?.(latest);
+        };
+        ytext.observe(handleDocChange);
+        cleanupsRef.current.push(() => {
+          try { ytext.unobserve(handleDocChange); } catch {}
+        });
+
+        // Broadcast cursor position changes via awareness (throttled)
+        let lastCursorTime = 0;
+        const cursorDisposable = editor.onDidChangeCursorPosition((e: any) => {
+          if (canEdit && collabClient) {
+            const now = Date.now();
+            if (now - lastCursorTime > 25) {
+              lastCursorTime = now;
+              collabClient.sendCursor(docId, e.position.lineNumber, e.position.column);
+            }
+          }
+        });
+        cleanupsRef.current.push(() => {
+          try { cursorDisposable.dispose(); } catch {}
+        });
+      } catch (err) {
+        console.error('[WorkspaceColumn] Error setting up Yjs binding', err);
+      }
+    } else {
+      // Fallback if collab client is unavailable: seed code once
+      if (loadedUserFileKeyRef.current !== currentKey) {
+        loadedUserFileKeyRef.current = currentKey;
+        localEmittedCodeRef.current = user.activeCode || '';
+        editor.setValue(user.activeCode || '');
+      }
     }
-  }, [user?.activeCode, currentKey, isSelf, isCollaboratingWithUser]);
+  };
+
+  useEffect(() => {
+    if (editorRef.current) {
+      setupYjsBinding(editorRef.current);
+    }
+    return () => {
+      cleanupsRef.current.forEach((fn) => {
+        try { fn(); } catch {}
+      });
+      cleanupsRef.current = [];
+      if (bindingRef.current) {
+        try { bindingRef.current.destroy(); } catch {}
+        bindingRef.current = null;
+      }
+    };
+  }, [docId, collabClient, user?.id, user?.activeFileName]);
 
   if (!user) {
     return (
@@ -478,10 +533,6 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
       </div>
     );
   }
-  const hasAccess = isSelf || isAdmin || isPublic || isSharedCollab || isCollaboratingWithUser;
-
-  const isLocked = Boolean(user.isLocked);
-  const canEdit = hasAccess && (isSelf || isSharedCollab || isCollaboratingWithUser) && !isLocked;
 
   const lang = user.currentLanguage || 'python';
   const monacoLang = getLanguageConfig(lang).monacoLang;
@@ -620,12 +671,16 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
             theme="vs-dark"
             onMount={(editor) => {
               editorRef.current = editor;
+              onEditorReady?.(editor);
+              setupYjsBinding(editor);
             }}
             onChange={(v) => {
-              const nextVal = v || '';
-              localEmittedCodeRef.current = nextVal;
-              if (onCodeChange) {
-                onCodeChange(nextVal);
+              if (!bindingRef.current) {
+                const nextVal = v || '';
+                localEmittedCodeRef.current = nextVal;
+                if (onCodeChange) {
+                  onCodeChange(nextVal);
+                }
               }
             }}
             options={{
