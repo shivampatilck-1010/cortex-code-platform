@@ -275,8 +275,8 @@ export class ClassroomRoomManager {
       return { room, participant: existing };
     }
 
-    // New participant: only admin if room has no active admin yet
-    const effectiveRole: ClassroomRole = !hasActiveAdmin ? 'admin' : (role === 'admin' && !room.admin.id ? 'admin' : 'user');
+    // New participant: only admin if explicitly requesting admin AND room has no active admin yet
+    const effectiveRole: ClassroomRole = (role === 'admin' && !hasActiveAdmin) ? 'admin' : 'user';
     const participantId = existingId || (effectiveRole === 'admin' ? generateId('admin') : generateId('user'));
     const userFiles = createDefaultFiles(name);
 

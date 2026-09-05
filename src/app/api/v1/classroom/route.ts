@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
         existingRoom.participants[existingRoom.admin.id] &&
         existingRoom.participants[existingRoom.admin.id].role === 'admin'
       );
-      const effectiveRole = !hasActiveAdmin ? 'admin' : 'user';
+      const requestedRole = body.role === 'admin' ? 'admin' : 'user';
+      const effectiveRole = (requestedRole === 'admin' && !hasActiveAdmin) ? 'admin' : 'user';
 
       const { room, participant } = ClassroomRoomManager.joinRoom(normRoomId, name.trim(), effectiveRole, existingId);
       const inviteUrl = `${baseUrl}/classroom/${room.roomId}`;

@@ -48,6 +48,7 @@ export class CollaborationClient {
   private cursorListeners: Set<(cursor: LiveCursor) => void> = new Set();
   private statusListeners: Set<(status: ConnectionStatus) => void> = new Set();
   private lifecycleListeners: Set<(lifecycle: ConnectionLifecycle) => void> = new Set();
+  private broadcastChannel: BroadcastChannel | null = null;
 
   // Gossip & room tracking
   private lastKnownParticipants: any[] = [];
@@ -66,6 +67,19 @@ export class CollaborationClient {
       this.lastRoomState = 'active';
     }
 
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        this.broadcastChannel = new BroadcastChannel(`cortex_classroom_${this.roomId}`);
+        this.broadcastChannel.onmessage = (event: MessageEvent) => {
+          if (event.data && event.data.clientId !== this.participantId) {
+            this.handleIncoming(event.data);
+          }
+        };
+      } catch (e) {
+        console.error('[CollabClient] BroadcastChannel init error', e);
+      }
+    }
+
     this.initConnection();
     this.startHeartbeat();
   }
@@ -79,7 +93,17 @@ export class CollaborationClient {
 
     this.setLifecycle('connecting');
 
-    // 1. Discover active WebSocket endpoint
+    const isLocalhost = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+    // On Cloudflare Workers / production hosting, port 3002 is not exposed.
+    // Connect directly to SSE for instant zero-latency edge streaming.
+    if (!isLocalhost) {
+      this.fallbackToSSE();
+      return;
+    }
+
+    // 1. Discover active WebSocket endpoint for local Node development
     let wsUrl: string | null = null;
     try {
       const res = await fetch(`/api/v1/classroom/${this.roomId}/events?info=true`, { cache: 'no-store' });
@@ -87,11 +111,7 @@ export class CollaborationClient {
         const data = await res.json();
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         if (data.wsPort) {
-          // Node.js development or standalone WebSocket hub
           wsUrl = `${protocol}//${window.location.hostname}:${data.wsPort}`;
-        } else if (data.hasCloudflareWs) {
-          // Cloudflare Workers Native WebSocket
-          wsUrl = `${protocol}//${window.location.host}/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}&participantName=${encodeURIComponent(this.participantName)}&participantRole=${this.participantRole}`;
         }
       }
     } catch {
@@ -99,8 +119,8 @@ export class CollaborationClient {
     }
 
     if (!wsUrl) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      wsUrl = `${protocol}//${window.location.host}/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}&participantName=${encodeURIComponent(this.participantName)}&participantRole=${this.participantRole}`;
+      this.fallbackToSSE();
+      return;
     }
 
     this.connectWebSocket(wsUrl);
@@ -568,6 +588,12 @@ export class CollaborationClient {
   // =========================================================================
 
   public async sendRaw(msg: RealtimeMessage) {
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage(msg);
+      } catch {}
+    }
+
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(serializeRealtimeMessage(msg));
@@ -662,6 +688,11 @@ export class CollaborationClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.cursorThrottleTimer) clearTimeout(this.cursorThrottleTimer);
+
+    if (this.broadcastChannel) {
+      try { this.broadcastChannel.close(); } catch {}
+      this.broadcastChannel = null;
+    }
 
     if (this.ws) {
       try { this.ws.close(); } catch {}

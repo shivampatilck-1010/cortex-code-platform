@@ -365,7 +365,13 @@ export default function ClassroomLivePage() {
       setConnectionStatus(status);
     });
 
+    // Resilient background edge synchronization: pings every 2.5 seconds to reconcile isolates
+    const syncTimer = setInterval(() => {
+      fetchRoomState(participantId, participantName, participantRole);
+    }, 2500);
+
     return () => {
+      clearInterval(syncTimer);
       unsubscribeEvents();
       unsubscribeStatus();
       client.cleanup();
@@ -972,7 +978,7 @@ export default function ClassroomLivePage() {
             const res = await fetch('/api/v1/classroom', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'join', roomId: targetId, name }),
+              body: JSON.stringify({ action: 'join', roomId: targetId, name, role: 'user' }),
             });
             const data = await res.json();
             if (!res.ok || !data.success) throw new Error(data.error || 'Failed to join classroom');
