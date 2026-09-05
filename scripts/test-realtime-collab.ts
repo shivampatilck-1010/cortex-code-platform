@@ -24,11 +24,11 @@ async function runSimulation() {
   const sharedDocId = 'shared_session1_main.py';
 
   // Helper to create a client connected to room
-  async function createTestClient(clientId, name, role = 'user') {
+  async function createTestClient(clientId: string, name: string, role = 'user') {
     const ws = new WebSocket(wsUrl);
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText('monaco');
-    const incomingMessages = [];
+    const incomingMessages: any[] = [];
 
     await new Promise((resolve, reject) => {
       ws.on('open', resolve);

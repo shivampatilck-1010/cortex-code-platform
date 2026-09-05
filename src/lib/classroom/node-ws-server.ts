@@ -70,6 +70,18 @@ export function broadcastToRoom(roomId: string, message: RealtimeMessage, exclud
   });
 }
 
+// Subscribe ClassroomRoomManager broadcasts directly to connected Node WebSockets
+ClassroomRoomManager.setExternalBroadcaster((roomId: string, event: any) => {
+  broadcastToRoom(roomId, {
+    type: event.type as any,
+    roomId,
+    clientId: event.senderId,
+    senderName: event.senderName,
+    payload: event.payload,
+    timestamp: event.timestamp || Date.now(),
+  });
+});
+
 /**
  * Ensures the Node.js WebSocket server is started and running
  */
@@ -364,6 +376,19 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         timestamp: Date.now(),
       });
       broadcastToRoom(normRoom, msg, client.participantId);
+      break;
+    }
+
+    case 'start_classroom':
+    case 'arena_started': {
+      const room = ClassroomRoomManager.startClassroom(normRoom, client.participantId);
+      broadcastToRoom(normRoom, {
+        type: 'room_state',
+        roomId: normRoom,
+        clientId: 'server',
+        payload: { room },
+        timestamp: Date.now(),
+      });
       break;
     }
 

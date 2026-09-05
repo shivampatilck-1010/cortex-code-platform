@@ -556,7 +556,7 @@ export class CollaborationClient {
   // SENDER & EVENT HELPERS
   // =========================================================================
 
-  private async sendRaw(msg: RealtimeMessage) {
+  public async sendRaw(msg: RealtimeMessage) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(serializeRealtimeMessage(msg));

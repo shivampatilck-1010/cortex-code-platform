@@ -239,13 +239,23 @@ export class ClassroomRoomManager {
       throw new Error(`Classroom has reached its capacity limit of ${room.settings.maxUsers} users.`);
     }
 
+    // Check if room has an active admin participant
+    const hasActiveAdmin = Boolean(
+      room.admin.id &&
+      room.admin.name &&
+      room.admin.name !== 'Classroom Host' &&
+      room.participants[room.admin.id] &&
+      room.participants[room.admin.id].role === 'admin'
+    );
+    const effectiveRole: ClassroomRole = (role === 'admin' || !hasActiveAdmin) ? 'admin' : 'user';
+
     // Reconnection of existing participant
     if (existingId && room.participants[existingId]) {
       const existing = room.participants[existingId];
       existing.online = true;
       existing.lastActive = Date.now();
       existing.name = name || existing.name;
-      if (role === 'admin') {
+      if (effectiveRole === 'admin') {
         existing.role = 'admin';
         room.admin.id = existing.id;
         room.admin.name = existing.name;
@@ -261,13 +271,13 @@ export class ClassroomRoomManager {
       return { room, participant: existing };
     }
 
-    const participantId = existingId || (role === 'admin' ? generateId('admin') : generateId('user'));
+    const participantId = existingId || (effectiveRole === 'admin' ? generateId('admin') : generateId('user'));
     const userFiles = createDefaultFiles(name);
 
     const participant: ClassroomParticipant = {
       id: participantId,
       name,
-      role: role,
+      role: effectiveRole,
       online: true,
       status: 'coding',
       currentLanguage: 'python',
@@ -276,9 +286,9 @@ export class ClassroomRoomManager {
       isLocked: false,
       canRun: room.settings.codeExecutionEnabled,
       privacy: {
-        workspaceVisibility: role === 'admin' ? 'public' : 'private',
+        workspaceVisibility: effectiveRole === 'admin' ? 'public' : 'private',
         allowCollaboration: true,
-        requireDownloadPermission: role !== 'admin',
+        requireDownloadPermission: effectiveRole !== 'admin',
       },
       files: userFiles,
       activeCode: userFiles[0].content,
@@ -286,7 +296,7 @@ export class ClassroomRoomManager {
 
     room.participants[participantId] = participant;
 
-    if (role === 'admin') {
+    if (effectiveRole === 'admin') {
       room.admin = { id: participantId, name, enteredArena: true };
       room.state = 'active';
       if (!room.activeWorkspaces.slotAUserId) {
@@ -320,12 +330,34 @@ export class ClassroomRoomManager {
     room.state = 'active';
     if (room.admin) {
       room.admin.enteredArena = true;
+      if (!room.admin.id || room.admin.name === 'Classroom Host') {
+        room.admin.id = adminId;
+        const p = room.participants[adminId];
+        if (p) {
+          room.admin.name = p.name;
+          p.role = 'admin';
+        }
+      }
     }
     this.broadcast(normRoomId, {
       type: 'classroom_started',
       roomId: normRoomId,
       senderId: adminId,
-      payload: { state: 'active' },
+      payload: { state: 'active', room },
+      timestamp: Date.now(),
+    });
+    this.broadcast(normRoomId, {
+      type: 'arena_started',
+      roomId: normRoomId,
+      senderId: adminId,
+      payload: { state: 'active', room },
+      timestamp: Date.now(),
+    });
+    this.broadcast(normRoomId, {
+      type: 'room_state',
+      roomId: normRoomId,
+      senderId: adminId,
+      payload: { room },
       timestamp: Date.now(),
     });
     return room;
@@ -922,6 +954,12 @@ export class ClassroomRoomManager {
     };
   }
 
+  private static externalBroadcaster: ((roomId: string, event: ClassroomEventMessage) => void) | null = null;
+
+  public static setExternalBroadcaster(fn: (roomId: string, event: ClassroomEventMessage) => void) {
+    this.externalBroadcaster = fn;
+  }
+
   public static broadcast(roomId: string, event: ClassroomEventMessage) {
     const norm = roomId.toUpperCase().trim();
     const roomListeners = listeners.get(norm);
@@ -933,6 +971,15 @@ export class ClassroomRoomManager {
           console.error('[ClassroomRoomManager] listener error', err);
         }
       });
+    }
+
+    // Bridge to active WebSocket servers (Node.js WS or Edge hub)
+    if (this.externalBroadcaster) {
+      try {
+        this.externalBroadcaster(norm, event);
+      } catch (err) {
+        console.error('[ClassroomRoomManager] externalBroadcaster error', err);
+      }
     }
   }
 }

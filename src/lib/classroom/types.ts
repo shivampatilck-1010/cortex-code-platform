@@ -161,6 +161,8 @@ export type ClassroomEventType =
   | 'admin_action'
   | 'chat_message'
   | 'classroom_started'
+  | 'start_classroom'
+  | 'arena_started'
   | 'classroom_ended';
 
 export interface ClassroomEventMessage {

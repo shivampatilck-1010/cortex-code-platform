@@ -276,6 +276,16 @@ export default function ClassroomLivePage() {
   // Launch the Code Arena for everyone in real time
   const handleStartClassroom = async () => {
     try {
+      // 1. Send WebSocket event for instant zero-latency edge propagation
+      collabClientRef.current?.sendRaw({
+        type: 'start_classroom',
+        roomId,
+        clientId: participantId,
+        senderName: participantName,
+        payload: { state: 'active' },
+        timestamp: Date.now(),
+      });
+
       const res = await fetch(`/api/v1/classroom/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -477,9 +487,15 @@ export default function ClassroomLivePage() {
         break;
 
       case 'classroom_started':
-        setRoom((prev) => prev ? { ...prev, state: 'active', admin: { ...prev.admin, enteredArena: true } } : prev);
-        fetchRoomState(participantId);
-        showToast('🚀 Admin has entered the arena! Starting session for everyone...');
+      case 'arena_started':
+      case 'session_started':
+        if (event.payload?.room) {
+          applyRoomState(event.payload.room);
+        } else {
+          setRoom((prev) => prev ? { ...prev, state: 'active', admin: { ...prev.admin, enteredArena: true } } : prev);
+          fetchRoomState(participantId);
+        }
+        showToast('🚀 Code Arena is now open! Entering arena...');
         break;
 
       case 'classroom_ended':
@@ -959,18 +975,12 @@ export default function ClassroomLivePage() {
   const onlineParticipantsCount = validParticipants.filter((p) => p.online).length;
   const totalParticipantsCount = validParticipants.length;
 
-  // Waiting room is strictly for when the room has not started, admin hasn't entered, and no active admin is in roster
-  const hasActiveAdminInRoom = Boolean(
-    room?.admin?.enteredArena ||
-    room?.state === 'active' ||
-    validParticipants.some((p) => p.role === 'admin' && (p.online || Date.now() - (p.lastActive || 0) < 1800000))
-  );
-
+  // The authoritative waiting room state: students wait only when the room is NOT active and admin has not entered the arena
   const isWaitingForAdmin =
     participantRole !== 'admin' &&
     room !== null &&
     room.state !== 'active' &&
-    !hasActiveAdminInRoom;
+    !room.admin?.enteredArena;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">

@@ -37,7 +37,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Participant name is required.' }, { status: 400 });
       }
 
-      const { room, participant } = ClassroomRoomManager.joinRoom(roomId.trim(), name.trim(), 'user', existingId);
+      const normRoomId = roomId.trim().toUpperCase();
+      const existingRoom = ClassroomRoomManager.getRoom(normRoomId, false);
+      const hasActiveAdmin = Boolean(
+        existingRoom &&
+        existingRoom.admin.id &&
+        existingRoom.admin.name !== 'Classroom Host' &&
+        existingRoom.participants[existingRoom.admin.id] &&
+        existingRoom.participants[existingRoom.admin.id].role === 'admin'
+      );
+      const effectiveRole = !hasActiveAdmin ? 'admin' : 'user';
+
+      const { room, participant } = ClassroomRoomManager.joinRoom(normRoomId, name.trim(), effectiveRole, existingId);
       const inviteUrl = `${baseUrl}/classroom/${room.roomId}`;
 
       return NextResponse.json({
