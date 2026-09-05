@@ -15,7 +15,7 @@ export interface AISettings {
 }
 
 export const DEFAULT_AI_SETTINGS: AISettings = {
-  autoFixErrors: true,
+  autoFixErrors: false,
   explainErrors: true,
   suggestImprovements: true,
   optimizeCode: true,

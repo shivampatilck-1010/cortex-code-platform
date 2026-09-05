@@ -491,11 +491,6 @@ export default function CloudIDEPage() {
       });
 
       setExecutionResult(res);
-
-      // Check if error occurred and auto-fix enabled
-      if (res.status !== 'success' && aiSettings.autoFixErrors) {
-        processAutoFix(activeFile.content, res.stderr, res.diagnostics || []);
-      }
     } finally {
       setIsRunning(false);
     }
