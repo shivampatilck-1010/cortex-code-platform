@@ -49,6 +49,8 @@ export class CollaborationClient {
   private statusListeners: Set<(status: ConnectionStatus) => void> = new Set();
   private lifecycleListeners: Set<(lifecycle: ConnectionLifecycle) => void> = new Set();
   private broadcastChannel: BroadcastChannel | null = null;
+  private peer: any = null;
+  private peerConnections: Map<string, any> = new Map();
 
   // Gossip & room tracking
   private lastKnownParticipants: any[] = [];
@@ -81,6 +83,7 @@ export class CollaborationClient {
     }
 
     this.initConnection();
+    this.initWebRTC();
     this.startHeartbeat();
   }
 
@@ -216,6 +219,87 @@ export class CollaborationClient {
       console.error('[CollabClient] SSE fallback failed', e);
       this.setLifecycle('disconnected');
     }
+  }
+
+  // =========================================================================
+  // WEBRTC PEER-TO-PEER ULTRA-LOW LATENCY DATACHANNEL MESH
+  // =========================================================================
+
+  private async initWebRTC() {
+    if (typeof window === 'undefined' || this.isDestroyed) return;
+    try {
+      const m = await import('peerjs');
+      const Peer = (m.default as any) || (m as any).Peer || m;
+      if (!Peer) return;
+
+      const normRoom = this.roomId.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normUser = this.participantId.replace(/[^a-z0-9]/g, '');
+      const myPeerId = `cortex-${normRoom}-${normUser}`;
+
+      this.peer = new Peer(myPeerId, {
+        debug: 0,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
+      });
+
+      this.peer.on('open', () => {
+        this.connectToKnownPeers();
+      });
+
+      this.peer.on('connection', (conn: any) => {
+        this.setupPeerConnection(conn);
+      });
+
+      this.peer.on('error', (err: any) => {
+        // Silently tolerate if peer ID exists or transient signaling issue
+        if (err?.type !== 'unavailable-id') {
+          console.warn('[CollabClient] WebRTC notice:', err?.type || err);
+        }
+      });
+    } catch {
+      // Gracefully continue using WebSocket/SSE if WebRTC is unavailable
+    }
+  }
+
+  private connectToKnownPeers() {
+    if (!this.peer || this.peer.destroyed) return;
+    const normRoom = this.roomId.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    for (const p of this.lastKnownParticipants) {
+      if (!p || !p.id || p.id === this.participantId) continue;
+      const targetPeerId = `cortex-${normRoom}-${p.id.replace(/[^a-z0-9]/g, '')}`;
+      if (!this.peerConnections.has(targetPeerId)) {
+        try {
+          const conn = this.peer.connect(targetPeerId, { reliable: true });
+          this.setupPeerConnection(conn);
+        } catch {}
+      }
+    }
+  }
+
+  private setupPeerConnection(conn: any) {
+    if (!conn) return;
+    const peerId = conn.peer;
+
+    conn.on('open', () => {
+      this.peerConnections.set(peerId, conn);
+    });
+
+    conn.on('data', (data: any) => {
+      this.handleIncoming(data);
+    });
+
+    conn.on('close', () => {
+      this.peerConnections.delete(peerId);
+    });
+
+    conn.on('error', () => {
+      this.peerConnections.delete(peerId);
+    });
   }
 
   private scheduleReconnect() {
@@ -588,12 +672,25 @@ export class CollaborationClient {
   // =========================================================================
 
   public async sendRaw(msg: RealtimeMessage) {
+    // 1. Ultra low-latency WebRTC DataChannel broadcast directly between web peers (15ms latency)
+    if (this.peerConnections.size > 0) {
+      this.peerConnections.forEach((conn) => {
+        if (conn && conn.open) {
+          try {
+            conn.send(msg);
+          } catch {}
+        }
+      });
+    }
+
+    // 2. BroadcastChannel for same-device multi-tab synchronization (0ms latency)
     if (this.broadcastChannel) {
       try {
         this.broadcastChannel.postMessage(msg);
       } catch {}
     }
 
+    // 3. Authoritative WebSocket (local dev & automated tests)
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(serializeRealtimeMessage(msg));
@@ -603,7 +700,7 @@ export class CollaborationClient {
       }
     }
 
-    // Low-latency HTTP fallback if WebSocket is not open
+    // 4. Low-latency HTTP fallback for server persistence
     try {
       await fetch(`/api/v1/classroom/${this.roomId}`, {
         method: 'POST',
@@ -658,6 +755,7 @@ export class CollaborationClient {
 
   public updateKnownParticipants(participants: any[]) {
     this.lastKnownParticipants = participants;
+    this.connectToKnownPeers();
   }
 
   public getKnownParticipants(): any[] {
@@ -692,6 +790,16 @@ export class CollaborationClient {
     if (this.broadcastChannel) {
       try { this.broadcastChannel.close(); } catch {}
       this.broadcastChannel = null;
+    }
+
+    this.peerConnections.forEach((conn) => {
+      try { conn.close(); } catch {}
+    });
+    this.peerConnections.clear();
+
+    if (this.peer) {
+      try { this.peer.destroy(); } catch {}
+      this.peer = null;
     }
 
     if (this.ws) {

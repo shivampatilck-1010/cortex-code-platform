@@ -20,7 +20,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
-import { ClassroomRoom, ClassroomParticipant, ClassroomRole, CollaborationRequest, FileDownloadRequest, FileDownloadDecision, CollaborationDecision } from '@/lib/classroom/types';
+import { ClassroomRoom, ClassroomParticipant, ClassroomRole, CollaborationRequest, FileDownloadRequest, FileDownloadDecision, CollaborationDecision, ChatMessage } from '@/lib/classroom/types';
 import { CollaborationClient } from '@/lib/classroom/collab-sync';
 import { UserListPanel } from '@/components/classroom/UserListPanel';
 import { TwoWorkspaceContainer } from '@/components/classroom/TwoWorkspaceContainer';
@@ -289,6 +289,10 @@ export default function ClassroomLivePage() {
         queryParams.set('clientParticipants', JSON.stringify(known));
       }
 
+      if (room?.chatMessages && room.chatMessages.length > 0) {
+        queryParams.set('clientChatMessages', JSON.stringify(room.chatMessages.slice(-20)));
+      }
+
       const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
 
       const res = await fetch(`/api/v1/classroom/${roomId}${queryStr}`);
@@ -365,10 +369,10 @@ export default function ClassroomLivePage() {
       setConnectionStatus(status);
     });
 
-    // Resilient background edge synchronization: pings every 2.5 seconds to reconcile isolates
+    // Resilient background edge synchronization: pings every 1.2 seconds to reconcile isolates
     const syncTimer = setInterval(() => {
       fetchRoomState(participantId, participantName, participantRole);
-    }, 2500);
+    }, 1200);
 
     return () => {
       clearInterval(syncTimer);
@@ -914,17 +918,50 @@ export default function ClassroomLivePage() {
   };
 
   const handleSendChat = async (text: string, isAnnouncement = false) => {
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'send_chat',
-        participantId,
-        text,
-        isAnnouncement,
-      }),
+    if (!text || !text.trim()) return;
+
+    const newMsg: ChatMessage = {
+      id: 'chat_' + Math.random().toString(36).substring(2, 9),
+      senderId: participantId,
+      senderName: participantName,
+      role: participantRole,
+      text: text.trim(),
+      timestamp: Date.now(),
+      isAnnouncement,
+    };
+
+    // 1. Instant optimistic local UI update (0ms feedback)
+    setRoom((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        chatMessages: [...(prev.chatMessages || []), newMsg],
+      };
     });
-    collabClientRef.current?.triggerImmediateSync();
+
+    // 2. Real-time broadcast over WebRTC DataChannels, BroadcastChannel & WebSockets
+    collabClientRef.current?.sendRaw({
+      type: 'chat_message',
+      roomId,
+      clientId: participantId,
+      senderName: participantName,
+      payload: newMsg,
+      timestamp: Date.now(),
+    });
+
+    // 3. Persist to server
+    try {
+      await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send_chat',
+          participantId,
+          text: text.trim(),
+          isAnnouncement,
+        }),
+      });
+    } catch {}
   };
 
   const handleUpdatePrivacy = async (privacy: any) => {

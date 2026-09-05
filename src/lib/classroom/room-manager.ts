@@ -376,7 +376,8 @@ export class ClassroomRoomManager {
     roomId: string,
     clientParticipants: ClassroomParticipant[],
     clientRoomState?: string,
-    clientAdminEntered?: boolean
+    clientAdminEntered?: boolean,
+    clientChatMessages?: ChatMessage[]
   ): ClassroomRoom | null {
     const normRoomId = roomId.toUpperCase().trim();
     const room = this.getRoom(normRoomId, true);
@@ -504,6 +505,22 @@ export class ClassroomRoomManager {
         }
       } else {
         seenNames.set(normName, id);
+      }
+    }
+
+    // 4. Merge chat messages gossiped across isolates
+    if (Array.isArray(clientChatMessages) && clientChatMessages.length > 0) {
+      if (!room.chatMessages) room.chatMessages = [];
+      const existingMsgIds = new Set(room.chatMessages.map((m) => m.id));
+      for (const m of clientChatMessages) {
+        if (m && m.id && !existingMsgIds.has(m.id)) {
+          room.chatMessages.push(m);
+          existingMsgIds.add(m.id);
+        }
+      }
+      room.chatMessages.sort((a, b) => a.timestamp - b.timestamp);
+      if (room.chatMessages.length > 200) {
+        room.chatMessages = room.chatMessages.slice(-200);
       }
     }
 

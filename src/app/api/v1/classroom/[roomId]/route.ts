@@ -54,8 +54,16 @@ export async function GET(
       }
     }
 
-    // Multi-isolate gossip sync: keeps participant lists and room state identical across all devices and isolates
-    ClassroomRoomManager.syncParticipants(roomId, clientParticipants, clientRoomState, clientAdminEntered);
+    const clientChatMessagesRaw = searchParams.get('clientChatMessages');
+    let clientChatMessages: any[] = [];
+    if (clientChatMessagesRaw) {
+      try {
+        clientChatMessages = JSON.parse(clientChatMessagesRaw);
+      } catch {}
+    }
+
+    // Multi-isolate gossip sync: keeps participant lists, room state, and chat identical across all devices and isolates
+    ClassroomRoomManager.syncParticipants(roomId, clientParticipants, clientRoomState, clientAdminEntered, clientChatMessages);
 
     const requester = requesterId ? room.participants[requesterId] : null;
     const isAdmin = requester?.role === 'admin';
@@ -128,7 +136,7 @@ export async function POST(
       }
 
       case 'heartbeat': {
-        const { clientParticipants, clientRoomState, clientAdminEntered, requesterRole } = body;
+        const { clientParticipants, clientRoomState, clientAdminEntered, requesterRole, clientChatMessages } = body;
         if (participantId && room.participants[participantId]) {
           room.participants[participantId].lastActive = Date.now();
           room.participants[participantId].online = true;
@@ -152,7 +160,8 @@ export async function POST(
           roomId,
           clientParticipants || [],
           clientRoomState,
-          clientAdminEntered
+          clientAdminEntered,
+          clientChatMessages
         );
         return NextResponse.json({ success: true, room: syncedRoom || room });
       }
