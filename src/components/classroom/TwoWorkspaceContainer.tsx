@@ -68,6 +68,15 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [isDragging, setIsDragging] = useState(false);
   const [fullscreenSlot, setFullscreenSlot] = useState<'none' | 'slotA' | 'slotB'>('none');
+  const [mobileTab, setMobileTab] = useState<'A' | 'B'>('A');
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -120,9 +129,14 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
     if (!userA || isRunningA) return;
     setIsRunningA(true);
     try {
+      const activeFileName = userA.activeFileName || 'main.py';
+      const fileList =
+        userA.files && userA.files.length > 0
+          ? userA.files.map((f) => (f.name === activeFileName ? { ...f, content: userA.activeCode || '' } : f))
+          : [{ id: '1', name: activeFileName, path: `/${activeFileName}`, content: userA.activeCode || '' }];
       const res = await executeInCloudSandbox({
         language: userA.currentLanguage || 'python',
-        files: userA.files || [{ id: '1', name: 'main.py', path: '/main.py', content: userA.activeCode }],
+        files: fileList,
       });
       setResultA(res);
     } catch (err: any) {
@@ -145,9 +159,14 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
     if (!userB || isRunningB) return;
     setIsRunningB(true);
     try {
+      const activeFileName = userB.activeFileName || 'main.py';
+      const fileList =
+        userB.files && userB.files.length > 0
+          ? userB.files.map((f) => (f.name === activeFileName ? { ...f, content: userB.activeCode || '' } : f))
+          : [{ id: '2', name: activeFileName, path: `/${activeFileName}`, content: userB.activeCode || '' }];
       const res = await executeInCloudSandbox({
         language: userB.currentLanguage || 'python',
-        files: userB.files || [{ id: '2', name: 'main.py', path: '/main.py', content: userB.activeCode }],
+        files: fileList,
       });
       setResultB(res);
     } catch (err: any) {
@@ -180,17 +199,47 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`h-full w-full flex flex-col sm:flex-row overflow-hidden bg-[#0c0d10] relative ${
+      className={`h-full w-full flex flex-col md:flex-row overflow-hidden bg-[#0c0d10] relative ${
         isDragging ? 'select-none cursor-col-resize' : ''
       }`}
     >
+      {/* Mobile Tab Bar (< md) */}
+      <div className="flex md:hidden h-9 bg-[#0e0f14] border-b border-[#1f2026] items-center px-2 space-x-1.5 flex-shrink-0 z-20">
+        <button
+          onClick={() => setMobileTab('A')}
+          className={`flex-1 py-1 px-2 text-xs font-semibold rounded flex items-center justify-center space-x-1.5 transition ${
+            mobileTab === 'A'
+              ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 shadow-sm'
+              : 'text-gray-400 hover:bg-[#181920]'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-cyan-400" />
+          <span className="truncate">Workspace A {userA ? `(${userA.name})` : ''}</span>
+        </button>
+        <button
+          onClick={() => setMobileTab('B')}
+          className={`flex-1 py-1 px-2 text-xs font-semibold rounded flex items-center justify-center space-x-1.5 transition ${
+            mobileTab === 'B'
+              ? 'bg-purple-950/80 text-purple-300 border border-purple-700/60 shadow-sm'
+              : 'text-gray-400 hover:bg-[#181920]'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-purple-400" />
+          <span className="truncate">Workspace B {userB ? `(${userB.name})` : ''}</span>
+        </button>
+      </div>
+
       {/* ================= WORKSPACE A ================= */}
       <div
         className={`h-full flex flex-col min-w-0 overflow-hidden transition-[width] duration-75 ${
-          fullscreenSlot === 'slotB' ? 'hidden' : 'flex'
+          fullscreenSlot === 'slotB'
+            ? 'hidden'
+            : isMobile && mobileTab === 'B'
+            ? 'hidden'
+            : 'flex'
         }`}
         style={{
-          width: fullscreenSlot === 'slotA' ? '100%' : `${splitPercent}%`,
+          width: isMobile || fullscreenSlot === 'slotA' ? '100%' : `${splitPercent}%`,
           flexShrink: 0,
         }}
       >
@@ -223,8 +272,8 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
         />
       </div>
 
-      {/* ================= DRAGGABLE SLIDER BAR ================= */}
-      {fullscreenSlot === 'none' && (
+      {/* ================= DRAGGABLE SLIDER BAR (Hidden on Mobile) ================= */}
+      {!isMobile && fullscreenSlot === 'none' && (
         <div
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
@@ -244,7 +293,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           </div>
 
           {/* Quick Percent Tooltip on hover/drag */}
-          <div className="absolute top-2 z-30 px-1.5 py-0.5 rounded bg-[#101116] border border-[#2b2d3c] text-[10px] font-mono text-gray-300 opacity-0 group-hover:opacity-100 transition shadow pointer-events-none whitespace-nowrap">
+          <div className="absolute top-2 z-30 px-1.5 py-0.5 rounded bg-[#101116] border border-[#2b2d38] text-[10px] font-mono text-gray-300 opacity-0 group-hover:opacity-100 transition shadow pointer-events-none whitespace-nowrap">
             {Math.round(splitPercent)}% : {Math.round(100 - splitPercent)}%
           </div>
         </div>
@@ -253,10 +302,14 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
       {/* ================= WORKSPACE B ================= */}
       <div
         className={`h-full flex flex-col min-w-0 overflow-hidden transition-[width] duration-75 ${
-          fullscreenSlot === 'slotA' ? 'hidden' : 'flex'
+          fullscreenSlot === 'slotA'
+            ? 'hidden'
+            : isMobile && mobileTab === 'A'
+            ? 'hidden'
+            : 'flex'
         }`}
         style={{
-          width: fullscreenSlot === 'slotB' ? '100%' : `${100 - splitPercent}%`,
+          width: isMobile || fullscreenSlot === 'slotB' ? '100%' : `${100 - splitPercent}%`,
           flexShrink: 0,
         }}
       >

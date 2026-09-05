@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Shield, Eye, Lock, Handshake, Download, X } from 'lucide-react';
+import { Shield, Eye, Lock, X } from 'lucide-react';
 import { UserPrivacySettings } from '@/lib/classroom/types';
 
 interface UserPrivacyModalProps {
@@ -25,84 +25,96 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
     requireDownloadPermission: false,
   };
 
+  const isPublic = safePrivacy.workspaceVisibility === 'public';
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-[#14151a] border border-[#2d303f] rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4 select-none">
-        <div className="flex items-center justify-between border-b border-[#242632] pb-3">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 select-none">
+      <div className="bg-[#14151e] border border-[#2b2e40] rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[#242634] pb-3">
           <div className="flex items-center space-x-2">
-            <Shield className="w-4 h-4 text-[#ff9100]" />
+            <div className="w-7 h-7 rounded-lg bg-[#ff9100]/15 border border-[#ff9100]/30 flex items-center justify-center text-[#ff9100]">
+              <Shield className="w-4 h-4" />
+            </div>
             <h3 className="font-heading font-bold text-sm text-gray-100">
-              My Workspace Privacy
+              Workspace Privacy Settings
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-white">
+          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-[#1e202c] transition">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="space-y-3 text-xs">
+        {/* 3 Simple Toggle Cards */}
+        <div className="space-y-2.5 text-xs">
           {/* Workspace Visibility */}
-          <div className="space-y-1.5 bg-[#191b22] p-3 rounded-lg border border-[#262834]">
-            <span className="font-semibold text-gray-200 block">Workspace Visibility</span>
-            <div className="space-y-1 pt-1">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="visibility"
-                  value="private"
-                  checked={safePrivacy.workspaceVisibility === 'private'}
-                  onChange={() => onUpdatePrivacy({ workspaceVisibility: 'private' })}
-                  className="accent-[#ff9100]"
-                />
-                <span className="text-gray-300">Private (Requires permission to view)</span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="visibility"
-                  value="public"
-                  checked={safePrivacy.workspaceVisibility === 'public'}
-                  onChange={() => onUpdatePrivacy({ workspaceVisibility: 'public' })}
-                  className="accent-[#ff9100]"
-                />
-                <span className="text-gray-300">Open to Classroom (Classroom users can inspect)</span>
-              </label>
+          <div className="p-3.5 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
+            <div className="space-y-0.5 pr-3">
+              <span className="font-semibold text-gray-200 block">
+                {isPublic ? 'Public Workspace' : 'Private Workspace'}
+              </span>
+              <span className="text-gray-400 text-[11px] block">
+                {isPublic ? 'Classroom participants can inspect your code' : 'Other users must ask permission to view your code'}
+              </span>
             </div>
+            <button
+              type="button"
+              onClick={() => onUpdatePrivacy({ workspaceVisibility: isPublic ? 'private' : 'public' })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 flex-shrink-0 ${
+                isPublic
+                  ? 'bg-emerald-600/20 border border-emerald-500/40 text-emerald-300'
+                  : 'bg-amber-600/20 border border-amber-500/40 text-amber-300'
+              }`}
+            >
+              {isPublic ? <Eye className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+              <span>{isPublic ? 'Public' : 'Private'}</span>
+            </button>
           </div>
 
-          {/* Collaboration Toggle */}
-          <div className="flex items-center justify-between bg-[#191b22] p-3 rounded-lg border border-[#262834]">
-            <div>
-              <span className="font-semibold text-gray-200 block">Incoming Collaboration</span>
-              <span className="text-gray-400 text-[11px]">Allow other users to send collaboration requests.</span>
+          {/* Incoming Collaboration */}
+          <div className="p-3.5 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
+            <div className="space-y-0.5 pr-3">
+              <span className="font-semibold text-gray-200 block">Allow Collaboration Requests</span>
+              <span className="text-gray-400 text-[11px] block">Let other students request to pair code with you</span>
             </div>
-            <input
-              type="checkbox"
-              checked={safePrivacy.allowCollaboration}
-              onChange={(e) => onUpdatePrivacy({ allowCollaboration: e.target.checked })}
-              className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
-            />
+            <button
+              type="button"
+              onClick={() => onUpdatePrivacy({ allowCollaboration: !safePrivacy.allowCollaboration })}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 p-0.5 ${
+                safePrivacy.allowCollaboration ? 'bg-[#ff9100]' : 'bg-[#2a2d3c]'
+              }`}
+            >
+              <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                safePrivacy.allowCollaboration ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
           </div>
 
-          {/* Download Permission Toggle */}
-          <div className="flex items-center justify-between bg-[#191b22] p-3 rounded-lg border border-[#262834]">
-            <div>
+          {/* Download Permission */}
+          <div className="p-3.5 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
+            <div className="space-y-0.5 pr-3">
               <span className="font-semibold text-gray-200 block">Require Download Approval</span>
-              <span className="text-gray-400 text-[11px]">Always require your consent before another user can download your code.</span>
+              <span className="text-gray-400 text-[11px] block">Require your consent before anyone downloads your file</span>
             </div>
-            <input
-              type="checkbox"
-              checked={safePrivacy.requireDownloadPermission}
-              onChange={(e) => onUpdatePrivacy({ requireDownloadPermission: e.target.checked })}
-              className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
-            />
+            <button
+              type="button"
+              onClick={() => onUpdatePrivacy({ requireDownloadPermission: !safePrivacy.requireDownloadPermission })}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 p-0.5 ${
+                safePrivacy.requireDownloadPermission ? 'bg-[#ff9100]' : 'bg-[#2a2d3c]'
+              }`}
+            >
+              <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                safePrivacy.requireDownloadPermission ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
           </div>
         </div>
 
-        <div className="flex justify-end pt-2">
+        {/* Done Button */}
+        <div className="pt-1 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-md bg-[#ff9100] hover:bg-[#e08000] text-black font-bold text-xs"
+            className="w-full py-2.5 rounded-xl bg-[#ff9100] hover:bg-[#e08000] text-black font-heading font-bold text-xs shadow-md transition"
           >
             Done
           </button>

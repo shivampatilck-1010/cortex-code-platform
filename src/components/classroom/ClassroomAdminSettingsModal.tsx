@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Settings, Shield, Megaphone, Power, X } from 'lucide-react';
+import { Settings, Shield, Megaphone, Power, X, Send } from 'lucide-react';
 import { ClassroomSettings } from '@/lib/classroom/types';
 
 interface ClassroomAdminSettingsModalProps {
@@ -34,122 +34,135 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-[#14151a] border border-[#2d303f] rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-5 select-none">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 select-none">
+      <div className="bg-[#14151e] border border-[#2b2e40] rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#242632] pb-3">
+        <div className="flex items-center justify-between border-b border-[#242634] pb-3">
           <div className="flex items-center space-x-2">
-            <Shield className="w-4 h-4 text-amber-400" />
+            <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Shield className="w-4 h-4" />
+            </div>
             <h3 className="font-heading font-bold text-sm text-gray-100">
-              Admin Classroom Control Center
+              Admin Control Center
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-white">
+          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-[#1e202c] transition">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Global Classroom Settings */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-heading font-bold text-gray-400 uppercase tracking-wider">
-            Classroom Policy &amp; Security
-          </h4>
-
-          <div className="space-y-2 bg-[#191b22] p-3 rounded-lg border border-[#262834] text-xs">
-            {/* User-to-User Collab */}
-            <div className="flex items-center justify-between py-1 border-b border-[#242632]">
-              <div>
-                <span className="font-semibold text-gray-200 block">User-to-User Collaboration</span>
-                <span className="text-gray-400 text-[11px]">Allow participants to collaborate via mutual permission.</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.userToUserCollaboration}
-                onChange={(e) => onUpdateSettings({ userToUserCollaboration: e.target.checked })}
-                className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
-              />
+        <div className="space-y-2 text-xs">
+          {/* Student-to-Student Collab */}
+          <div className="p-3 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
+            <div className="space-y-0.5 pr-2">
+              <span className="font-semibold text-gray-200 block">Student Collaboration</span>
+              <span className="text-gray-400 text-[11px] block">Allow participants to collaborate via mutual consent</span>
             </div>
+            <button
+              type="button"
+              onClick={() => onUpdateSettings({ userToUserCollaboration: !settings.userToUserCollaboration })}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 p-0.5 ${
+                settings.userToUserCollaboration ? 'bg-[#ff9100]' : 'bg-[#2a2d3c]'
+              }`}
+            >
+              <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                settings.userToUserCollaboration ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
 
-            {/* Code Execution */}
-            <div className="flex items-center justify-between py-1 border-b border-[#242632]">
-              <div>
-                <span className="font-semibold text-gray-200 block">Cloud Code Execution</span>
-                <span className="text-gray-400 text-[11px]">Allow students to compile and run code in isolated sandboxes.</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.codeExecutionEnabled}
-                onChange={(e) => onUpdateSettings({ codeExecutionEnabled: e.target.checked })}
-                className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
-              />
+          {/* Code Execution */}
+          <div className="p-3 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
+            <div className="space-y-0.5 pr-2">
+              <span className="font-semibold text-gray-200 block">Cloud Code Execution</span>
+              <span className="text-gray-400 text-[11px] block">Allow students to run code in cloud sandboxes</span>
             </div>
+            <button
+              type="button"
+              onClick={() => onUpdateSettings({ codeExecutionEnabled: !settings.codeExecutionEnabled })}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 p-0.5 ${
+                settings.codeExecutionEnabled ? 'bg-[#ff9100]' : 'bg-[#2a2d3c]'
+              }`}
+            >
+              <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                settings.codeExecutionEnabled ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
 
-            {/* File Downloads */}
-            <div className="flex items-center justify-between py-1">
-              <div>
-                <span className="font-semibold text-gray-200 block">File Downloads</span>
-                <span className="text-gray-400 text-[11px]">Allow downloading authorized code files.</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.fileDownloadsAllowed}
-                onChange={(e) => onUpdateSettings({ fileDownloadsAllowed: e.target.checked })}
-                className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
-              />
+          {/* File Downloads */}
+          <div className="p-3 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
+            <div className="space-y-0.5 pr-2">
+              <span className="font-semibold text-gray-200 block">File Downloads</span>
+              <span className="text-gray-400 text-[11px] block">Allow downloading authorized code files</span>
             </div>
+            <button
+              type="button"
+              onClick={() => onUpdateSettings({ fileDownloadsAllowed: !settings.fileDownloadsAllowed })}
+              className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 p-0.5 ${
+                settings.fileDownloadsAllowed ? 'bg-[#ff9100]' : 'bg-[#2a2d3c]'
+              }`}
+            >
+              <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${
+                settings.fileDownloadsAllowed ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
           </div>
         </div>
 
         {/* Room Announcement */}
-        <form onSubmit={handleSendAnnouncement} className="space-y-2">
-          <h4 className="text-xs font-heading font-bold text-gray-400 uppercase tracking-wider flex items-center space-x-1.5">
+        <form onSubmit={handleSendAnnouncement} className="space-y-1.5 pt-1">
+          <label className="text-xs font-semibold text-gray-300 flex items-center space-x-1.5">
             <Megaphone className="w-3.5 h-3.5 text-[#ff9100]" />
-            <span>Room-Wide Announcement</span>
-          </h4>
+            <span>Broadcast Announcement</span>
+          </label>
           <div className="flex space-x-2">
             <input
               type="text"
-              placeholder="Type an announcement to all students..."
+              placeholder="Send message to all students..."
               value={announcement}
               onChange={(e) => setAnnouncement(e.target.value)}
-              className="flex-1 bg-[#181920] border border-[#2b2d38] rounded-md px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#ff9100]"
+              className="flex-1 bg-[#191b24] border border-[#2b2d38] rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-[#ff9100]"
             />
             <button
               type="submit"
-              className="px-3 py-1.5 rounded-md bg-[#ff9100] hover:bg-[#e08000] text-black font-bold text-xs transition"
+              disabled={!announcement.trim()}
+              className="px-3.5 py-2 rounded-xl bg-[#ff9100] hover:bg-[#e08000] text-black font-bold text-xs disabled:opacity-50 transition flex items-center space-x-1"
             >
-              Broadcast
+              <Send className="w-3 h-3" />
+              <span>Send</span>
             </button>
           </div>
         </form>
 
-        {/* End Classroom Session */}
-        <div className="pt-2 border-t border-[#242632] space-y-2">
+        {/* End Session */}
+        <div className="pt-2 border-t border-[#242634]">
           {!confirmEnd ? (
             <button
               onClick={() => setConfirmEnd(true)}
-              className="w-full py-2 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 text-xs font-bold transition flex items-center justify-center space-x-1.5"
+              className="w-full py-2.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-rose-300 text-xs font-bold transition flex items-center justify-center space-x-1.5"
             >
               <Power className="w-3.5 h-3.5" />
               <span>End Classroom Session</span>
             </button>
           ) : (
-            <div className="p-3 bg-rose-950/50 border border-rose-800/60 rounded-lg space-y-2 text-xs">
-              <p className="text-rose-200 font-semibold">
-                Are you sure you want to end this classroom session? All participants will be disconnected gracefully.
-              </p>
-              <div className="flex justify-end space-x-2">
+            <div className="p-3 bg-rose-950/60 border border-rose-800/60 rounded-xl space-y-2 text-xs text-center">
+              <p className="text-rose-200 font-medium">End classroom and disconnect all users?</p>
+              <div className="flex justify-center space-x-2">
                 <button
+                  type="button"
                   onClick={() => setConfirmEnd(false)}
-                  className="px-3 py-1 rounded bg-gray-800 text-gray-300 text-xs"
+                  className="px-4 py-1.5 rounded-lg bg-[#20222e] text-gray-300 text-xs"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={onEndClassroom}
-                  className="px-4 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
+                  className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
                 >
-                  Confirm &amp; End
+                  Confirm End
                 </button>
               </div>
             </div>

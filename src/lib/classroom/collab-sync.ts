@@ -423,7 +423,7 @@ export class CollaborationClient {
   /**
    * Ultra low-latency broadcast of code changes over WebSocket
    */
-  public sendCodeUpdate(code: string, language?: string, targetUserId?: string) {
+  public sendCodeUpdate(code?: string, language?: string, targetUserId?: string) {
     this.sendEvent({
       type: 'code_update',
       roomId: this.roomId,
@@ -432,8 +432,8 @@ export class CollaborationClient {
       payload: {
         participantId: targetUserId || this.participantId,
         targetUserId: targetUserId || this.participantId,
-        code,
-        language,
+        ...(code !== undefined ? { code } : {}),
+        ...(language !== undefined ? { language } : {}),
       },
       timestamp: Date.now(),
     });

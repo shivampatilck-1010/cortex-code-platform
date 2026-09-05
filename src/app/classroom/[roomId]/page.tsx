@@ -56,6 +56,7 @@ export default function ClassroomLivePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const [isUserListOpen, setIsUserListOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Pending incoming requests
@@ -143,25 +144,43 @@ export default function ClassroomLivePage() {
       return newRoom;
     });
 
-    // 1. Synchronize Workspaces Slots
-    if (newRoom.activeWorkspaces) {
-      if (newRoom.activeWorkspaces.slotAUserId) {
-        setSlotAUserId(newRoom.activeWorkspaces.slotAUserId);
+    // 1. Maintain Workspaces Slots without background clobbering:
+    setSlotAUserId((prevA) => {
+      // If already set to a valid participant, keep it!
+      if (prevA && newRoom.participants && newRoom.participants[prevA]) {
+        return prevA;
       }
-      if (newRoom.activeWorkspaces.slotBUserId) {
-        setSlotBUserId(newRoom.activeWorkspaces.slotBUserId);
+      // If user has their own participant ID, default Workspace A to themselves!
+      if (myId && newRoom.participants && newRoom.participants[myId]) {
+        return myId;
       }
-    }
+      return newRoom.activeWorkspaces?.slotAUserId || Object.keys(newRoom.participants || {})[0] || prevA;
+    });
 
-    // 2. Auto-mount second user to slot B only if slot B is completely vacant
-    if (!slotBUserId && newRoom.participants && !newRoom.activeWorkspaces?.slotBUserId) {
-      const otherUser = Object.values(newRoom.participants).find(
-        (p) => p && p.id && p.id !== (newRoom.activeWorkspaces?.slotAUserId || slotAUserId) && p.id !== myId && p.name !== 'Classroom Host'
+    setSlotBUserId((prevB) => {
+      // If in active mutual collaboration, slot B must be the collaboration partner!
+      const myCollabSession = Object.values(newRoom.collaborationSessions || {}).find(
+        (s: any) => s.participantIds?.includes(myId)
       );
-      if (otherUser) {
-        setSlotBUserId(otherUser.id);
+      if (myCollabSession && myCollabSession.participantIds) {
+        const partnerId = myCollabSession.participantIds.find((pid: string) => pid !== myId);
+        if (partnerId) return partnerId;
       }
-    }
+
+      // If already set to a valid participant, keep it!
+      if (prevB && newRoom.participants && newRoom.participants[prevB]) {
+        return prevB;
+      }
+
+      // Otherwise auto-mount another participant into Slot B
+      if (newRoom.participants) {
+        const otherUser = Object.values(newRoom.participants).find(
+          (p) => p && p.id && p.id !== myId && p.name !== 'Classroom Host'
+        );
+        if (otherUser) return otherUser.id;
+      }
+      return prevB;
+    });
 
     // 3. Track active collaboration sessions & trigger toast when collaboration is established
     if (myId && newRoom.collaborationSessions) {
@@ -368,9 +387,9 @@ export default function ClassroomLivePage() {
         break;
 
       case 'select_workspaces':
-        if (event.payload) {
-          setSlotAUserId(event.payload.slotAUserId);
-          setSlotBUserId(event.payload.slotBUserId);
+        if (event.payload?.broadcast && participantRole !== 'admin') {
+          if (event.payload.slotAUserId) setSlotAUserId(event.payload.slotAUserId);
+          if (event.payload.slotBUserId) setSlotBUserId(event.payload.slotBUserId);
         }
         break;
 
@@ -564,34 +583,128 @@ export default function ClassroomLivePage() {
     }
   };
 
+  const handleLanguageChangeA = async (lang: string) => {
+    if (!slotAUserId) return;
+    setRoom((prev) => {
+      if (!prev || !prev.participants[slotAUserId]) return prev;
+      return {
+        ...prev,
+        participants: {
+          ...prev.participants,
+          [slotAUserId]: {
+            ...prev.participants[slotAUserId],
+            currentLanguage: lang,
+          },
+        },
+      };
+    });
+
+    const isAuthorized =
+      slotAUserId === participantId ||
+      Boolean(
+        room &&
+          Object.values(room.collaborationSessions || {}).some(
+            (s: any) => s.participantIds?.includes(participantId) && s.participantIds?.includes(slotAUserId)
+          )
+      );
+
+    if (isAuthorized) {
+      collabClientRef.current?.sendCodeUpdate(undefined, lang, slotAUserId);
+      try {
+        await fetch(`/api/v1/classroom/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update_code',
+            participantId: slotAUserId,
+            targetUserId: slotAUserId,
+            language: lang,
+          }),
+        });
+      } catch (e) {
+        console.error('Failed to persist language change for slot A', e);
+      }
+    }
+  };
+
+  const handleLanguageChangeB = async (lang: string) => {
+    if (!slotBUserId) return;
+    setRoom((prev) => {
+      if (!prev || !prev.participants[slotBUserId]) return prev;
+      return {
+        ...prev,
+        participants: {
+          ...prev.participants,
+          [slotBUserId]: {
+            ...prev.participants[slotBUserId],
+            currentLanguage: lang,
+          },
+        },
+      };
+    });
+
+    const isAuthorized =
+      slotBUserId === participantId ||
+      Boolean(
+        room &&
+          Object.values(room.collaborationSessions || {}).some(
+            (s: any) => s.participantIds?.includes(participantId) && s.participantIds?.includes(slotBUserId)
+          )
+      );
+
+    if (isAuthorized) {
+      collabClientRef.current?.sendCodeUpdate(undefined, lang, slotBUserId);
+      try {
+        await fetch(`/api/v1/classroom/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update_code',
+            participantId: slotBUserId,
+            targetUserId: slotBUserId,
+            language: lang,
+          }),
+        });
+      } catch (e) {
+        console.error('Failed to persist language change for slot B', e);
+      }
+    }
+  };
+
   const handleSelectSlotA = async (userId: string) => {
     setSlotAUserId(userId);
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'select_workspaces',
-        participantId,
-        slotAUserId: userId,
-        slotBUserId,
-      }),
-    });
-    collabClientRef.current?.triggerImmediateSync();
+    if (participantRole === 'admin') {
+      try {
+        await fetch(`/api/v1/classroom/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'select_workspaces',
+            participantId,
+            slotAUserId: userId,
+            slotBUserId,
+          }),
+        });
+      } catch {}
+    }
   };
 
   const handleSelectSlotB = async (userId: string) => {
     setSlotBUserId(userId);
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'select_workspaces',
-        participantId,
-        slotAUserId,
-        slotBUserId: userId,
-      }),
-    });
-    collabClientRef.current?.triggerImmediateSync();
+    if (participantRole === 'admin') {
+      try {
+        await fetch(`/api/v1/classroom/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'select_workspaces',
+            participantId,
+            slotAUserId,
+            slotBUserId: userId,
+          }),
+        });
+      } catch {}
+    }
   };
 
   const handleRequestCollaboration = async (targetUserId: string) => {
@@ -947,6 +1060,17 @@ export default function ClassroomLivePage() {
             <span>{onlineParticipantsCount} online</span>
           </span>
 
+          {/* Mobile User List Toggle */}
+          <button
+            onClick={() => setIsUserListOpen(!isUserListOpen)}
+            className={`lg:hidden p-1.5 rounded transition ${
+              isUserListOpen ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-gray-400 hover:text-white hover:bg-[#1a1c22]'
+            }`}
+            title="Toggle Classroom Participants"
+          >
+            <Users className="w-4 h-4" />
+          </button>
+
           {/* Chat Toggle */}
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
@@ -1102,17 +1226,35 @@ export default function ClassroomLivePage() {
         </div>
       ) : (
         /* 3. Main Body Arena (Left: User List | Center: Two Workspaces | Right: Chat Drawer) */
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar: All Classroom Users */}
-          <div className="w-64 sm:w-72 flex-shrink-0 h-full">
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* Mobile Drawer Backdrop */}
+          {isUserListOpen && (
+            <div
+              onClick={() => setIsUserListOpen(false)}
+              className="lg:hidden fixed inset-0 z-20 bg-black/60 backdrop-blur-xs"
+            />
+          )}
+
+          {/* Left Sidebar: All Classroom Users (Responsive Drawer on < lg) */}
+          <div
+            className={`fixed inset-y-12 left-0 z-30 lg:static lg:inset-auto w-64 sm:w-72 flex-shrink-0 h-[calc(100%-3rem)] lg:h-full transition-transform duration-200 ${
+              isUserListOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+            }`}
+          >
             <UserListPanel
               participants={room?.participants || {}}
               currentUserId={participantId}
               currentUserRole={participantRole}
               slotAUserId={slotAUserId}
               slotBUserId={slotBUserId}
-              onSelectSlotA={handleSelectSlotA}
-              onSelectSlotB={handleSelectSlotB}
+              onSelectSlotA={(uid) => {
+                handleSelectSlotA(uid);
+                setIsUserListOpen(false);
+              }}
+              onSelectSlotB={(uid) => {
+                handleSelectSlotB(uid);
+                setIsUserListOpen(false);
+              }}
               onRequestCollaboration={handleRequestCollaboration}
               onRequestFileDownload={handleRequestFileDownload}
               onAdminAction={handleAdminAction}
@@ -1132,6 +1274,8 @@ export default function ClassroomLivePage() {
               }
               onCodeChangeA={handleCodeChangeA}
               onCodeChangeB={handleCodeChangeB}
+              onLanguageChangeA={handleLanguageChangeA}
+              onLanguageChangeB={handleLanguageChangeB}
               onEndCollaboration={handleEndCollaboration}
               onRequestViewAccess={(targetId) => {
                 handleRequestCollaboration(targetId);
@@ -1193,9 +1337,9 @@ export default function ClassroomLivePage() {
         />
       )}
 
-      {/* Outgoing Request & Action Notification Toast */}
+      {/* Outgoing Request & Action Notification Toast (Relocated to bottom-right z-40) */}
       {toastMessage && (
-        <div className="fixed top-14 right-4 z-50 max-w-sm w-full animate-in slide-in-from-top-2 fade-in duration-200 select-none">
+        <div className="fixed bottom-5 right-5 z-40 max-w-sm w-full animate-in slide-in-from-bottom-2 fade-in duration-200 select-none pointer-events-auto">
           <div className="bg-[#12141c]/95 backdrop-blur-md border border-cyan-500/50 rounded-xl p-3.5 shadow-2xl text-xs text-cyan-200 flex items-center justify-between">
             <span className="font-medium leading-tight">{toastMessage}</span>
             <button
