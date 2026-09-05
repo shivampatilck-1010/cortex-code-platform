@@ -392,13 +392,18 @@ export class ClassroomRoomManager {
       };
 
       room.collaborationSessions[sessionId] = session;
+      // Automatically mount collaborating users into Workspace A and Workspace B
+      room.activeWorkspaces = {
+        slotAUserId: req.fromId,
+        slotBUserId: req.toId,
+      };
     }
 
     this.broadcast(room.roomId, {
       type: 'collaboration_response',
       roomId: room.roomId,
       senderId: responderId,
-      payload: { request: req, session },
+      payload: { request: req, session, activeWorkspaces: room.activeWorkspaces },
       timestamp: Date.now(),
     });
 

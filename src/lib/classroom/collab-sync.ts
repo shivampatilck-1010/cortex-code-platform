@@ -152,14 +152,12 @@ export class CollaborationClient {
               payload: { room: data.room },
               timestamp: Date.now(),
             });
-            if (this.currentStatus === 'offline') {
-              this.setStatus(this.isConnected ? 'online' : 'syncing');
-            }
+            this.setStatus('online');
           }
         }
       } catch {
         if (!this.isConnected) {
-          this.setStatus('offline');
+          this.setStatus('syncing');
         }
       }
     };

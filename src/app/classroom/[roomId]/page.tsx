@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { 
   Copy, 
   Check, 
-  Crown, 
   Users, 
   MessageSquare, 
   Settings, 
@@ -153,13 +152,7 @@ export default function ClassroomLivePage() {
       setConnectionStatus(status);
     });
 
-    // Infallible polling fallback every 2.5 seconds to guarantee zero lag or desync
-    const pollInterval = setInterval(() => {
-      fetchRoomState(participantId);
-    }, 2500);
-
     return () => {
-      clearInterval(pollInterval);
       unsubscribeEvents();
       unsubscribeStatus();
       client.cleanup();
@@ -176,9 +169,14 @@ export default function ClassroomLivePage() {
         break;
 
       case 'join':
-      case 'presence':
       case 'user_updated':
         fetchRoomState(participantId);
+        break;
+
+      case 'presence':
+        if (event.senderId !== participantId) {
+          fetchRoomState(participantId);
+        }
         break;
 
       case 'select_workspaces':
@@ -194,9 +192,31 @@ export default function ClassroomLivePage() {
         }
         break;
 
-      case 'collaboration_response':
+      case 'collaboration_response': {
+        const { request, session, activeWorkspaces } = event.payload || {};
+        if (activeWorkspaces) {
+          setSlotAUserId(activeWorkspaces.slotAUserId);
+          setSlotBUserId(activeWorkspaces.slotBUserId);
+        } else if (session?.participantIds) {
+          setSlotAUserId(session.participantIds[0]);
+          setSlotBUserId(session.participantIds[1]);
+        }
+        if (request && (request.fromId === participantId || request.toId === participantId)) {
+          if (request.status === 'accepted') {
+            const partner = request.fromId === participantId ? request.toName : request.fromName;
+            showToast(`🎉 Access approved! Real-time collaboration active with ${partner}.`);
+          } else if (request.status === 'declined') {
+            const partner = request.fromId === participantId ? request.toName : request.fromName;
+            showToast(`Access request was declined by ${partner}.`);
+          }
+        }
+        fetchRoomState(participantId);
+        break;
+      }
+
       case 'end_collaboration':
         fetchRoomState(participantId);
+        showToast('Collaboration session ended.');
         break;
 
       case 'file_download_request':
@@ -205,13 +225,21 @@ export default function ClassroomLivePage() {
         }
         break;
 
-      case 'file_download_response':
-        // If requester is self and approved, trigger download
-        if (event.payload?.request?.requesterId === participantId && event.payload?.token) {
-          const { fileId, token } = event.payload;
-          window.open(`/api/v1/classroom/${roomId}/file-download?fileId=${fileId}&token=${token}&requesterId=${participantId}`);
+      case 'file_download_response': {
+        const { request, token, fileId } = event.payload || {};
+        if (request?.requesterId === participantId) {
+          if (request.status === 'allow_once' || request.status === 'allow_session') {
+            showToast(`✅ Download approved by ${request.ownerName}!`);
+            if (token && fileId) {
+              window.open(`/api/v1/classroom/${roomId}/file-download?fileId=${fileId}&token=${token}&requesterId=${participantId}`);
+            }
+          } else if (request.status === 'denied') {
+            showToast(`❌ Download request was denied by ${request.ownerName}.`);
+          }
         }
+        fetchRoomState(participantId);
         break;
+      }
 
       case 'chat_message':
         setRoom((prev) => {
@@ -343,18 +371,34 @@ export default function ClassroomLivePage() {
   };
 
   const handleRespondCollaboration = async (requestId: string, decision: CollaborationDecision) => {
+    const targetReq = incomingCollabReq;
     setIncomingCollabReq(null);
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'respond_collaboration',
-        participantId,
-        requestId,
-        decision,
-      }),
-    });
-    fetchRoomState(participantId);
+    try {
+      const res = await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'respond_collaboration',
+          participantId,
+          requestId,
+          decision,
+        }),
+      });
+      const data = await res.json();
+      if (decision === 'accepted') {
+        const partnerId = targetReq?.fromId;
+        if (partnerId) {
+          setSlotAUserId(participantId);
+          setSlotBUserId(partnerId);
+          showToast(`🎉 Access approved! Real-time collaboration active with ${targetReq.fromName || 'participant'}.`);
+        }
+      } else {
+        showToast('Access request declined.');
+      }
+      fetchRoomState(participantId);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleEndCollaboration = async (sessionId: string) => {
@@ -533,13 +577,6 @@ export default function ClassroomLivePage() {
             </div>
           </div>
 
-          {/* Admin Label */}
-          {room && (
-            <div className="hidden lg:flex items-center space-x-1.5 pl-2 border-l border-[#20222a] text-xs text-gray-400">
-              <Crown className="w-3.5 h-3.5 text-amber-400" />
-              <span>Admin: <strong className="text-gray-200">{room.admin.name}</strong></span>
-            </div>
-          )}
         </div>
 
         {/* Center / Right Controls */}
@@ -589,6 +626,25 @@ export default function ClassroomLivePage() {
             >
               <Settings className="w-4 h-4" />
             </button>
+          )}
+
+          {/* Current User Profile Badge */}
+          {participantName && (
+            <div className="flex items-center space-x-1.5 px-2 py-1 rounded bg-[#161720] border border-[#272a38] text-xs shadow-inner">
+              <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#ff9100] to-[#ffa733] text-black flex items-center justify-center font-bold text-[10px] shadow-sm">
+                {participantName.charAt(0).toUpperCase()}
+              </div>
+              <span className="font-medium text-gray-200 text-xs max-w-[90px] truncate" title={participantName}>
+                {participantName}
+              </span>
+              <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono font-medium ${
+                participantRole === 'admin' 
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}>
+                {participantRole === 'admin' ? 'Admin' : 'You'}
+              </span>
+            </div>
           )}
 
           {/* Leave Classroom */}

@@ -116,8 +116,10 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
     activeSession.mode === 'shared' &&
     userA &&
     userB &&
-    activeSession.participantIds.includes(userA.id) &&
-    activeSession.participantIds.includes(userB.id)
+    (
+      (activeSession.participantIds.includes(userA.id) && activeSession.participantIds.includes(userB.id)) ||
+      (activeSession.participantIds.includes(currentUserId) && (activeSession.participantIds.includes(userA.id) || activeSession.participantIds.includes(userB.id)))
+    )
   );
 
   return (
@@ -237,10 +239,16 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   const isSelf = user.id === currentUserId;
   const isAdmin = currentUserRole === 'admin';
   const isPublic = user.privacy.workspaceVisibility === 'public';
-  const hasAccess = isSelf || isAdmin || isPublic || isSharedCollab;
+  const isCollaboratingWithUser = Boolean(
+    activeSession &&
+    activeSession.mode === 'shared' &&
+    activeSession.participantIds.includes(currentUserId) &&
+    activeSession.participantIds.includes(user.id)
+  );
+  const hasAccess = isSelf || isAdmin || isPublic || isSharedCollab || isCollaboratingWithUser;
 
   const isLocked = Boolean(user.isLocked);
-  const canEdit = hasAccess && (isSelf || isSharedCollab) && !isLocked;
+  const canEdit = hasAccess && (isSelf || isSharedCollab || isCollaboratingWithUser) && !isLocked;
 
   const lang = user.currentLanguage || 'python';
   const monacoLang = getLanguageConfig(lang).monacoLang;
