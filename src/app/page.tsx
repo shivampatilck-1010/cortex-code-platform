@@ -1047,10 +1047,8 @@ export default function CloudIDEPage() {
           Practice competitive programming challenges, online coding tests, algorithm practice, and benchmark execution latency and memory consumption.
         </p>
         <nav aria-label="Core Navigation">
-          <a href="/challenges">Coding Challenges & Algorithms</a>
-          <a href="/learn">Interactive Programming Tutorials</a>
-          <a href="/dashboard">Developer Dashboard & Metrics</a>
-          <a href="/compare">Language Benchmark & Comparison</a>
+          <a href="/">Universal Online IDE & Cloud Compiler</a>
+          <a href="/compare">Algorithm Benchmark & Dual Code Comparison</a>
         </nav>
       </section>
     </div>

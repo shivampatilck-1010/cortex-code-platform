@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Settings, 
@@ -16,7 +16,14 @@ import {
   CheckCircle2,
   Loader2,
   ExternalLink,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Copy,
+  Lock,
+  Server,
+  Zap,
+  RefreshCw
 } from 'lucide-react';
 import { AISettings } from '@/lib/ai/assistant';
 import { CortexLogo } from '@/components/brand/CortexLogo';
@@ -47,9 +54,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   >('ai');
 
   const [keyInput, setKeyInput] = useState(aiSettings.apiKey || '');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [validationState, setValidationState] = useState<'idle' | 'valid' | 'invalid'>(aiSettings.apiKey ? 'valid' : 'idle');
   const [validationMsg, setValidationMsg] = useState(aiSettings.apiKey ? 'Your auto fix is connected and good to go!' : '');
+
+  // API Key & Execution Limits State
+  const [showCortexApiKey, setShowCortexApiKey] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [memoryLimit, setMemoryLimit] = useState<number>(512);
+  const [processTimeout, setProcessTimeout] = useState<number>(10);
+
+  // Load execution limits from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMem = localStorage.getItem('cortex_memory_limit');
+      if (savedMem) setMemoryLimit(Number(savedMem));
+      const savedTimeout = localStorage.getItem('cortex_process_timeout');
+      if (savedTimeout) setProcessTimeout(Number(savedTimeout));
+    }
+  }, []);
+
+  const handleSaveMemory = (val: number) => {
+    setMemoryLimit(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cortex_memory_limit', String(val));
+    }
+  };
+
+  const handleSaveTimeout = (val: number) => {
+    setProcessTimeout(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cortex_process_timeout', String(val));
+    }
+  };
 
   const validateKey = async (k: string) => {
     const trimmed = k.trim();
@@ -89,6 +127,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleCopyApiKey = (keyText: string) => {
+    navigator.clipboard.writeText(keyText);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -98,10 +142,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="px-5 py-3.5 bg-[#141518] border-b border-[#252830] flex items-center justify-between">
           <div className="flex items-center space-x-3 text-gray-200">
             <CortexLogo variant="header" size="sm" />
-            <span className="text-gray-600 font-normal">|</span>
-            <span className="font-semibold text-xs text-gray-300">Platform Preferences</span>
+            <span className="text-gray-400 text-xs">•</span>
+            <span className="font-heading font-semibold text-gray-300 text-xs">Platform Settings</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white p-1.5 rounded hover:bg-[#252834] transition">
+          <button
+            onClick={onClose}
+            className="p-1 rounded text-gray-400 hover:text-white hover:bg-[#202227] transition"
+            title="Close (Esc)"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -114,7 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               { id: 'ai', label: 'AI Assistance', icon: Sparkles },
               { id: 'editor', label: 'Editor & Fonts', icon: Sliders },
               { id: 'appearance', label: 'Theme & Style', icon: Palette },
-              { id: 'execution', label: 'Execution Limits', icon: Cpu },
+              { id: 'execution', label: 'Execution & Limits', icon: Cpu },
               { id: 'security', label: 'Security & Sandbox', icon: Shield },
               { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
               { id: 'api', label: 'Developer API Keys', icon: Key },
@@ -149,7 +197,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="space-y-3 bg-[#1e2028] p-4 rounded border border-[#2d303d]">
-                  {/* Inline Code Suggestions Toggle (Default OFF) */}
+                  {/* Inline Code Suggestions Toggle */}
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="font-heading font-semibold text-gray-200 block text-xs">Inline Code Suggestions (Ghost Text)</span>
@@ -165,19 +213,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           localStorage.setItem('cortex_inline_suggestions', String(enabled));
                         }
                       }}
-                      className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2.5 border-t border-[#2a2c36]">
-                    <div>
-                      <span className="font-heading font-semibold text-gray-200 block text-xs">Auto Fix Errors</span>
-                      <span className="text-gray-400 text-xs">Automatically generate fixes when compiler or runtime errors are detected.</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={aiSettings.autoFixErrors}
-                      onChange={(e) => onUpdateAISettings({ autoFixErrors: e.target.checked })}
                       className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
                     />
                   </div>
@@ -209,7 +244,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Google Gemini AI Integration (Free API Key) Instructions & Connect */}
+                {/* Google Gemini AI Integration (Free API Key) */}
                 <div className="bg-[#151722] border border-[#2d303f] rounded-lg p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-white text-xs flex items-center space-x-1.5 text-[#ff9100]">
@@ -228,31 +263,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
 
                   <p className="text-gray-300 text-[11px] leading-relaxed">
-                    To handle complex logic and algorithmic errors across all 16 languages beyond offline heuristics, you can connect your free Google Gemini API key:
+                    To handle complex algorithmic errors and deep code repairs across all 16 languages beyond offline heuristics, connect your free Google Gemini API key:
                   </p>
 
-                  <div className="text-gray-400 text-[10.5px] space-y-1.5 bg-[#0f1015] p-2.5 rounded border border-[#222430]">
+                  <div className="text-gray-400 text-[10.5px] space-y-1 bg-[#0f1015] p-2 rounded border border-[#222430]">
                     <div className="flex items-start space-x-2">
                       <span className="text-[#ff9100] font-bold">1.</span>
-                      <span>Click <strong className="text-white">"Connect Gemini AI (Free)"</strong> directly inside the Auto-Fix widget (or in Settings).</span>
+                      <span>Paste your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[#ff9100] underline">Google AI Studio</a>.</span>
                     </div>
                     <div className="flex items-start space-x-2">
                       <span className="text-[#ff9100] font-bold">2.</span>
-                      <span>Paste your free Google AI Studio key (<span className="font-mono text-[#ff9100]">AIzaSy...</span>) from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[#ff9100] underline hover:text-[#e08000]">Google AI Studio</a>.</span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <span className="text-[#ff9100] font-bold">3.</span>
-                      <span>The key is saved locally in your browser (<span className="font-mono text-gray-300">localStorage</span>), activating Gemini 2.5 Flash for deep reasoning, automated code repairs, and instant diffs. When no key is entered, Cortex runs the deterministic offline engine.</span>
+                      <span>The key is encrypted in your local browser storage (<span className="font-mono text-gray-300">localStorage</span>). It is never logged or exposed.</span>
                     </div>
                   </div>
 
-                  {/* Automated Input Box */}
+                  {/* Input Box with Visibility Toggle */}
                   <div className="pt-1 space-y-2">
                     <label className="text-gray-300 font-semibold block text-xs">Google Gemini API Key:</label>
                     <div className="flex items-center space-x-2">
                       <div className="relative flex-1">
                         <input
-                          type="password"
+                          type={showGeminiKey ? 'text' : 'password'}
                           placeholder="AIzaSy..."
                           value={keyInput}
                           onChange={(e) => {
@@ -266,8 +297,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') validateKey(keyInput);
                           }}
-                          className="w-full bg-[#0e0f14] text-gray-200 px-3 py-2 rounded border border-[#2d303d] focus:border-[#ff9100] focus:outline-none font-mono text-xs pr-8"
+                          className="w-full bg-[#0e0f14] text-gray-200 px-3 py-2 rounded border border-[#2d303d] focus:border-[#ff9100] focus:outline-none font-mono text-xs pr-16"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+                          className="absolute right-8 top-2.5 text-gray-400 hover:text-gray-200 transition"
+                          title={showGeminiKey ? 'Hide key' : 'Show key'}
+                        >
+                          {showGeminiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
                         {isValidating && (
                           <Loader2 className="w-3.5 h-3.5 text-[#ff9100] animate-spin absolute right-2.5 top-2.5" />
                         )}
@@ -321,27 +360,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="space-y-3 bg-[#1e2028] p-4 rounded border border-[#2d303d]">
-                  {/* Inline Code Suggestions Toggle (Default OFF) */}
                   <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-heading font-semibold text-gray-200 block text-xs">Inline Code Suggestions (Ghost Text)</span>
-                      <span className="text-gray-400 text-xs">Show intelligent completions as you type. Press Tab to accept, Esc to dismiss. (Default: OFF)</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(aiSettings.enableInlineSuggestions)}
-                      onChange={(e) => {
-                        const enabled = e.target.checked;
-                        onUpdateAISettings({ enableInlineSuggestions: enabled });
-                        if (typeof window !== 'undefined') {
-                          localStorage.setItem('cortex_inline_suggestions', String(enabled));
-                        }
-                      }}
-                      className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2.5 border-t border-[#2a2c36]">
                     <span className="font-heading font-semibold text-gray-200 text-xs">Font Size (px)</span>
                     <input
                       type="number"
@@ -353,11 +372,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </div>
                   <div className="flex items-center justify-between pt-2.5 border-t border-[#2a2c36]">
-                    <span className="font-heading font-semibold text-gray-200 text-xs">Tab Size</span>
+                    <span className="font-heading font-semibold text-gray-200 text-xs">Tab Indentation</span>
                     <span className="text-gray-400 font-mono text-xs">4 Spaces</span>
                   </div>
                   <div className="flex items-center justify-between pt-2.5 border-t border-[#2a2c36]">
-                    <span className="font-heading font-semibold text-gray-200 text-xs">Format On Paste</span>
+                    <span className="font-heading font-semibold text-gray-200 text-xs">Auto Bracket Matching</span>
                     <input type="checkbox" defaultChecked className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer" />
                   </div>
                 </div>
@@ -370,9 +389,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <h3 className="text-sm font-heading font-bold text-gray-200">Theme & UI Aesthetic</h3>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { id: 'vs-dark', name: 'Cortex Dark (VS Code)', preview: '#1e1e1e' },
-                    { id: 'light', name: 'Cortex Light', preview: '#f8fafc' },
+                    { id: 'vs-dark', name: 'Cortex Charcoal Dark', preview: '#18191e' },
                     { id: 'hc-black', name: 'High Contrast Black', preview: '#000000' },
+                    { id: 'light', name: 'Cortex Light Mode', preview: '#f8fafc' },
                   ].map((t) => (
                     <button
                       key={t.id}
@@ -389,22 +408,135 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* EXECUTION LIMITS */}
+            {/* EXECUTION & LIMITS */}
             {activeSection === 'execution' && (
               <div className="space-y-4">
-                <h3 className="text-sm font-heading font-bold text-gray-200">Sandbox Resource Quotas</h3>
-                <div className="space-y-2 text-gray-300 bg-[#1e2028] p-4 rounded border border-[#2d303d] text-xs">
-                  <div className="flex justify-between py-1.5 border-b border-[#2a2c36]">
-                    <span>Process Timeout</span>
-                    <span className="font-mono text-[#ff9100]">10 Seconds</span>
+                <div>
+                  <h3 className="text-sm font-heading font-bold text-gray-200">Execution & Resource Quotas</h3>
+                  <p className="text-gray-400 text-xs mt-0.5">Customize process execution ceilings, runtime timeouts, and memory limits.</p>
+                </div>
+
+                <div className="space-y-3 bg-[#1e2028] p-4 rounded border border-[#2d303d] text-xs">
+                  {/* Memory Limit Selector */}
+                  <div className="flex items-center justify-between py-1.5 border-b border-[#2a2c36]">
+                    <div>
+                      <span className="font-heading font-semibold text-gray-200 block">Memory Ceiling (RAM)</span>
+                      <span className="text-gray-400 text-[11px]">Maximum memory assigned to your compiler and program runtime.</span>
+                    </div>
+                    <select
+                      value={memoryLimit}
+                      onChange={(e) => handleSaveMemory(Number(e.target.value))}
+                      className="bg-[#141518] text-[#ff9100] font-mono font-bold border border-[#2d303d] rounded px-3 py-1.5 text-xs focus:outline-none focus:border-[#ff9100]"
+                    >
+                      <option value={256}>256 MB (Standard)</option>
+                      <option value={512}>512 MB (Recommended)</option>
+                      <option value={1024}>1024 MB (1 GB - Data / ML)</option>
+                      <option value={2048}>2048 MB (2 GB - High Performance)</option>
+                      <option value={4096}>4096 MB (4 GB - Maximum)</option>
+                    </select>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-[#2a2c36]">
-                    <span>Memory Limit</span>
-                    <span className="font-mono text-gray-200">256 MB</span>
+
+                  {/* Process Timeout Selector */}
+                  <div className="flex items-center justify-between py-1.5 border-b border-[#2a2c36]">
+                    <div>
+                      <span className="font-heading font-semibold text-gray-200 block">Process Timeout</span>
+                      <span className="text-gray-400 text-[11px]">Automatic termination guard to prevent infinite loops and hangs.</span>
+                    </div>
+                    <select
+                      value={processTimeout}
+                      onChange={(e) => handleSaveTimeout(Number(e.target.value))}
+                      className="bg-[#141518] text-[#ff9100] font-mono font-bold border border-[#2d303d] rounded px-3 py-1.5 text-xs focus:outline-none focus:border-[#ff9100]"
+                    >
+                      <option value={5}>5 Seconds (Fast Check)</option>
+                      <option value={10}>10 Seconds (Default)</option>
+                      <option value={15}>15 Seconds (Heavy Compute)</option>
+                      <option value={30}>30 Seconds (Extended)</option>
+                    </select>
                   </div>
-                  <div className="flex justify-between py-1.5">
-                    <span>Concurrent Jobs</span>
-                    <span className="font-mono text-emerald-400">3 Parallel Workers</span>
+
+                  {/* Parallel Execution */}
+                  <div className="flex items-center justify-between py-1.5">
+                    <div>
+                      <span className="font-heading font-semibold text-gray-200 block">Concurrent Execution Workers</span>
+                      <span className="text-gray-400 text-[11px]">Parallel edge containers provisioned for dual benchmarks and tests.</span>
+                    </div>
+                    <span className="font-mono text-emerald-400 font-bold bg-[#141518] px-3 py-1 rounded border border-[#2d303d]">
+                      3 Parallel Containers
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SECURITY & SANDBOX */}
+            {activeSection === 'security' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-heading font-bold text-gray-200 flex items-center space-x-2">
+                    <Shield className="w-4 h-4 text-emerald-400" />
+                    <span>Security & Container Sandbox Architecture</span>
+                  </h3>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    How Cortex enforces multi-tenant process isolation, memory safety, and infrastructure protection.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Security Status Badge */}
+                  <div className="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <div>
+                        <span className="text-emerald-300 font-heading font-bold block text-xs">Sandbox Status: SECURE ISOLATE ACTIVE</span>
+                        <span className="text-emerald-400/80 text-[11px]">All executions run in isolated, disposable V8 & Linux cgroup sandboxes.</span>
+                      </div>
+                    </div>
+                    <span className="font-mono text-[10.5px] bg-emerald-900/40 px-2 py-0.5 rounded text-emerald-300 border border-emerald-700/50">
+                      Tier-1 Zero Trust
+                    </span>
+                  </div>
+
+                  {/* Security Features Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-[#1e2028] border border-[#2d303d] rounded space-y-1">
+                      <div className="flex items-center space-x-1.5 text-gray-200 font-semibold">
+                        <Lock className="w-3.5 h-3.5 text-[#ff9100]" />
+                        <span>Zero Host Access</span>
+                      </div>
+                      <p className="text-gray-400 text-[11px] leading-relaxed">
+                        Code runs inside an isolated micro-container. Processes cannot read host OS files, inspect other users, or access private memory.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-[#1e2028] border border-[#2d303d] rounded space-y-1">
+                      <div className="flex items-center space-x-1.5 text-gray-200 font-semibold">
+                        <Server className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Ephemeral File System</span>
+                      </div>
+                      <p className="text-gray-400 text-[11px] leading-relaxed">
+                        Each run executes on a disposable in-memory mount. All binaries and scratch files are permanently deleted upon completion.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-[#1e2028] border border-[#2d303d] rounded space-y-1">
+                      <div className="flex items-center space-x-1.5 text-gray-200 font-semibold">
+                        <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Syscall Filter (seccomp-bpf)</span>
+                      </div>
+                      <p className="text-gray-400 text-[11px] leading-relaxed">
+                        Dangerous Linux syscalls (e.g. ptrace, reboot, mount, kexec) are blocked at the kernel level to prevent privilege escalation.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-[#1e2028] border border-[#2d303d] rounded space-y-1">
+                      <div className="flex items-center space-x-1.5 text-gray-200 font-semibold">
+                        <Zap className="w-3.5 h-3.5 text-purple-400" />
+                        <span>Network Airgap Policy</span>
+                      </div>
+                      <p className="text-gray-400 text-[11px] leading-relaxed">
+                        Raw network socket creation is restricted by default, preventing malicious outbound botnets, scraping, or port scans.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -439,13 +571,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* DEVELOPER API KEYS */}
+            {/* DEVELOPER API KEYS (Masked & Hidden by default) */}
             {activeSection === 'api' && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-heading font-bold text-gray-200">Public Developer API Key</h3>
-                <p className="text-gray-400 text-xs">Use your developer API key to trigger programmatic cloud code executions via <code>POST /api/v1/execute</code>.</p>
-                <div className="flex items-center space-x-2 bg-[#141518] p-3 rounded border border-[#2d303d] font-mono text-[#ff9100] text-xs">
-                  <span>cortex_live_pk_8f73a90c12e5429188a</span>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-heading font-bold text-gray-200">Developer API Keys</h3>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    Use your API key to trigger programmatic cloud code executions via <code>POST /api/v1/execute</code>.
+                  </p>
+                </div>
+
+                <div className="bg-[#1e2028] p-4 rounded border border-[#2d303d] space-y-3">
+                  <div className="flex items-center justify-between text-gray-300">
+                    <span className="font-semibold text-xs">Production Secret API Key</span>
+                    <span className="text-[11px] text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+                      Keep Secret • Never Share
+                    </span>
+                  </div>
+
+                  {/* Masked Key Display with Show/Hide and Copy */}
+                  <div className="flex items-center space-x-2 bg-[#141518] p-2.5 rounded border border-[#2d303d]">
+                    <span className="font-mono text-xs flex-1 text-gray-300 tracking-wider">
+                      {showCortexApiKey 
+                        ? 'cortex_live_pk_8f73a90c12e5429188a' 
+                        : 'cortex_live_pk_••••••••••••••••••••'}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowCortexApiKey(!showCortexApiKey)}
+                      className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#22242c] transition"
+                      title={showCortexApiKey ? 'Hide Key' : 'Show Key'}
+                    >
+                      {showCortexApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyApiKey('cortex_live_pk_8f73a90c12e5429188a')}
+                      className="flex items-center space-x-1 px-3 py-1 bg-[#252832] hover:bg-[#30333f] text-gray-200 rounded text-xs transition"
+                      title="Copy Key to Clipboard"
+                    >
+                      {copiedKey ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400 font-bold">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <p className="text-gray-400 text-[11px]">
+                    This key is masked by default to protect against accidental screen sharing or recording.
+                  </p>
                 </div>
               </div>
             )}

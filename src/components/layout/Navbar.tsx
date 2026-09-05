@@ -57,28 +57,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             IDE
           </Link>
           <Link
-            href="/challenges"
-            className="px-2.5 py-1 rounded text-xs font-heading font-semibold text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c] transition"
-          >
-            Challenges
-          </Link>
-          <Link
-            href="/learn"
-            className="px-2.5 py-1 rounded text-xs font-heading font-semibold text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c] transition"
-          >
-            Learn
-          </Link>
-          <Link
             href="/compare"
             className="px-2.5 py-1 rounded text-xs font-heading font-semibold text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c] transition"
           >
             Benchmark
-          </Link>
-          <Link
-            href="/dashboard"
-            className="px-2.5 py-1 rounded text-xs font-heading font-semibold text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c] transition"
-          >
-            Dashboard
           </Link>
         </nav>
       </div>
