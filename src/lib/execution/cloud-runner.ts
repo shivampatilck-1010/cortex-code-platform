@@ -27,40 +27,59 @@ export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
 function prepareSourceCode(req: ExecutionRequest): string {
   const nonFolderFiles = req.files.filter((f) => !f.isFolder);
   if (nonFolderFiles.length === 0) return '';
-  if (nonFolderFiles.length === 1) return nonFolderFiles[0].content;
 
   const langConfig = getLanguageConfig(req.language);
   const mainFile =
     nonFolderFiles.find(
       (f) => f.name === req.entrypoint || f.name === langConfig.defaultFileName || f.id === 'main'
-    ) || nonFolderFiles[0];
+    ) ||
+    nonFolderFiles.find((f) => f.name.endsWith(langConfig.fileExtension)) ||
+    nonFolderFiles[0];
 
-  const otherFiles = nonFolderFiles.filter((f) => f !== mainFile);
+  if (!mainFile) return '';
 
-  // For Python: inline other modules before main code
+  // For Python: only include valid Python (.py) modules, never markdown or config files
   if (req.language === 'python') {
-    let combined = '';
-    for (const file of otherFiles) {
-      const moduleName = file.name.replace(/\.py$/, '');
-      combined += `# === Module: ${file.name} ===\n`;
-      combined += `class __module_${moduleName}:\n`;
-      combined += file.content
-        .split('\n')
-        .map((line) => `    ${line}`)
-        .join('\n');
-      combined += `\nimport sys\nsys.modules['${moduleName}'] = __module_${moduleName}()\n\n`;
+    const pyFiles = nonFolderFiles.filter(
+      (f) => f !== mainFile && f.name.endsWith('.py') && !f.name.startsWith('.')
+    );
+
+    if (pyFiles.length === 0) {
+      return mainFile.content;
     }
-    combined += `# === Entrypoint: ${mainFile.name} ===\n`;
+
+    let combined = `import sys, types\n`;
+    for (const file of pyFiles) {
+      const moduleName = file.name.replace(/\.py$/, '').replace(/\W/g, '_');
+      const escapedContent = JSON.stringify(file.content);
+      combined += `\n# Module: ${file.name}\n`;
+      combined += `_mod_${moduleName} = types.ModuleType('${moduleName}')\n`;
+      combined += `exec(${escapedContent}, _mod_${moduleName}.__dict__)\n`;
+      combined += `sys.modules['${moduleName}'] = _mod_${moduleName}\n`;
+    }
+    combined += `\n# === Entrypoint: ${mainFile.name} ===\n`;
     combined += mainFile.content;
     return combined;
   }
 
-  // For C/C++: prepend headers and helper source files
+  // For C/C++: prepend ONLY headers and C/C++ source files (never README or other docs)
   if (req.language === 'c' || req.language === 'cpp') {
-    let combined = '';
-    const headers = otherFiles.filter((f) => f.name.endsWith('.h') || f.name.endsWith('.hpp'));
-    const sources = otherFiles.filter((f) => !f.name.endsWith('.h') && !f.name.endsWith('.hpp'));
+    const isCpp = req.language === 'cpp';
+    const headerExts = ['.h', '.hpp', '.hxx'];
+    const sourceExts = isCpp ? ['.cpp', '.cc', '.cxx'] : ['.c'];
 
+    const headers = nonFolderFiles.filter(
+      (f) => f !== mainFile && headerExts.some((ext) => f.name.toLowerCase().endsWith(ext))
+    );
+    const sources = nonFolderFiles.filter(
+      (f) => f !== mainFile && sourceExts.some((ext) => f.name.toLowerCase().endsWith(ext))
+    );
+
+    if (headers.length === 0 && sources.length === 0) {
+      return mainFile.content;
+    }
+
+    let combined = '';
     for (const h of headers) {
       combined += `// === Header: ${h.name} ===\n${h.content}\n\n`;
     }
