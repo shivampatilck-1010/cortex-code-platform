@@ -141,9 +141,28 @@ export class CollaborationClient {
     return this.lastKnownParticipants;
   }
 
+  private lastRoomSig = '';
+
+  private computeRoomSig(r: any): string {
+    if (!r) return '';
+    const pList = Object.values(r.participants || {})
+      .map((p: any) => `${p.id}:${p.online}:${p.status}:${p.name}:${p.activeCode?.length || 0}`)
+      .sort()
+      .join('|');
+    const sA = r.activeWorkspaces?.slotAUserId || '';
+    const sB = r.activeWorkspaces?.slotBUserId || '';
+    const cLen = r.chatMessages?.length || 0;
+    const colReq = Object.keys(r.collaborationRequests || {}).length;
+    const colSess = Object.keys(r.collaborationSessions || {}).length;
+    const dlReq = Object.keys(r.downloadRequests || {}).length;
+    const state = r.state || '';
+    const arena = r.admin?.enteredArena ? '1' : '0';
+    return `${state}:${arena}:${sA}:${sB}:${cLen}:${colReq}:${colSess}:${dlReq}#${pList}`;
+  }
+
   /**
    * Resilient Background Polling Heartbeat
-   * High-frequency sync (600ms) guarantees zero-latency, real-time sync across Cloudflare edge isolates
+   * 1500ms cadence provides smooth, zero-flicker real-time sync across Cloudflare edge isolates
    */
   private startBackgroundHeartbeat() {
     if (typeof window === 'undefined' || this.isDestroyed) return;
@@ -178,13 +197,17 @@ export class CollaborationClient {
           const data = await res.json();
           if (data.success && data.room) {
             this.lastKnownParticipants = Object.values(data.room.participants || {});
-            this.handleIncoming({
-              type: 'room_state',
-              roomId: this.roomId,
-              senderId: 'server',
-              payload: { room: data.room },
-              timestamp: Date.now(),
-            });
+            const sig = this.computeRoomSig(data.room);
+            if (sig !== this.lastRoomSig) {
+              this.lastRoomSig = sig;
+              this.handleIncoming({
+                type: 'room_state',
+                roomId: this.roomId,
+                senderId: 'server',
+                payload: { room: data.room },
+                timestamp: Date.now(),
+              });
+            }
             this.setStatus('online');
           }
         }
@@ -195,8 +218,8 @@ export class CollaborationClient {
       }
     };
 
-    // Poll every 600ms for instant real-time sync without page refreshes
-    this.pollTimer = setInterval(poll, 600);
+    // Poll every 1500ms for stable, flicker-free background sync
+    this.pollTimer = setInterval(poll, 1500);
   }
 
   /**
@@ -204,6 +227,7 @@ export class CollaborationClient {
    */
   public triggerImmediateSync() {
     if (typeof window === 'undefined' || this.isDestroyed) return;
+    this.lastRoomSig = ''; // Force update on next payload
     const query = new URLSearchParams({
       requesterId: this.participantId,
       requesterName: this.participantName,
@@ -216,6 +240,9 @@ export class CollaborationClient {
         online: p.online,
         lastActive: p.lastActive,
         status: p.status,
+        currentLanguage: p.currentLanguage,
+        activeFileName: p.activeFileName,
+        privacy: p.privacy,
       }));
       query.set('clientParticipants', JSON.stringify(compact));
     }
@@ -224,6 +251,7 @@ export class CollaborationClient {
       .then((data) => {
         if (data.success && data.room) {
           this.lastKnownParticipants = Object.values(data.room.participants || {});
+          this.lastRoomSig = this.computeRoomSig(data.room);
           this.handleIncoming({
             type: 'room_state',
             roomId: this.roomId,

@@ -292,8 +292,8 @@ export class ClassroomRoomManager {
         room.activeWorkspaces.slotAUserId = participantId;
       }
     } else {
-      // Automatically assign slot B if open and user is not slot A
-      if (!room.activeWorkspaces.slotBUserId && room.activeWorkspaces.slotAUserId !== participantId) {
+      // Automatically assign slot B if open and user is not slot A (only on fresh join, not reconnect)
+      if (!existingId && !room.activeWorkspaces.slotBUserId && room.activeWorkspaces.slotAUserId !== participantId) {
         room.activeWorkspaces.slotBUserId = participantId;
       }
     }
@@ -354,7 +354,8 @@ export class ClassroomRoomManager {
         };
 
         if (!existing) {
-          if (now - (p.lastActive || 0) > 45000) continue;
+          // Never reject known classroom participants within 30 minutes
+          if (now - (p.lastActive || 0) > 1800000) continue;
           room.participants[p.id] = {
             ...p,
             currentLanguage: p.currentLanguage || 'python',
@@ -362,7 +363,7 @@ export class ClassroomRoomManager {
             activeCode: p.activeCode || '',
             files: p.files || [],
             privacy: safePrivacy,
-            online: now - (p.lastActive || 0) < 10000,
+            online: now - (p.lastActive || 0) < 60000,
           };
           if (p.role === 'admin' && !room.admin.id) {
             room.admin.id = p.id;
@@ -375,7 +376,7 @@ export class ClassroomRoomManager {
           if (p.lastActive && p.lastActive > existing.lastActive) {
             existing.lastActive = p.lastActive;
             existing.status = p.status || existing.status;
-            existing.online = now - p.lastActive < 10000;
+            existing.online = now - p.lastActive < 60000;
             if (p.activeCode && p.activeCode !== existing.activeCode) {
               existing.activeCode = p.activeCode;
             }
@@ -384,19 +385,19 @@ export class ClassroomRoomManager {
       }
     }
 
-    // 2. Prune stale ghosts and update online statuses
+    // 2. Prune stale ghosts and update online statuses smoothly
     for (const [id, p] of Object.entries(room.participants)) {
       if (p.name === 'Classroom Host' || !p.id) {
         delete room.participants[id];
         continue;
       }
       const timeSinceActive = now - (p.lastActive || 0);
-      if (timeSinceActive > 45000) {
-        // Inactive >45s -> remove ghost so participant counts stay identical on all screens
+      if (timeSinceActive > 1800000) {
+        // Only prune after 30 minutes of complete inactivity
         delete room.participants[id];
         if (room.activeWorkspaces.slotAUserId === id) room.activeWorkspaces.slotAUserId = undefined;
         if (room.activeWorkspaces.slotBUserId === id) room.activeWorkspaces.slotBUserId = undefined;
-      } else if (timeSinceActive > 10000) {
+      } else if (timeSinceActive > 60000) {
         p.online = false;
         p.status = 'offline';
       } else {

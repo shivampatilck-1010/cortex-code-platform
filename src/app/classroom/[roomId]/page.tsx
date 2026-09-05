@@ -96,6 +96,33 @@ export default function ClassroomLivePage() {
 
   const activeSessionPartnerIdsRef = useRef<Set<string>>(new Set());
 
+  const isRoomDifferent = (prev: ClassroomRoom, next: ClassroomRoom): boolean => {
+    if (prev.state !== next.state) return true;
+    if (prev.admin?.enteredArena !== next.admin?.enteredArena) return true;
+    if (prev.activeWorkspaces?.slotAUserId !== next.activeWorkspaces?.slotAUserId) return true;
+    if (prev.activeWorkspaces?.slotBUserId !== next.activeWorkspaces?.slotBUserId) return true;
+    if ((prev.chatMessages?.length || 0) !== (next.chatMessages?.length || 0)) return true;
+    if (Object.keys(prev.collaborationRequests || {}).length !== Object.keys(next.collaborationRequests || {}).length) return true;
+    if (Object.keys(prev.collaborationSessions || {}).length !== Object.keys(next.collaborationSessions || {}).length) return true;
+    if (Object.keys(prev.downloadRequests || {}).length !== Object.keys(next.downloadRequests || {}).length) return true;
+
+    const prevP = Object.values(prev.participants || {});
+    const nextP = Object.values(next.participants || {});
+    if (prevP.length !== nextP.length) return true;
+
+    for (const np of nextP) {
+      const pp = prev.participants[np.id];
+      if (!pp) return true;
+      if (pp.online !== np.online) return true;
+      if (pp.status !== np.status) return true;
+      if (pp.name !== np.name) return true;
+      if (pp.currentLanguage !== np.currentLanguage) return true;
+      if (pp.activeCode !== np.activeCode) return true;
+      if (pp.isLocked !== np.isLocked) return true;
+    }
+    return false;
+  };
+
   // Unified real-time state applier: updates slots, pending requests, and sessions instantly
   const applyRoomState = (newRoom: ClassroomRoom, activeId?: string) => {
     if (!newRoom) return;
@@ -108,7 +135,13 @@ export default function ClassroomLivePage() {
       );
     }
 
-    setRoom(newRoom);
+    // Only update state if room data actually changed to eliminate UI flickering and fluctuation
+    setRoom((prev) => {
+      if (prev && !isRoomDifferent(prev, newRoom)) {
+        return prev;
+      }
+      return newRoom;
+    });
 
     // 1. Synchronize Workspaces Slots
     if (newRoom.activeWorkspaces) {
@@ -120,10 +153,10 @@ export default function ClassroomLivePage() {
       }
     }
 
-    // 2. Auto-mount second user to slot B if slot B is currently empty
-    if (newRoom.participants && (!newRoom.activeWorkspaces?.slotBUserId || !slotBUserId)) {
+    // 2. Auto-mount second user to slot B only if slot B is completely vacant
+    if (!slotBUserId && newRoom.participants && !newRoom.activeWorkspaces?.slotBUserId) {
       const otherUser = Object.values(newRoom.participants).find(
-        (p) => p.id !== (newRoom.activeWorkspaces?.slotAUserId || slotAUserId) && p.id !== myId
+        (p) => p && p.id && p.id !== (newRoom.activeWorkspaces?.slotAUserId || slotAUserId) && p.id !== myId && p.name !== 'Classroom Host'
       );
       if (otherUser) {
         setSlotBUserId(otherUser.id);
