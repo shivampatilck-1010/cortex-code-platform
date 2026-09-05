@@ -71,9 +71,24 @@ export async function POST(
     }
 
     switch (action) {
+      case 'code_update':
       case 'update_code': {
         const { code, language, fileName, status } = body;
-        ClassroomRoomManager.updateParticipantCode(roomId, participantId, { code, language, fileName, status });
+        const targetId = body.targetUserId || body.participantId || participantId;
+        ClassroomRoomManager.updateParticipantCode(roomId, targetId, { code, language, fileName, status });
+        return NextResponse.json({ success: true });
+      }
+
+      case 'cursor_update':
+      case 'crdt_sync': {
+        ClassroomRoomManager.broadcast(roomId, {
+          type: action as any,
+          roomId,
+          senderId: participantId,
+          senderName: body.senderName || '',
+          payload: body,
+          timestamp: Date.now(),
+        });
         return NextResponse.json({ success: true });
       }
 

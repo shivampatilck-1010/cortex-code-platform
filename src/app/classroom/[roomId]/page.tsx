@@ -91,6 +91,87 @@ export default function ClassroomLivePage() {
     }
   }, [roomId]);
 
+  const activeSessionPartnerIdsRef = useRef<Set<string>>(new Set());
+
+  // Unified real-time state applier: updates slots, pending requests, and sessions instantly
+  const applyRoomState = (newRoom: ClassroomRoom, activeId?: string) => {
+    if (!newRoom) return;
+    const myId = activeId || participantId;
+
+    setRoom(newRoom);
+
+    // 1. Synchronize Workspaces Slots
+    if (newRoom.activeWorkspaces) {
+      if (newRoom.activeWorkspaces.slotAUserId) {
+        setSlotAUserId(newRoom.activeWorkspaces.slotAUserId);
+      }
+      if (newRoom.activeWorkspaces.slotBUserId) {
+        setSlotBUserId(newRoom.activeWorkspaces.slotBUserId);
+      }
+    }
+
+    // 2. Auto-mount second user to slot B if slot B is currently empty
+    if (newRoom.participants && (!newRoom.activeWorkspaces?.slotBUserId || !slotBUserId)) {
+      const otherUser = Object.values(newRoom.participants).find(
+        (p) => p.id !== (newRoom.activeWorkspaces?.slotAUserId || slotAUserId) && p.id !== myId
+      );
+      if (otherUser) {
+        setSlotBUserId(otherUser.id);
+      }
+    }
+
+    // 3. Track active collaboration sessions & trigger toast when collaboration is established
+    if (myId && newRoom.collaborationSessions) {
+      const activeSessions = Object.values(newRoom.collaborationSessions);
+      const myActiveSessions = activeSessions.filter((s: any) => s.participantIds?.includes(myId));
+      
+      myActiveSessions.forEach((s: any) => {
+        s.participantIds?.forEach((pid: string) => {
+          if (pid !== myId && !activeSessionPartnerIdsRef.current.has(pid)) {
+            activeSessionPartnerIdsRef.current.add(pid);
+            const partnerName = newRoom.participants[pid]?.name || 'Collaborator';
+            showToast(`🎉 Real-time collaboration active with ${partnerName}!`);
+          }
+        });
+      });
+
+      const currentActiveIds = new Set<string>();
+      myActiveSessions.forEach((s: any) => s.participantIds?.forEach((pid: string) => {
+        if (pid !== myId) currentActiveIds.add(pid);
+      }));
+      activeSessionPartnerIdsRef.current = currentActiveIds;
+    }
+
+    // 4. Synchronize pending incoming collaboration requests in real time:
+    if (newRoom.collaborationRequests && myId) {
+      const activePartnerIds = new Set<string>();
+      Object.values(newRoom.collaborationSessions || {}).forEach((s: any) => {
+        if (s.participantIds?.includes(myId)) {
+          s.participantIds.forEach((pid: string) => {
+            if (pid !== myId) activePartnerIds.add(pid);
+          });
+        }
+      });
+
+      const myCollabReq = Object.values(newRoom.collaborationRequests).find(
+        (r: any) => r.toId === myId && r.status === 'pending' && !activePartnerIds.has(r.fromId)
+      );
+      setIncomingCollabReq(myCollabReq ? (myCollabReq as any) : null);
+    } else {
+      setIncomingCollabReq(null);
+    }
+
+    // 5. Synchronize pending incoming file download requests for this participant:
+    if (newRoom.downloadRequests && myId) {
+      const myDownloadReq = Object.values(newRoom.downloadRequests).find(
+        (r: any) => r.ownerId === myId && r.status === 'pending'
+      );
+      setIncomingDownloadReq(myDownloadReq ? (myDownloadReq as any) : null);
+    } else {
+      setIncomingDownloadReq(null);
+    }
+  };
+
   // 2. Fetch Room State
   const fetchRoomState = async (pId?: string, pName?: string, pRole?: ClassroomRole) => {
     try {
@@ -111,43 +192,7 @@ export default function ClassroomLivePage() {
         throw new Error(data.error || 'Failed to load classroom state');
       }
 
-      setRoom(data.room);
-      setSlotAUserId(data.room.activeWorkspaces?.slotAUserId);
-      setSlotBUserId(data.room.activeWorkspaces?.slotBUserId);
-
-      // Synchronize pending incoming collaboration requests for this participant:
-      if (data.room?.collaborationRequests && activeId) {
-        const activePartnerIds = new Set<string>();
-        Object.values(data.room.collaborationSessions || {}).forEach((s: any) => {
-          if (s.participantIds?.includes(activeId)) {
-            s.participantIds.forEach((pid: string) => {
-              if (pid !== activeId) activePartnerIds.add(pid);
-            });
-          }
-        });
-
-        const myCollabReq = Object.values(data.room.collaborationRequests).find(
-          (r: any) => r.toId === activeId && r.status === 'pending' && !activePartnerIds.has(r.fromId)
-        );
-        if (myCollabReq) {
-          setIncomingCollabReq(myCollabReq as any);
-        } else {
-          setIncomingCollabReq(null);
-        }
-      }
-
-      // Synchronize pending incoming file download requests for this participant:
-      if (data.room?.downloadRequests && activeId) {
-        const myDownloadReq = Object.values(data.room.downloadRequests).find(
-          (r: any) => r.ownerId === activeId && r.status === 'pending'
-        );
-        if (myDownloadReq) {
-          setIncomingDownloadReq(myDownloadReq as any);
-        } else {
-          setIncomingDownloadReq(null);
-        }
-      }
-
+      applyRoomState(data.room, activeId);
       setError(null);
     } catch (err: any) {
       if (!participantId && !pId) {
@@ -186,7 +231,7 @@ export default function ClassroomLivePage() {
     switch (event.type) {
       case 'room_state':
         if (event.payload?.room) {
-          setRoom(event.payload.room);
+          applyRoomState(event.payload.room);
         }
         break;
 
@@ -353,11 +398,17 @@ export default function ClassroomLivePage() {
       };
     });
 
-    if (slotAUserId === participantId) {
-      // 1. Ultra low-latency broadcast via WebSocket
-      collabClientRef.current?.sendCodeUpdate(code);
+    const isAuthorizedA = slotAUserId === participantId || (
+      room && Object.values(room.collaborationSessions || {}).some(
+        (s: any) => s.participantIds?.includes(participantId) && s.participantIds?.includes(slotAUserId)
+      )
+    );
 
-      // 2. Debounce HTTP persistence write by 400ms to eliminate network congestion
+    if (isAuthorizedA) {
+      // 1. Ultra low-latency broadcast via WebSocket
+      collabClientRef.current?.sendCodeUpdate(code, undefined, slotAUserId);
+
+      // 2. Debounce HTTP persistence write by 300ms to eliminate network congestion
       if (codeSaveTimersRef.current['slotA']) {
         clearTimeout(codeSaveTimersRef.current['slotA']);
       }
@@ -368,14 +419,15 @@ export default function ClassroomLivePage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'update_code',
-              participantId,
+              participantId: slotAUserId,
+              targetUserId: slotAUserId,
               code,
             }),
           });
         } catch (e) {
           console.error('Code save error', e);
         }
-      }, 400);
+      }, 300);
     }
   };
 
@@ -395,11 +447,17 @@ export default function ClassroomLivePage() {
       };
     });
 
-    if (slotBUserId === participantId) {
-      // 1. Ultra low-latency broadcast via WebSocket
-      collabClientRef.current?.sendCodeUpdate(code);
+    const isAuthorizedB = slotBUserId === participantId || (
+      room && Object.values(room.collaborationSessions || {}).some(
+        (s: any) => s.participantIds?.includes(participantId) && s.participantIds?.includes(slotBUserId)
+      )
+    );
 
-      // 2. Debounce HTTP persistence write by 400ms to eliminate network congestion
+    if (isAuthorizedB) {
+      // 1. Ultra low-latency broadcast via WebSocket
+      collabClientRef.current?.sendCodeUpdate(code, undefined, slotBUserId);
+
+      // 2. Debounce HTTP persistence write by 300ms to eliminate network congestion
       if (codeSaveTimersRef.current['slotB']) {
         clearTimeout(codeSaveTimersRef.current['slotB']);
       }
@@ -410,14 +468,15 @@ export default function ClassroomLivePage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'update_code',
-              participantId,
+              participantId: slotBUserId,
+              targetUserId: slotBUserId,
               code,
             }),
           });
         } catch (e) {
           console.error('Code save error', e);
         }
-      }, 400);
+      }, 300);
     }
   };
 
@@ -433,6 +492,7 @@ export default function ClassroomLivePage() {
         slotBUserId,
       }),
     });
+    collabClientRef.current?.triggerImmediateSync();
   };
 
   const handleSelectSlotB = async (userId: string) => {
@@ -447,6 +507,7 @@ export default function ClassroomLivePage() {
         slotBUserId: userId,
       }),
     });
+    collabClientRef.current?.triggerImmediateSync();
   };
 
   const handleRequestCollaboration = async (targetUserId: string) => {
@@ -466,6 +527,7 @@ export default function ClassroomLivePage() {
       }
       const targetUser = room?.participants[targetUserId];
       showToast(`Access request sent to ${targetUser?.name || 'participant'}! Waiting for response...`);
+      collabClientRef.current?.triggerImmediateSync();
     } catch (err: any) {
       showToast(`⚠️ ${err?.message || 'Failed to send request'}`);
     }
@@ -518,6 +580,7 @@ export default function ClassroomLivePage() {
         });
       }
 
+      collabClientRef.current?.triggerImmediateSync();
       fetchRoomState(participantId);
     } catch (e) {
       console.error(e);
@@ -534,6 +597,7 @@ export default function ClassroomLivePage() {
         sessionId,
       }),
     });
+    collabClientRef.current?.triggerImmediateSync();
     fetchRoomState(participantId);
   };
 
@@ -555,6 +619,7 @@ export default function ClassroomLivePage() {
       }
       const owner = room?.participants[ownerId];
       showToast(`Download permission requested from ${owner?.name || 'owner'}! Waiting for response...`);
+      collabClientRef.current?.triggerImmediateSync();
     } catch (err: any) {
       showToast(`⚠️ ${err?.message || 'Failed to request download'}`);
     }
@@ -572,6 +637,7 @@ export default function ClassroomLivePage() {
         decision,
       }),
     });
+    collabClientRef.current?.triggerImmediateSync();
   };
 
   const handleAdminAction = async (adminAction: any) => {
@@ -584,6 +650,7 @@ export default function ClassroomLivePage() {
         adminAction,
       }),
     });
+    collabClientRef.current?.triggerImmediateSync();
   };
 
   const handleSendChat = async (text: string, isAnnouncement = false) => {
@@ -597,6 +664,7 @@ export default function ClassroomLivePage() {
         isAnnouncement,
       }),
     });
+    collabClientRef.current?.triggerImmediateSync();
   };
 
   const handleUpdatePrivacy = async (privacy: any) => {

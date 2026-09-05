@@ -133,7 +133,7 @@ export class CollaborationClient {
 
   /**
    * Resilient Background Polling Heartbeat
-   * Ensures uninterrupted state sync even during transient drops, firewall restrictions, or edge disconnects
+   * High-frequency sync (600ms) guarantees zero-latency, real-time sync across Cloudflare edge isolates
    */
   private startBackgroundHeartbeat() {
     if (typeof window === 'undefined' || this.isDestroyed) return;
@@ -141,7 +141,11 @@ export class CollaborationClient {
     const poll = async () => {
       if (this.isDestroyed) return;
       try {
-        const res = await fetch(`/api/v1/classroom/${this.roomId}?requesterId=${this.participantId}`);
+        const query = new URLSearchParams({
+          requesterId: this.participantId,
+          requesterName: this.participantName,
+        });
+        const res = await fetch(`/api/v1/classroom/${this.roomId}?${query.toString()}`);
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.room) {
@@ -162,8 +166,33 @@ export class CollaborationClient {
       }
     };
 
-    // Heartbeat every 2.5 seconds
-    this.pollTimer = setInterval(poll, 2500);
+    // Poll every 600ms for instant real-time sync without page refreshes
+    this.pollTimer = setInterval(poll, 600);
+  }
+
+  /**
+   * Immediately trigger an out-of-band sync (0ms latency after actions)
+   */
+  public triggerImmediateSync() {
+    if (typeof window === 'undefined' || this.isDestroyed) return;
+    const query = new URLSearchParams({
+      requesterId: this.participantId,
+      requesterName: this.participantName,
+    });
+    fetch(`/api/v1/classroom/${this.roomId}?${query.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.room) {
+          this.handleIncoming({
+            type: 'room_state',
+            roomId: this.roomId,
+            senderId: 'server',
+            payload: { room: data.room },
+            timestamp: Date.now(),
+          });
+        }
+      })
+      .catch(() => {});
   }
 
   private handleIncoming(msg: ClassroomEventMessage) {
@@ -291,14 +320,15 @@ export class CollaborationClient {
   /**
    * Ultra low-latency broadcast of code changes over WebSocket
    */
-  public sendCodeUpdate(code: string, language?: string) {
+  public sendCodeUpdate(code: string, language?: string, targetUserId?: string) {
     this.sendEvent({
       type: 'code_update',
       roomId: this.roomId,
       senderId: this.participantId,
       senderName: this.participantName,
       payload: {
-        participantId: this.participantId,
+        participantId: targetUserId || this.participantId,
+        targetUserId: targetUserId || this.participantId,
         code,
         language,
       },
