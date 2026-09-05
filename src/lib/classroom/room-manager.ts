@@ -113,43 +113,59 @@ export class ClassroomRoomManager {
       }
     }
 
-    const adminId = generateId('admin');
-    const adminFiles = createDefaultFiles(adminName);
+    const isPlaceholder = adminName === 'Classroom Host';
+    const adminId = isPlaceholder ? '' : generateId('admin');
+    const adminFiles = isPlaceholder ? [] : createDefaultFiles(adminName);
 
-    const adminParticipant: ClassroomParticipant = {
-      id: adminId,
-      name: adminName,
-      role: 'admin',
-      online: true,
-      status: 'coding',
-      currentLanguage: 'python',
-      activeFileName: 'main.py',
-      lastActive: Date.now(),
-      isLocked: false,
-      canRun: true,
-      privacy: {
-        workspaceVisibility: 'public',
-        allowCollaboration: true,
-        requireDownloadPermission: false,
-      },
-      files: adminFiles,
-      activeCode: adminFiles[0].content,
-    };
+    const adminParticipant: ClassroomParticipant = isPlaceholder
+      ? {
+          id: '',
+          name: '',
+          role: 'admin',
+          online: false,
+          status: 'offline',
+          currentLanguage: 'python',
+          activeFileName: 'main.py',
+          lastActive: 0,
+          isLocked: false,
+          canRun: true,
+          privacy: { workspaceVisibility: 'public', allowCollaboration: true, requireDownloadPermission: false },
+          files: [],
+          activeCode: '',
+        }
+      : {
+          id: adminId,
+          name: adminName,
+          role: 'admin',
+          online: true,
+          status: 'coding',
+          currentLanguage: 'python',
+          activeFileName: 'main.py',
+          lastActive: Date.now(),
+          isLocked: false,
+          canRun: true,
+          privacy: {
+            workspaceVisibility: 'public',
+            allowCollaboration: true,
+            requireDownloadPermission: false,
+          },
+          files: adminFiles,
+          activeCode: adminFiles[0].content,
+        };
 
     const room: ClassroomRoom = {
       roomId,
       admin: {
         id: adminId,
-        name: adminName,
+        name: isPlaceholder ? '' : adminName,
+        enteredArena: false,
       },
-      participants: {
-        [adminId]: adminParticipant,
-      },
+      participants: isPlaceholder ? {} : { [adminId]: adminParticipant },
       settings: {
         ...DEFAULT_SETTINGS,
         ...customSettings,
       },
-      activeWorkspaces: {
+      activeWorkspaces: isPlaceholder ? {} : {
         slotAUserId: adminId,
       },
       collaborationSessions: {},
@@ -157,18 +173,20 @@ export class ClassroomRoomManager {
       downloadRequests: {},
       downloadPermissions: {},
       viewRequests: {},
-      chatMessages: [
-        {
-          id: generateId('msg'),
-          senderId: adminId,
-          senderName: 'System',
-          role: 'admin',
-          text: `Classroom created by ${adminName}. Welcome!`,
-          timestamp: Date.now(),
-          isAnnouncement: true,
-        },
-      ],
-      state: 'active',
+      chatMessages: isPlaceholder
+        ? []
+        : [
+            {
+              id: generateId('msg'),
+              senderId: adminId,
+              senderName: 'System',
+              role: 'admin',
+              text: `Classroom created by ${adminName}. Welcome!`,
+              timestamp: Date.now(),
+              isAnnouncement: true,
+            },
+          ],
+      state: 'created',
       createdAt: Date.now(),
     };
 
@@ -184,8 +202,6 @@ export class ClassroomRoomManager {
     const normRoomId = roomId.toUpperCase().trim();
     let room = rooms.get(normRoomId);
     if (!room && autoCreate) {
-      // Self-healing: if an edge worker isolate restarted or a valid roomId is queried,
-      // restore/initialize room automatically so users never encounter "Classroom was not found"
       const created = this.createRoom('Classroom Host', undefined, normRoomId);
       room = created.room;
     }
@@ -204,13 +220,19 @@ export class ClassroomRoomManager {
     const normRoomId = roomId.toUpperCase().trim();
     let room = rooms.get(normRoomId);
     if (!room) {
-      // Auto-create room so joining never fails with "Classroom room was not found"
       const created = this.createRoom(role === 'admin' ? name : 'Classroom Host', undefined, normRoomId);
       room = created.room;
     }
     if (room.state === 'ended') {
       throw new Error('This classroom session has ended.');
     }
+
+    // Always purge any placeholder "Classroom Host" from participants
+    Object.keys(room.participants).forEach((k) => {
+      if (room!.participants[k].name === 'Classroom Host' || !room!.participants[k].id) {
+        delete room!.participants[k];
+      }
+    });
 
     const participantCount = Object.keys(room.participants).length;
     if (participantCount >= room.settings.maxUsers && !existingId) {
@@ -223,6 +245,11 @@ export class ClassroomRoomManager {
       existing.online = true;
       existing.lastActive = Date.now();
       existing.name = name || existing.name;
+      if (role === 'admin') {
+        existing.role = 'admin';
+        room.admin.id = existing.id;
+        room.admin.name = existing.name;
+      }
       this.broadcast(normRoomId, {
         type: 'presence',
         roomId: normRoomId,
@@ -249,9 +276,9 @@ export class ClassroomRoomManager {
       isLocked: false,
       canRun: room.settings.codeExecutionEnabled,
       privacy: {
-        workspaceVisibility: 'private',
+        workspaceVisibility: role === 'admin' ? 'public' : 'private',
         allowCollaboration: true,
-        requireDownloadPermission: true,
+        requireDownloadPermission: role !== 'admin',
       },
       files: userFiles,
       activeCode: userFiles[0].content,
@@ -259,9 +286,16 @@ export class ClassroomRoomManager {
 
     room.participants[participantId] = participant;
 
-    // Automatically assign slot B if open
-    if (!room.activeWorkspaces.slotBUserId && room.activeWorkspaces.slotAUserId !== participantId) {
-      room.activeWorkspaces.slotBUserId = participantId;
+    if (role === 'admin') {
+      room.admin = { id: participantId, name, enteredArena: room.admin.enteredArena || false };
+      if (!room.activeWorkspaces.slotAUserId) {
+        room.activeWorkspaces.slotAUserId = participantId;
+      }
+    } else {
+      // Automatically assign slot B if open and user is not slot A
+      if (!room.activeWorkspaces.slotBUserId && room.activeWorkspaces.slotAUserId !== participantId) {
+        room.activeWorkspaces.slotBUserId = participantId;
+      }
     }
 
     this.broadcast(normRoomId, {
@@ -274,6 +308,89 @@ export class ClassroomRoomManager {
     });
 
     return { room, participant };
+  }
+
+  /**
+   * Admin enters the arena -> launches arena for everyone!
+   */
+  public static startClassroom(roomId: string, adminId: string): ClassroomRoom {
+    const normRoomId = roomId.toUpperCase().trim();
+    const room = this.getRoom(normRoomId, true)!;
+    room.state = 'active';
+    if (room.admin) {
+      room.admin.enteredArena = true;
+    }
+    this.broadcast(normRoomId, {
+      type: 'classroom_started',
+      roomId: normRoomId,
+      senderId: adminId,
+      payload: { state: 'active' },
+      timestamp: Date.now(),
+    });
+    return room;
+  }
+
+  /**
+   * Multi-isolate gossip synchronization: merges participants from all edges and prunes ghosts
+   */
+  public static syncParticipants(roomId: string, clientParticipants: ClassroomParticipant[]): ClassroomRoom | null {
+    const normRoomId = roomId.toUpperCase().trim();
+    const room = this.getRoom(normRoomId, true);
+    if (!room) return null;
+
+    const now = Date.now();
+
+    // 1. Merge participants reported by client
+    if (Array.isArray(clientParticipants)) {
+      for (const p of clientParticipants) {
+        if (!p || !p.id || !p.name) continue;
+        if (p.name === 'Classroom Host') continue; // Reject placeholder phantom
+
+        const existing = room.participants[p.id];
+        if (!existing) {
+          if (now - (p.lastActive || 0) > 45000) continue;
+          room.participants[p.id] = {
+            ...p,
+            online: now - (p.lastActive || 0) < 10000,
+          };
+          if (p.role === 'admin' && !room.admin.id) {
+            room.admin.id = p.id;
+            room.admin.name = p.name;
+          }
+        } else {
+          if (p.lastActive && p.lastActive > existing.lastActive) {
+            existing.lastActive = p.lastActive;
+            existing.status = p.status || existing.status;
+            existing.online = now - p.lastActive < 10000;
+            if (p.activeCode && p.activeCode !== existing.activeCode) {
+              existing.activeCode = p.activeCode;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Prune stale ghosts and update online statuses
+    for (const [id, p] of Object.entries(room.participants)) {
+      if (p.name === 'Classroom Host' || !p.id) {
+        delete room.participants[id];
+        continue;
+      }
+      const timeSinceActive = now - (p.lastActive || 0);
+      if (timeSinceActive > 45000) {
+        // Inactive >45s -> remove ghost so participant counts stay identical on all screens
+        delete room.participants[id];
+        if (room.activeWorkspaces.slotAUserId === id) room.activeWorkspaces.slotAUserId = undefined;
+        if (room.activeWorkspaces.slotBUserId === id) room.activeWorkspaces.slotBUserId = undefined;
+      } else if (timeSinceActive > 10000) {
+        p.online = false;
+        p.status = 'offline';
+      } else {
+        p.online = true;
+      }
+    }
+
+    return room;
   }
 
   /**

@@ -131,6 +131,16 @@ export class CollaborationClient {
     }
   }
 
+  private lastKnownParticipants: any[] = [];
+
+  public updateKnownParticipants(participants: any[]) {
+    this.lastKnownParticipants = participants;
+  }
+
+  public getKnownParticipants(): any[] {
+    return this.lastKnownParticipants;
+  }
+
   /**
    * Resilient Background Polling Heartbeat
    * High-frequency sync (600ms) guarantees zero-latency, real-time sync across Cloudflare edge isolates
@@ -145,10 +155,24 @@ export class CollaborationClient {
           requesterId: this.participantId,
           requesterName: this.participantName,
         });
+        if (this.lastKnownParticipants.length > 0) {
+          const compact = this.lastKnownParticipants.map((p) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            online: p.online,
+            lastActive: p.lastActive,
+            status: p.status,
+            currentLanguage: p.currentLanguage,
+            activeFileName: p.activeFileName,
+          }));
+          query.set('clientParticipants', JSON.stringify(compact));
+        }
         const res = await fetch(`/api/v1/classroom/${this.roomId}?${query.toString()}`);
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.room) {
+            this.lastKnownParticipants = Object.values(data.room.participants || {});
             this.handleIncoming({
               type: 'room_state',
               roomId: this.roomId,
@@ -179,10 +203,22 @@ export class CollaborationClient {
       requesterId: this.participantId,
       requesterName: this.participantName,
     });
+    if (this.lastKnownParticipants.length > 0) {
+      const compact = this.lastKnownParticipants.map((p) => ({
+        id: p.id,
+        name: p.name,
+        role: p.role,
+        online: p.online,
+        lastActive: p.lastActive,
+        status: p.status,
+      }));
+      query.set('clientParticipants', JSON.stringify(compact));
+    }
     fetch(`/api/v1/classroom/${this.roomId}?${query.toString()}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.room) {
+          this.lastKnownParticipants = Object.values(data.room.participants || {});
           this.handleIncoming({
             type: 'room_state',
             roomId: this.roomId,

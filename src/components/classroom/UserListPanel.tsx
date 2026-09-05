@@ -48,7 +48,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
-  const participantList = Object.values(participants);
+  const participantList = Object.values(participants).filter((p) => p && p.id && p.name && p.name !== 'Classroom Host');
   const totalUsers = participantList.length;
   const onlineCount = participantList.filter((p) => p.online).length;
   const codingCount = participantList.filter((p) => p.online && p.status === 'coding').length;

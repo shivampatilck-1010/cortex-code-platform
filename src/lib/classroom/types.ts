@@ -122,6 +122,7 @@ export interface ClassroomRoom {
   admin: {
     id: string;
     name: string;
+    enteredArena?: boolean;
   };
   participants: Record<string, ClassroomParticipant>;
   settings: ClassroomSettings;
@@ -159,6 +160,7 @@ export type ClassroomEventType =
   | 'file_update'
   | 'admin_action'
   | 'chat_message'
+  | 'classroom_started'
   | 'classroom_ended';
 
 export interface ClassroomEventMessage {

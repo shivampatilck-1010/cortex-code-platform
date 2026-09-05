@@ -48,7 +48,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
   }, [defaultRoomId]);
 
   // Result state
-  const [createdInfo, setCreatedInfo] = useState<{ roomId: string; inviteUrl: string } | null>(null);
+  const [createdInfo, setCreatedInfo] = useState<{ roomId: string; inviteUrl: string; participantId?: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -58,7 +58,8 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
     if (createdInfo) {
       const fullUrl = createdInfo.inviteUrl?.startsWith('http')
         ? createdInfo.inviteUrl
-        : `${typeof window !== 'undefined' ? window.location.origin : ''}/classroom/${createdInfo.roomId}`;
+        : `${typeof window !== 'undefined' ? window.location.origin : ''}${createdInfo.inviteUrl}`;
+
       QRCode.toDataURL(fullUrl, {
         width: 320,
         margin: 2,
@@ -68,7 +69,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
         },
       })
         .then((url) => setQrDataUrl(url))
-        .catch((err) => console.error('Failed to generate QR code', err));
+        .catch((err) => console.error('Error generating QR code', err));
     }
   }, [createdInfo]);
 
@@ -87,6 +88,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
       setCreatedInfo({
         roomId: res.roomId,
         inviteUrl: res.inviteUrl,
+        participantId: res.participantId,
       });
     } catch (err: any) {
       setError(err?.message || 'Failed to create classroom');
@@ -260,6 +262,13 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                 <button
                   onClick={() => {
                     if (createdInfo) {
+                      try {
+                        fetch(`/api/v1/classroom/${createdInfo.roomId}`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'start_classroom', participantId: createdInfo.participantId || '' }),
+                        }).catch(() => {});
+                      } catch {}
                       if (onEnterRoom) {
                         onEnterRoom(createdInfo.roomId);
                       } else {

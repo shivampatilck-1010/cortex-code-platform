@@ -14,7 +14,10 @@ import {
   AlertTriangle,
   Radio,
   SlidersHorizontal,
-  X
+  X,
+  Play,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { ClassroomRoom, ClassroomParticipant, ClassroomRole, CollaborationRequest, FileDownloadRequest, FileDownloadDecision, CollaborationDecision } from '@/lib/classroom/types';
@@ -98,6 +101,13 @@ export default function ClassroomLivePage() {
     if (!newRoom) return;
     const myId = activeId || participantId;
 
+    // Propagate participants gossip to collab client to keep all edge isolates perfectly synced
+    if (collabClientRef.current && newRoom.participants) {
+      collabClientRef.current.updateKnownParticipants(
+        Object.values(newRoom.participants).filter((p) => p && p.id && p.name && p.name !== 'Classroom Host')
+      );
+    }
+
     setRoom(newRoom);
 
     // 1. Synchronize Workspaces Slots
@@ -172,7 +182,7 @@ export default function ClassroomLivePage() {
     }
   };
 
-  // 2. Fetch Room State
+  // 2. Fetch Room State with gossip participants
   const fetchRoomState = async (pId?: string, pName?: string, pRole?: ClassroomRole) => {
     try {
       const activeId = pId || participantId;
@@ -183,6 +193,12 @@ export default function ClassroomLivePage() {
       if (activeId) queryParams.set('requesterId', activeId);
       if (activeName) queryParams.set('requesterName', activeName);
       if (activeRole) queryParams.set('requesterRole', activeRole);
+
+      const known = collabClientRef.current?.getKnownParticipants?.() || [];
+      if (known.length > 0) {
+        queryParams.set('clientParticipants', JSON.stringify(known));
+      }
+
       const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
 
       const res = await fetch(`/api/v1/classroom/${roomId}${queryStr}`);
@@ -203,6 +219,35 @@ export default function ClassroomLivePage() {
       setIsLoading(false);
     }
   };
+
+  // Launch the Code Arena for everyone in real time
+  const handleStartClassroom = async () => {
+    try {
+      const res = await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'start_classroom',
+          participantId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.room) {
+        applyRoomState(data.room);
+        collabClientRef.current?.triggerImmediateSync();
+        showToast('🚀 Code Arena launched for all waiting participants!');
+      }
+    } catch (err) {
+      console.error('Failed to launch classroom arena', err);
+    }
+  };
+
+  // Auto-launch Code Arena for everyone as soon as Admin enters
+  useEffect(() => {
+    if (participantRole === 'admin' && room && (room.state === 'created' || !room.admin?.enteredArena)) {
+      handleStartClassroom();
+    }
+  }, [participantRole, room?.state, room?.admin?.enteredArena]);
 
   // 3. Connect Real-time event transport with resilient polling
   useEffect(() => {
@@ -373,6 +418,12 @@ export default function ClassroomLivePage() {
 
       case 'admin_action':
         fetchRoomState(participantId);
+        break;
+
+      case 'classroom_started':
+        setRoom((prev) => prev ? { ...prev, state: 'active', admin: { ...prev.admin, enteredArena: true } } : prev);
+        fetchRoomState(participantId);
+        showToast('🚀 Admin has entered the arena! Starting session for everyone...');
         break;
 
       case 'classroom_ended':
@@ -751,9 +802,12 @@ export default function ClassroomLivePage() {
   const userA = room && slotAUserId ? room.participants[slotAUserId] : null;
   const userB = room && slotBUserId ? room.participants[slotBUserId] : null;
 
+  const validParticipants = room
+    ? Object.values(room.participants).filter((p) => p && p.id && p.name && p.name !== 'Classroom Host')
+    : [];
   const currentParticipant = room?.participants[participantId];
-  const onlineParticipantsCount = room ? Object.values(room.participants).filter(p => p.online).length : 0;
-  const totalParticipantsCount = room ? Object.keys(room.participants).length : 0;
+  const onlineParticipantsCount = validParticipants.filter((p) => p.online).length;
+  const totalParticipantsCount = validParticipants.length;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">
@@ -802,6 +856,26 @@ export default function ClassroomLivePage() {
 
         {/* Center / Right Controls */}
         <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Admin Start Arena for Everyone Button */}
+          {participantRole === 'admin' && room?.state === 'created' && (
+            <button
+              onClick={handleStartClassroom}
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-black font-heading font-bold text-xs shadow-lg hover:from-amber-400 hover:to-orange-400 transition animate-pulse"
+              title="Start the Code Arena for all waiting participants"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Start Arena for Everyone</span>
+            </button>
+          )}
+
+          {/* Arena Active indicator for Admin */}
+          {participantRole === 'admin' && room?.state === 'active' && (
+            <span className="hidden md:flex items-center space-x-1 px-2 py-0.5 rounded bg-emerald-950/40 text-[11px] font-mono text-emerald-300 border border-emerald-800/40">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Arena Active</span>
+            </span>
+          )}
+
           {/* Quick link to Benchmark with current pair */}
           <Link
             href={`/compare?room=${roomId}&userA=${slotAUserId || ''}&userB=${slotBUserId || ''}`}
@@ -888,57 +962,137 @@ export default function ClassroomLivePage() {
         </div>
       )}
 
-      {/* 3. Main Body Arena (Left: User List | Center: Two Workspaces | Right: Chat Drawer) */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar: All Classroom Users */}
-        <div className="w-64 sm:w-72 flex-shrink-0 h-full">
-          <UserListPanel
-            participants={room?.participants || {}}
+      {/* 3. Main Body: Live Waiting Room for Students OR Full Collaborative Arena */}
+      {participantRole !== 'admin' && room && (room.state === 'created' || !room.admin?.enteredArena) ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#0e1017] to-[#07080a] relative overflow-hidden select-none">
+          {/* Ambient background glow */}
+          <div className="absolute top-1/3 w-96 h-96 bg-[#ff9100]/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative max-w-lg w-full bg-[#12141c]/90 border border-[#222533] backdrop-blur-xl rounded-2xl p-8 shadow-2xl space-y-6">
+            {/* Animated Pulse Icon */}
+            <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-[#ff9100]/20 animate-ping" />
+              <div className="relative w-16 h-16 rounded-full bg-[#ff9100]/10 border border-[#ff9100]/40 flex items-center justify-center text-[#ff9100]">
+                <Clock className="w-8 h-8" />
+              </div>
+            </div>
+
+            {/* Title & Status */}
+            <div className="space-y-2">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-semibold">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>Waiting for Admin to enter the arena...</span>
+              </div>
+              <h2 className="text-xl font-heading font-bold text-gray-100">
+                Classroom Waiting Room
+              </h2>
+              <p className="text-xs text-gray-400 leading-relaxed max-w-md mx-auto">
+                Welcome <strong className="text-gray-200">{participantName}</strong>! The Admin is preparing the classroom session. As soon as the Admin enters the Code Arena, your workspace will automatically launch in real-time.
+              </p>
+            </div>
+
+            {/* Realtime No-Refresh Banner */}
+            <div className="p-3 bg-[#181a24] border border-[#262938] rounded-xl flex items-center space-x-3 text-left">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                <Radio className="w-4 h-4 animate-pulse" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-emerald-300">Live edge synchronization active</div>
+                <div className="text-[11px] text-gray-400">Do not refresh your browser — updates happen automatically.</div>
+              </div>
+            </div>
+
+            {/* Waiting Lobby Participants */}
+            <div className="space-y-2 text-left">
+              <div className="flex items-center justify-between text-xs font-semibold text-gray-400 px-1">
+                <span>Connected Participants:</span>
+                <span className="text-[11px] font-mono text-emerald-400 font-bold">{onlineParticipantsCount} ready</span>
+              </div>
+              <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2.5 bg-[#0c0d12] rounded-lg border border-[#1e202b]">
+                {validParticipants.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#161822] border border-[#262838] text-xs"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="font-medium text-gray-200">{p.name}</span>
+                    {p.role === 'admin' && (
+                      <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono font-bold">Admin</span>
+                    )}
+                    {p.id === participantId && (
+                      <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded font-mono font-bold">You</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action footer */}
+            <div className="pt-2 flex items-center justify-between text-xs border-t border-[#1e202b]">
+              <span className="font-mono text-gray-500">Room: <strong className="text-[#ff9100] font-bold">{roomId}</strong></span>
+              <button
+                onClick={handleLeaveClassroom}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center space-x-1"
+              >
+                <LogOut className="w-3 h-3" />
+                <span>Leave Classroom</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* 3. Main Body Arena (Left: User List | Center: Two Workspaces | Right: Chat Drawer) */
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar: All Classroom Users */}
+          <div className="w-64 sm:w-72 flex-shrink-0 h-full">
+            <UserListPanel
+              participants={room?.participants || {}}
+              currentUserId={participantId}
+              currentUserRole={participantRole}
+              slotAUserId={slotAUserId}
+              slotBUserId={slotBUserId}
+              onSelectSlotA={handleSelectSlotA}
+              onSelectSlotB={handleSelectSlotB}
+              onRequestCollaboration={handleRequestCollaboration}
+              onRequestFileDownload={handleRequestFileDownload}
+              onAdminAction={handleAdminAction}
+              onOpenPrivacyModal={() => setIsPrivacyOpen(true)}
+            />
+          </div>
+
+          {/* Center: Strict Two-Workspace Model (Workspace A | Workspace B) */}
+          <div className="flex-1 h-full min-w-0">
+            <TwoWorkspaceContainer
+              userA={userA}
+              userB={userB}
+              currentUserId={participantId}
+              currentUserRole={participantRole}
+              activeSession={
+                room ? Object.values(room.collaborationSessions).find(s => s.participantIds.includes(participantId)) : null
+              }
+              onCodeChangeA={handleCodeChangeA}
+              onCodeChangeB={handleCodeChangeB}
+              onEndCollaboration={handleEndCollaboration}
+              onRequestViewAccess={(targetId) => {
+                handleRequestCollaboration(targetId);
+              }}
+              onDownloadFile={(ownerId, fileId) => {
+                handleRequestFileDownload(ownerId, fileId);
+              }}
+            />
+          </div>
+
+          {/* Right Drawer: Classroom Chat & Announcements */}
+          <ClassroomChatDrawer
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            messages={room?.chatMessages || []}
             currentUserId={participantId}
             currentUserRole={participantRole}
-            slotAUserId={slotAUserId}
-            slotBUserId={slotBUserId}
-            onSelectSlotA={handleSelectSlotA}
-            onSelectSlotB={handleSelectSlotB}
-            onRequestCollaboration={handleRequestCollaboration}
-            onRequestFileDownload={handleRequestFileDownload}
-            onAdminAction={handleAdminAction}
-            onOpenPrivacyModal={() => setIsPrivacyOpen(true)}
+            onSendMessage={handleSendChat}
           />
         </div>
-
-        {/* Center: Strict Two-Workspace Model (Workspace A | Workspace B) */}
-        <div className="flex-1 h-full min-w-0">
-          <TwoWorkspaceContainer
-            userA={userA}
-            userB={userB}
-            currentUserId={participantId}
-            currentUserRole={participantRole}
-            activeSession={
-              room ? Object.values(room.collaborationSessions).find(s => s.participantIds.includes(participantId)) : null
-            }
-            onCodeChangeA={handleCodeChangeA}
-            onCodeChangeB={handleCodeChangeB}
-            onEndCollaboration={handleEndCollaboration}
-            onRequestViewAccess={(targetId) => {
-              handleRequestCollaboration(targetId);
-            }}
-            onDownloadFile={(ownerId, fileId) => {
-              handleRequestFileDownload(ownerId, fileId);
-            }}
-          />
-        </div>
-
-        {/* Right Drawer: Classroom Chat & Announcements */}
-        <ClassroomChatDrawer
-          isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
-          messages={room?.chatMessages || []}
-          currentUserId={participantId}
-          currentUserRole={participantRole}
-          onSendMessage={handleSendChat}
-        />
-      </div>
+      )}
 
       {/* Incoming Collaboration Request Modal (Mutual Consent) */}
       <CollaborationPromptModal

@@ -16,11 +16,25 @@ export async function GET(
     const requesterId = searchParams.get('requesterId');
     const requesterName = searchParams.get('requesterName') || 'Participant';
     const requesterRole = (searchParams.get('requesterRole') as any) || 'user';
+    const clientParticipantsRaw = searchParams.get('clientParticipants');
+
+    let clientParticipants: any[] = [];
+    if (clientParticipantsRaw) {
+      try {
+        clientParticipants = JSON.parse(clientParticipantsRaw);
+      } catch {}
+    }
 
     // Edge Self-Healing: if participant is known by client but missing in this worker isolate, auto-register
     if (requesterId && !room.participants[requesterId]) {
       ClassroomRoomManager.joinRoom(roomId, requesterName, requesterRole, requesterId);
+    } else if (requesterId && room.participants[requesterId]) {
+      room.participants[requesterId].lastActive = Date.now();
+      room.participants[requesterId].online = true;
     }
+
+    // Multi-isolate gossip sync: keeps participant lists identical across all devices and isolates
+    ClassroomRoomManager.syncParticipants(roomId, clientParticipants);
 
     const requester = requesterId ? room.participants[requesterId] : null;
     const isAdmin = requester?.role === 'admin';
@@ -77,6 +91,22 @@ export async function POST(
         const targetId = body.targetUserId || body.participantId || participantId;
         ClassroomRoomManager.updateParticipantCode(roomId, targetId, { code, language, fileName, status });
         return NextResponse.json({ success: true });
+      }
+
+      case 'start_classroom':
+      case 'admin_entered': {
+        const updatedRoom = ClassroomRoomManager.startClassroom(roomId, participantId);
+        return NextResponse.json({ success: true, room: updatedRoom });
+      }
+
+      case 'heartbeat': {
+        const { clientParticipants } = body;
+        if (participantId && room.participants[participantId]) {
+          room.participants[participantId].lastActive = Date.now();
+          room.participants[participantId].online = true;
+        }
+        const syncedRoom = ClassroomRoomManager.syncParticipants(roomId, clientParticipants || []);
+        return NextResponse.json({ success: true, room: syncedRoom || room });
       }
 
       case 'cursor_update':
