@@ -7,6 +7,9 @@ export class CollaborationClient {
   private roomId: string;
   private participantId: string;
   private participantName: string;
+  private participantRole: string;
+  private lastRoomState: string = 'created';
+  private lastAdminEntered: boolean = false;
   private ws: WebSocket | null = null;
   private sse: EventSource | null = null;
   private listeners: Set<(event: ClassroomEventMessage) => void> = new Set();
@@ -23,10 +26,15 @@ export class CollaborationClient {
   private ytext: Y.Text | null = null;
   private isApplyingRemoteUpdate = false;
 
-  constructor(roomId: string, participantId: string, participantName: string) {
+  constructor(roomId: string, participantId: string, participantName: string, participantRole: string = 'user') {
     this.roomId = roomId.toUpperCase().trim();
     this.participantId = participantId;
     this.participantName = participantName;
+    this.participantRole = participantRole;
+    if (participantRole === 'admin') {
+      this.lastAdminEntered = true;
+      this.lastRoomState = 'active';
+    }
     this.connect();
     this.startBackgroundHeartbeat();
   }
@@ -173,7 +181,14 @@ export class CollaborationClient {
         const query = new URLSearchParams({
           requesterId: this.participantId,
           requesterName: this.participantName,
+          requesterRole: this.participantRole,
         });
+        if (this.lastRoomState === 'active') {
+          query.set('clientRoomState', 'active');
+        }
+        if (this.lastAdminEntered) {
+          query.set('clientAdminEntered', 'true');
+        }
         if (this.lastKnownParticipants.length > 0) {
           const compact = this.lastKnownParticipants.map((p) => ({
             id: p.id,
@@ -196,6 +211,12 @@ export class CollaborationClient {
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.room) {
+            if (data.room.state === 'active') {
+              this.lastRoomState = 'active';
+            }
+            if (data.room.admin?.enteredArena) {
+              this.lastAdminEntered = true;
+            }
             this.lastKnownParticipants = Object.values(data.room.participants || {});
             const sig = this.computeRoomSig(data.room);
             if (sig !== this.lastRoomSig) {
@@ -231,7 +252,14 @@ export class CollaborationClient {
     const query = new URLSearchParams({
       requesterId: this.participantId,
       requesterName: this.participantName,
+      requesterRole: this.participantRole,
     });
+    if (this.lastRoomState === 'active') {
+      query.set('clientRoomState', 'active');
+    }
+    if (this.lastAdminEntered) {
+      query.set('clientAdminEntered', 'true');
+    }
     if (this.lastKnownParticipants.length > 0) {
       const compact = this.lastKnownParticipants.map((p) => ({
         id: p.id,
@@ -250,6 +278,12 @@ export class CollaborationClient {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.room) {
+          if (data.room.state === 'active') {
+            this.lastRoomState = 'active';
+          }
+          if (data.room.admin?.enteredArena) {
+            this.lastAdminEntered = true;
+          }
           this.lastKnownParticipants = Object.values(data.room.participants || {});
           this.lastRoomSig = this.computeRoomSig(data.room);
           this.handleIncoming({

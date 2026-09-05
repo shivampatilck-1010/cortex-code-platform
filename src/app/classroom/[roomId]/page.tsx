@@ -286,7 +286,7 @@ export default function ClassroomLivePage() {
   useEffect(() => {
     if (!roomId || !participantId || !participantName) return;
 
-    const client = new CollaborationClient(roomId, participantId, participantName);
+    const client = new CollaborationClient(roomId, participantId, participantName, participantRole);
     collabClientRef.current = client;
 
     const unsubscribeEvents = client.onEvent((event) => {
@@ -302,7 +302,7 @@ export default function ClassroomLivePage() {
       unsubscribeStatus();
       client.cleanup();
     };
-  }, [roomId, participantId, participantName]);
+  }, [roomId, participantId, participantName, participantRole]);
 
   // 4. Handle incoming real-time events
   const handleIncomingRealtimeEvent = (event: any) => {
@@ -842,6 +842,19 @@ export default function ClassroomLivePage() {
   const onlineParticipantsCount = validParticipants.filter((p) => p.online).length;
   const totalParticipantsCount = validParticipants.length;
 
+  // Waiting room is strictly for when the room has not started, admin hasn't entered, and no active admin is in roster
+  const hasActiveAdminInRoom = Boolean(
+    room?.admin?.enteredArena ||
+    room?.state === 'active' ||
+    validParticipants.some((p) => p.role === 'admin' && (p.online || Date.now() - (p.lastActive || 0) < 1800000))
+  );
+
+  const isWaitingForAdmin =
+    participantRole !== 'admin' &&
+    room !== null &&
+    room.state !== 'active' &&
+    !hasActiveAdminInRoom;
+
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">
       {/* 1. Global Header Bar */}
@@ -996,7 +1009,7 @@ export default function ClassroomLivePage() {
       )}
 
       {/* 3. Main Body: Live Waiting Room for Students OR Full Collaborative Arena */}
-      {participantRole !== 'admin' && room && (room.state === 'created' || !room.admin?.enteredArena) ? (
+      {isWaitingForAdmin ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#0e1017] to-[#07080a] relative overflow-hidden select-none">
           {/* Ambient background glow */}
           <div className="absolute top-1/3 w-96 h-96 bg-[#ff9100]/5 rounded-full blur-3xl pointer-events-none" />
@@ -1061,15 +1074,29 @@ export default function ClassroomLivePage() {
             </div>
 
             {/* Action footer */}
-            <div className="pt-2 flex items-center justify-between text-xs border-t border-[#1e202b]">
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs border-t border-[#1e202b]">
               <span className="font-mono text-gray-500">Room: <strong className="text-[#ff9100] font-bold">{roomId}</strong></span>
-              <button
-                onClick={handleLeaveClassroom}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center space-x-1"
-              >
-                <LogOut className="w-3 h-3" />
-                <span>Leave Classroom</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    fetchRoomState(participantId, participantName, participantRole);
+                    collabClientRef.current?.triggerImmediateSync();
+                    showToast('Checking arena status...');
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#20222f] hover:bg-[#2b2e40] text-gray-200 border border-[#34384e] transition flex items-center space-x-1.5"
+                  title="Check if Admin has entered the arena"
+                >
+                  <Radio className="w-3 h-3 text-[#ff9100] animate-pulse" />
+                  <span>Check Status</span>
+                </button>
+                <button
+                  onClick={handleLeaveClassroom}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center space-x-1"
+                >
+                  <LogOut className="w-3 h-3" />
+                  <span>Leave Classroom</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

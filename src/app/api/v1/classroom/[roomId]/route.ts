@@ -17,6 +17,8 @@ export async function GET(
     const requesterName = searchParams.get('requesterName') || 'Participant';
     const requesterRole = (searchParams.get('requesterRole') as any) || 'user';
     const clientParticipantsRaw = searchParams.get('clientParticipants');
+    const clientRoomState = searchParams.get('clientRoomState') || undefined;
+    const clientAdminEntered = searchParams.get('clientAdminEntered') === 'true';
 
     let clientParticipants: any[] = [];
     if (clientParticipantsRaw) {
@@ -31,10 +33,25 @@ export async function GET(
     } else if (requesterId && room.participants[requesterId]) {
       room.participants[requesterId].lastActive = Date.now();
       room.participants[requesterId].online = true;
+      if (requesterRole === 'admin') {
+        room.participants[requesterId].role = 'admin';
+        room.admin.id = requesterId;
+        room.admin.name = requesterName;
+        room.admin.enteredArena = true;
+        room.state = 'active';
+      }
     }
 
-    // Multi-isolate gossip sync: keeps participant lists identical across all devices and isolates
-    ClassroomRoomManager.syncParticipants(roomId, clientParticipants);
+    // Cascading state sync
+    if (clientRoomState === 'active' || clientAdminEntered) {
+      room.state = 'active';
+      if (room.admin) {
+        room.admin.enteredArena = true;
+      }
+    }
+
+    // Multi-isolate gossip sync: keeps participant lists and room state identical across all devices and isolates
+    ClassroomRoomManager.syncParticipants(roomId, clientParticipants, clientRoomState, clientAdminEntered);
 
     const requester = requesterId ? room.participants[requesterId] : null;
     const isAdmin = requester?.role === 'admin';
@@ -107,12 +124,28 @@ export async function POST(
       }
 
       case 'heartbeat': {
-        const { clientParticipants } = body;
+        const { clientParticipants, clientRoomState, clientAdminEntered, requesterRole } = body;
         if (participantId && room.participants[participantId]) {
           room.participants[participantId].lastActive = Date.now();
           room.participants[participantId].online = true;
+          if (requesterRole === 'admin' || room.participants[participantId].role === 'admin') {
+            room.admin.id = participantId;
+            room.admin.enteredArena = true;
+            room.state = 'active';
+          }
         }
-        const syncedRoom = ClassroomRoomManager.syncParticipants(roomId, clientParticipants || []);
+        if (clientRoomState === 'active' || clientAdminEntered) {
+          room.state = 'active';
+          if (room.admin) {
+            room.admin.enteredArena = true;
+          }
+        }
+        const syncedRoom = ClassroomRoomManager.syncParticipants(
+          roomId,
+          clientParticipants || [],
+          clientRoomState,
+          clientAdminEntered
+        );
         return NextResponse.json({ success: true, room: syncedRoom || room });
       }
 

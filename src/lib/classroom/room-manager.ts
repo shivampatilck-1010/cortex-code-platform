@@ -287,7 +287,8 @@ export class ClassroomRoomManager {
     room.participants[participantId] = participant;
 
     if (role === 'admin') {
-      room.admin = { id: participantId, name, enteredArena: room.admin.enteredArena || false };
+      room.admin = { id: participantId, name, enteredArena: true };
+      room.state = 'active';
       if (!room.activeWorkspaces.slotAUserId) {
         room.activeWorkspaces.slotAUserId = participantId;
       }
@@ -333,12 +334,25 @@ export class ClassroomRoomManager {
   /**
    * Multi-isolate gossip synchronization: merges participants from all edges and prunes ghosts
    */
-  public static syncParticipants(roomId: string, clientParticipants: ClassroomParticipant[]): ClassroomRoom | null {
+  public static syncParticipants(
+    roomId: string,
+    clientParticipants: ClassroomParticipant[],
+    clientRoomState?: string,
+    clientAdminEntered?: boolean
+  ): ClassroomRoom | null {
     const normRoomId = roomId.toUpperCase().trim();
     const room = this.getRoom(normRoomId, true);
     if (!room) return null;
 
     const now = Date.now();
+
+    // Cascading state sync: once active, always active across all isolates
+    if (clientRoomState === 'active' || clientAdminEntered) {
+      room.state = 'active';
+      if (room.admin) {
+        room.admin.enteredArena = true;
+      }
+    }
 
     // 1. Merge participants reported by client
     if (Array.isArray(clientParticipants)) {
@@ -365,9 +379,11 @@ export class ClassroomRoomManager {
             privacy: safePrivacy,
             online: now - (p.lastActive || 0) < 60000,
           };
-          if (p.role === 'admin' && !room.admin.id) {
+          if (p.role === 'admin') {
             room.admin.id = p.id;
             room.admin.name = p.name;
+            room.admin.enteredArena = true;
+            room.state = 'active';
           }
         } else {
           if (!existing.privacy) {
@@ -381,7 +397,24 @@ export class ClassroomRoomManager {
               existing.activeCode = p.activeCode;
             }
           }
+          if (p.role === 'admin') {
+            room.admin.id = p.id;
+            room.admin.name = p.name;
+            room.admin.enteredArena = true;
+            room.state = 'active';
+          }
         }
+      }
+    }
+
+    // Auto-activate room and arena if any admin is present in this room
+    const hasAdminInRoom = Object.values(room.participants).some(
+      (p) => p && p.role === 'admin' && (p.online || now - (p.lastActive || 0) < 1800000)
+    );
+    if (hasAdminInRoom) {
+      room.admin.enteredArena = true;
+      if (room.state === 'created') {
+        room.state = 'active';
       }
     }
 

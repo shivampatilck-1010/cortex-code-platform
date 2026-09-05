@@ -260,15 +260,17 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
 
               <div className="flex justify-end">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (createdInfo) {
                       try {
-                        fetch(`/api/v1/classroom/${createdInfo.roomId}`, {
+                        await fetch(`/api/v1/classroom/${createdInfo.roomId}`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ action: 'start_classroom', participantId: createdInfo.participantId || '' }),
-                        }).catch(() => {});
-                      } catch {}
+                        });
+                      } catch (err) {
+                        console.error('Failed to signal start_classroom', err);
+                      }
                       if (onEnterRoom) {
                         onEnterRoom(createdInfo.roomId);
                       } else {
