@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { executeInLocalSandbox } from '@/lib/execution/local-sandbox';
-import { ExecutionRequest } from '@/lib/execution/types';
+import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
+import { ExecutionRequest, ExecutionResult } from '@/lib/execution/types';
 import { getLanguageConfig } from '@/config/languages';
 
 export async function POST(req: NextRequest) {
@@ -36,8 +36,21 @@ export async function POST(req: NextRequest) {
       entrypoint: entrypoint || langConfig.defaultFileName,
     };
 
-    // Execute in sandboxed worker
-    const result = await executeInLocalSandbox(execReq);
+    // Primary: Cloud Runner (Judge0 CE - 100% compatible with Cloudflare Workers V8 isolates)
+    let result: ExecutionResult = await executeInCloudRunner(execReq);
+
+    // If cloud runner had a network error and we are in local dev with child_process, attempt local sandbox
+    if (result.status === 'runtime_error' && result.stderr.includes('Cloud execution error')) {
+      try {
+        const { executeInLocalSandbox } = await import('@/lib/execution/local-sandbox');
+        const localResult = await executeInLocalSandbox(execReq);
+        if (localResult) {
+          result = localResult;
+        }
+      } catch {
+        // Keep cloud runner error if local sandbox is not available (e.g. on Cloudflare Workers)
+      }
+    }
 
     return NextResponse.json(
       {

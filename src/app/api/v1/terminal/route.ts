@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { exec } from 'child_process';
 import { ProjectFile } from '@/lib/execution/types';
+import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,139 +12,175 @@ export async function POST(req: NextRequest) {
     }
 
     const trimmedCmd = command.trim();
-    const tmpDir = path.join(os.tmpdir(), `cortex_term_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
-    fs.mkdirSync(tmpDir, { recursive: true });
+    const currentFiles: ProjectFile[] = [...(files as ProjectFile[])];
+    let syncFiles: ProjectFile[] | undefined = undefined;
 
-    // Write all project files preserving nested directories
-    for (const file of files as ProjectFile[]) {
-      if (!file.isFolder) {
-        const relPath = file.path ? file.path.replace(/^\/+/, '') : file.name;
-        const targetPath = path.join(tmpDir, relPath);
-        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-        fs.writeFileSync(targetPath, file.content || '', 'utf-8');
-      }
+    // Handle 'clear' command
+    if (trimmedCmd === 'clear') {
+      return NextResponse.json({ stdout: '\x1b[2J\x1b[H', stderr: '', exitCode: 0 });
     }
 
-    // Map common bash/terminal commands for cross-platform execution
-    let cmdToRun = trimmedCmd;
-    if (cmdToRun.startsWith('run')) {
-      const arg = cmdToRun.replace(/^run\s*/, '').trim();
-      const target = arg || (files.find((f: any) => !f.isFolder && (f.id === 'main' || f.name.startsWith('main.') || f.name.startsWith('index.')))?.name) || 'main.py';
-      if (target.endsWith('.py')) {
-        cmdToRun = `python "${target}"`;
-      } else if (target.endsWith('.js') || target.endsWith('.ts')) {
-        cmdToRun = `node "${target}"`;
-      } else if (target.endsWith('.cpp') || target.endsWith('.cc')) {
-        cmdToRun = `g++ -O1 -std=c++20 -I. "${target}" -o main.exe; if ($?) { .\\main.exe }`;
-      } else if (target.endsWith('.c')) {
-        cmdToRun = `gcc -O1 -I. "${target}" -o main.exe; if ($?) { .\\main.exe }`;
+    // Handle 'pwd'
+    if (trimmedCmd === 'pwd') {
+      return NextResponse.json({ stdout: '/home/cortex/workspace\n', stderr: '', exitCode: 0 });
+    }
+
+    // Handle 'whoami'
+    if (trimmedCmd === 'whoami') {
+      return NextResponse.json({ stdout: 'cortex\n', stderr: '', exitCode: 0 });
+    }
+
+    // Handle 'date'
+    if (trimmedCmd === 'date') {
+      return NextResponse.json({ stdout: `${new Date().toUTCString()}\n`, stderr: '', exitCode: 0 });
+    }
+
+    // Handle 'help'
+    if (trimmedCmd === 'help') {
+      const helpMsg = [
+        'Cortex Cloud Terminal v1.0 (Cloudflare Edge Worker)',
+        'Available built-in commands:',
+        '  run [file]            Execute the current file or specified script',
+        '  python [file]         Run Python file via cloud isolate',
+        '  node [file]           Run JavaScript file via cloud isolate',
+        '  gcc / g++ [file]      Compile and run C / C++ code',
+        '  ls [-la]              List directory files and folders',
+        '  cat <file>            Display file contents',
+        '  touch <file>          Create a new file in workspace',
+        '  mkdir <dir>           Create a new directory in workspace',
+        '  rm [-rf] <file>       Delete a file or folder from workspace',
+        '  echo <text>           Print text to console',
+        '  pwd                   Print current working directory',
+        '  whoami                Show current terminal session user',
+        '  clear                 Clear the terminal screen',
+      ].join('\n') + '\n';
+      return NextResponse.json({ stdout: helpMsg, stderr: '', exitCode: 0 });
+    }
+
+    // Handle 'ls' / 'dir'
+    if (trimmedCmd === 'ls' || trimmedCmd === 'ls -la' || trimmedCmd === 'ls -l' || trimmedCmd === 'dir') {
+      if (currentFiles.length === 0) {
+        return NextResponse.json({ stdout: 'total 0\n', stderr: '', exitCode: 0 });
+      }
+      const lines = [`total ${currentFiles.length * 4}`];
+      for (const f of currentFiles) {
+        const typeChar = f.isFolder ? 'd' : '-';
+        const perms = f.isFolder ? 'rwxr-xr-x' : 'rw-r--r--';
+        const size = (f.content?.length || 0).toString().padStart(6);
+        const name = f.isFolder ? `${f.name}/` : f.name;
+        lines.push(`${typeChar}${perms} 1 cortex cortex ${size} Sep 05 16:00 ${name}`);
+      }
+      return NextResponse.json({ stdout: lines.join('\n') + '\n', stderr: '', exitCode: 0 });
+    }
+
+    // Handle 'cat <filename>'
+    if (trimmedCmd.startsWith('cat ')) {
+      const targetName = trimmedCmd.replace(/^cat\s+/, '').trim();
+      const found = currentFiles.find((f) => !f.isFolder && (f.name === targetName || f.path === `/${targetName}`));
+      if (found) {
+        return NextResponse.json({ stdout: `${found.content || ''}\n`, stderr: '', exitCode: 0 });
       } else {
-        cmdToRun = `python "${target}"`;
+        return NextResponse.json({ stdout: '', stderr: `cat: ${targetName}: No such file or directory\n`, exitCode: 1 });
       }
-    } else if (cmdToRun.startsWith('touch ')) {
-      const target = cmdToRun.replace(/^touch\s+/, '').trim();
-      cmdToRun = `New-Item -ItemType File -Force "${target}" | Out-Null`;
-    } else if (cmdToRun.startsWith('mkdir ')) {
-      const target = cmdToRun.replace(/^mkdir\s+(-p\s+)?/, '').trim();
-      cmdToRun = `New-Item -ItemType Directory -Force "${target}" | Out-Null`;
-    } else if (cmdToRun.startsWith('rm -rf ') || cmdToRun.startsWith('rm -r ')) {
-      const target = cmdToRun.replace(/^rm\s+-[rf]+\s+/, '').trim();
-      cmdToRun = `Remove-Item -Recurse -Force "${target}" -ErrorAction SilentlyContinue`;
-    } else if (cmdToRun.startsWith('rm ')) {
-      const target = cmdToRun.replace(/^rm\s+/, '').trim();
-      cmdToRun = `Remove-Item -Force "${target}" -ErrorAction SilentlyContinue`;
-    } else if (cmdToRun === 'ls' || cmdToRun === 'ls -la' || cmdToRun === 'ls -l') {
-      cmdToRun = `Get-ChildItem | ForEach-Object { "$($_.Mode)  $($_.Length.ToString().PadLeft(8))  $($_.LastWriteTime.ToString('MMM dd HH:mm'))  $($_.Name)" }`;
-    } else if (cmdToRun === 'pwd') {
-      cmdToRun = `Write-Output "/home/sandbox/workspace"`;
-    } else if (cmdToRun === 'whoami') {
-      cmdToRun = `Write-Output "sandbox"`;
-    } else if (cmdToRun === 'date') {
-      cmdToRun = `Get-Date -Format "ddd MMM dd HH:mm:ss UTC yyyy"`;
-    } else if (cmdToRun.startsWith('./main') || cmdToRun.startsWith('./a.out')) {
-      cmdToRun = `.\\main.exe`;
     }
 
-    // Execute the command in the isolated workspace
-    const execPromise = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
-      exec(
-        cmdToRun,
-        {
-          cwd: tmpDir,
-          shell: 'powershell.exe',
-          timeout: 15000,
-          maxBuffer: 1024 * 1024 * 4,
-          env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-        },
-        (error, stdout, stderr) => {
-          const exitCode = error ? (error.code || 1) : 0;
-          resolve({
-            stdout: stdout ? stdout.toString() : '',
-            stderr: stderr ? stderr.toString() : '',
-            exitCode,
-          });
-        }
-      );
-    });
-
-    const result = await execPromise;
-
-    // Scan for created/updated files in tmpDir to sync back to IDE
-    const syncFiles: ProjectFile[] = [];
-    const scanDir = (dir: string, baseDir: string) => {
-      try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
-          if (entry.isDirectory()) {
-            if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
-              syncFiles.push({
-                id: `f_${relPath.replace(/\W/g, '_')}`,
-                name: entry.name,
-                path: `/${relPath}`,
-                content: '',
-                isFolder: true,
-              });
-              scanDir(fullPath, baseDir);
-            }
-          } else {
-            // Ignore compiled binary outputs
-            if (!entry.name.endsWith('.exe') && !entry.name.endsWith('.o') && !entry.name.endsWith('.obj')) {
-              try {
-                const content = fs.readFileSync(fullPath, 'utf-8');
-                syncFiles.push({
-                  id: `f_${relPath.replace(/\W/g, '_')}`,
-                  name: entry.name,
-                  path: `/${relPath}`,
-                  content,
-                  isFolder: false,
-                });
-              } catch {
-                // Ignore binary read errors
-              }
-            }
-          }
-        }
-      } catch {
-        // Ignore read errors
-      }
-    };
-
-    scanDir(tmpDir, tmpDir);
-
-    // Cleanup temp dir
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {
-      // Non-blocking cleanup
+    // Handle 'echo <text>'
+    if (trimmedCmd.startsWith('echo ')) {
+      const text = trimmedCmd.replace(/^echo\s+/, '');
+      return NextResponse.json({ stdout: `${text}\n`, stderr: '', exitCode: 0 });
     }
 
+    // Handle 'touch <filename>'
+    if (trimmedCmd.startsWith('touch ')) {
+      const filename = trimmedCmd.replace(/^touch\s+/, '').trim();
+      if (!currentFiles.some((f) => f.name === filename)) {
+        currentFiles.push({
+          id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: filename,
+          path: `/${filename}`,
+          content: '',
+          isFolder: false,
+        });
+        syncFiles = currentFiles;
+      }
+      return NextResponse.json({ stdout: '', stderr: '', exitCode: 0, files: syncFiles });
+    }
+
+    // Handle 'mkdir [-p] <dirname>'
+    if (trimmedCmd.startsWith('mkdir ')) {
+      const dirname = trimmedCmd.replace(/^mkdir\s+(-p\s+)?/, '').trim();
+      if (!currentFiles.some((f) => f.name === dirname)) {
+        currentFiles.push({
+          id: `d_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: dirname,
+          path: `/${dirname}`,
+          content: '',
+          isFolder: true,
+        });
+        syncFiles = currentFiles;
+      }
+      return NextResponse.json({ stdout: '', stderr: '', exitCode: 0, files: syncFiles });
+    }
+
+    // Handle 'rm [-rf] <target>'
+    if (trimmedCmd.startsWith('rm ')) {
+      const target = trimmedCmd.replace(/^rm\s+(-[rf]+\s+)?/, '').trim();
+      const updated = currentFiles.filter((f) => f.name !== target && f.path !== `/${target}` && !f.path?.startsWith(`/${target}/`));
+      syncFiles = updated;
+      return NextResponse.json({ stdout: '', stderr: '', exitCode: 0, files: syncFiles });
+    }
+
+    // Handle Execution Commands ('run', 'python ...', 'node ...', 'gcc ...', 'g++ ...', './main')
+    let runLang = 'python';
+    let targetFile = '';
+
+    if (trimmedCmd.startsWith('run')) {
+      const arg = trimmedCmd.replace(/^run\s*/, '').trim();
+      targetFile = arg || (currentFiles.find((f) => !f.isFolder && (f.id === 'main' || f.name.startsWith('main.') || f.name.startsWith('index.')))?.name) || 'main.py';
+    } else if (trimmedCmd.startsWith('python ') || trimmedCmd === 'python') {
+      targetFile = trimmedCmd.replace(/^python\s*/, '').trim() || 'main.py';
+      runLang = 'python';
+    } else if (trimmedCmd.startsWith('node ') || trimmedCmd === 'node') {
+      targetFile = trimmedCmd.replace(/^node\s*/, '').trim() || 'index.js';
+      runLang = 'javascript';
+    } else if (trimmedCmd.startsWith('gcc ') || trimmedCmd.startsWith('g++ ') || trimmedCmd === './main' || trimmedCmd === './a.out') {
+      const isCpp = trimmedCmd.startsWith('g++');
+      runLang = isCpp ? 'cpp' : 'c';
+      targetFile = trimmedCmd.replace(/^(gcc|g\+\+)\s*/, '').replace(/-o\s+\S+/, '').trim() || (isCpp ? 'main.cpp' : 'main.c');
+    }
+
+    if (targetFile) {
+      if (targetFile.endsWith('.py')) runLang = 'python';
+      else if (targetFile.endsWith('.js')) runLang = 'javascript';
+      else if (targetFile.endsWith('.ts')) runLang = 'typescript';
+      else if (targetFile.endsWith('.cpp') || targetFile.endsWith('.cc')) runLang = 'cpp';
+      else if (targetFile.endsWith('.c')) runLang = 'c';
+      else if (targetFile.endsWith('.java')) runLang = 'java';
+      else if (targetFile.endsWith('.go')) runLang = 'go';
+      else if (targetFile.endsWith('.rs')) runLang = 'rust';
+
+      const result = await executeInCloudRunner({
+        language: runLang,
+        version: '*',
+        files: currentFiles,
+        stdin: '',
+        args: [],
+        entrypoint: targetFile,
+      });
+
+      return NextResponse.json({
+        stdout: result.stdout || (result.compileOutput ? `${result.compileOutput}\n` : ''),
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        files: syncFiles,
+      });
+    }
+
+    // Default: Unrecognized command
     return NextResponse.json({
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      files: syncFiles.length > 0 ? syncFiles : undefined,
+      stdout: '',
+      stderr: `cortex: command not found: ${trimmedCmd}. Type 'help' for available commands or 'run' to execute code.\n`,
+      exitCode: 127,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Terminal execution failed' }, { status: 500 });
