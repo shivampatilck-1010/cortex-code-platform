@@ -16,55 +16,74 @@ export const FileDownloadModal: React.FC<FileDownloadModalProps> = ({
   if (!request) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-[#14151a] border border-[#2d303f] rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4 select-none">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-            <Download className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="font-heading font-bold text-sm text-gray-100">
-              File Download Request
-            </h3>
-            <p className="text-xs text-gray-400">Owner authorization required</p>
-          </div>
-        </div>
+    <div className="fixed top-14 right-4 z-50 max-w-sm w-full animate-in slide-in-from-top-4 fade-in duration-300 select-none">
+      <div className="bg-[#14151c]/95 backdrop-blur-md border border-cyan-500/60 ring-2 ring-cyan-500/20 rounded-xl shadow-2xl shadow-black/90 p-4 space-y-3">
+        {/* Header with live pulse */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-400"></span>
+            </span>
 
-        <div className="p-3.5 bg-[#1a1c24] border border-[#282a36] rounded-lg text-xs text-gray-200 space-y-2">
-          <div>
-            <strong className="text-cyan-400">{request.requesterName}</strong> wants to download a copy of:
-            <div className="mt-1 font-mono font-bold text-white bg-[#101115] px-2.5 py-1.5 rounded border border-[#262832]">
-              📄 {request.fileName}
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+              <Download className="w-4 h-4" />
+            </div>
+
+            <div>
+              <h4 className="font-heading font-bold text-xs text-white tracking-wide">
+                File Download Request
+              </h4>
+              <p className="text-[10.5px] text-gray-400">Read-Only File Access</p>
             </div>
           </div>
-          <p className="text-gray-400 text-[11px] leading-relaxed">
-            Downloading gives the requester a read-only local copy. They will <strong>never</strong> receive write or delete access to your original file.
+
+          <button
+            onClick={() => onRespond(request.id, 'denied')}
+            className="text-gray-400 hover:text-white p-1 rounded hover:bg-[#20222e] transition"
+            title="Deny request"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Message body */}
+        <div className="p-2.5 bg-[#0f1015] border border-[#232534] rounded-lg text-xs text-gray-200 space-y-1">
+          <div>
+            <span className="font-semibold text-cyan-400">{request.requesterName}</span> requests a copy of:
+            <span className="font-mono text-[11px] text-white block bg-[#161720] px-2 py-1 rounded border border-[#2b2d3d] mt-1 truncate">
+              📄 {request.fileName}
+            </span>
+          </div>
+          <p className="text-gray-400 text-[10.5px] mt-1 leading-snug">
+            Grants a read-only local download copy. Your original file cannot be modified.
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-1">
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end space-x-1.5 pt-0.5">
           <button
             onClick={() => onRespond(request.id, 'denied')}
-            className="px-3 py-1.5 rounded-lg bg-[#20222b] hover:bg-rose-900/40 text-rose-300 border border-[#2e313d] text-xs font-medium transition flex items-center justify-center space-x-1"
+            className="px-2.5 py-1 rounded bg-[#1f212c] hover:bg-rose-950/40 text-rose-300 border border-rose-900/30 text-xs font-medium transition flex items-center space-x-1"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3 h-3" />
             <span>Deny</span>
           </button>
 
           <button
             onClick={() => onRespond(request.id, 'allow_once')}
-            className="px-3.5 py-1.5 rounded-lg bg-[#20222b] hover:bg-[#282a36] text-gray-200 border border-[#2e313d] text-xs font-medium transition flex items-center justify-center space-x-1"
+            className="px-2.5 py-1 rounded bg-[#1f212c] hover:bg-[#2c2f40] text-gray-200 border border-[#2f3244] text-xs font-medium transition flex items-center space-x-1"
           >
-            <Check className="w-3.5 h-3.5 text-cyan-400" />
+            <Check className="w-3 h-3 text-cyan-400" />
             <span>Allow Once</span>
           </button>
 
           <button
             onClick={() => onRespond(request.id, 'allow_session')}
-            className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-heading font-bold shadow transition flex items-center justify-center space-x-1"
+            className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-heading font-bold shadow-md transition flex items-center space-x-1 active:scale-95"
           >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Allow For This Session</span>
+            <ShieldCheck className="w-3 h-3" />
+            <span>Allow Session</span>
           </button>
         </div>
       </div>

@@ -14,7 +14,8 @@ import {
   Scale, 
   AlertTriangle,
   Radio,
-  SlidersHorizontal
+  SlidersHorizontal,
+  X
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { ClassroomRoom, ClassroomParticipant, ClassroomRole, CollaborationRequest, FileDownloadRequest, FileDownloadDecision, CollaborationDecision } from '@/lib/classroom/types';
@@ -59,6 +60,14 @@ export default function ClassroomLivePage() {
   const [incomingCollabReq, setIncomingCollabReq] = useState<CollaborationRequest | null>(null);
   const [incomingDownloadReq, setIncomingDownloadReq] = useState<FileDownloadRequest | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'syncing' | 'offline'>('syncing');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((curr) => (curr === msg ? null : curr));
+    }, 4000);
+  };
 
   const collabClientRef = useRef<CollaborationClient | null>(null);
 
@@ -84,7 +93,8 @@ export default function ClassroomLivePage() {
   // 2. Fetch Room State
   const fetchRoomState = async (pId?: string) => {
     try {
-      const pidQuery = pId ? `?requesterId=${pId}` : '';
+      const activeId = pId || participantId;
+      const pidQuery = activeId ? `?requesterId=${activeId}` : '';
       const res = await fetch(`/api/v1/classroom/${roomId}${pidQuery}`);
       const data = await res.json();
 
@@ -95,6 +105,31 @@ export default function ClassroomLivePage() {
       setRoom(data.room);
       setSlotAUserId(data.room.activeWorkspaces?.slotAUserId);
       setSlotBUserId(data.room.activeWorkspaces?.slotBUserId);
+
+      // Synchronize pending incoming collaboration requests for this participant:
+      if (data.room?.collaborationRequests && activeId) {
+        const myCollabReq = Object.values(data.room.collaborationRequests).find(
+          (r: any) => r.toId === activeId && r.status === 'pending'
+        );
+        if (myCollabReq) {
+          setIncomingCollabReq(myCollabReq as any);
+        } else {
+          setIncomingCollabReq(null);
+        }
+      }
+
+      // Synchronize pending incoming file download requests for this participant:
+      if (data.room?.downloadRequests && activeId) {
+        const myDownloadReq = Object.values(data.room.downloadRequests).find(
+          (r: any) => r.ownerId === activeId && r.status === 'pending'
+        );
+        if (myDownloadReq) {
+          setIncomingDownloadReq(myDownloadReq as any);
+        } else {
+          setIncomingDownloadReq(null);
+        }
+      }
+
       setError(null);
     } catch (err: any) {
       setError(err?.message || 'Error loading classroom');
@@ -286,15 +321,25 @@ export default function ClassroomLivePage() {
   };
 
   const handleRequestCollaboration = async (targetUserId: string) => {
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'request_collaboration',
-        participantId,
-        targetUserId,
-      }),
-    });
+    try {
+      const res = await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request_collaboration',
+          participantId,
+          targetUserId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to request access');
+      }
+      const targetUser = room?.participants[targetUserId];
+      showToast(`Access request sent to ${targetUser?.name || 'participant'}! Waiting for response...`);
+    } catch (err: any) {
+      showToast(`⚠️ ${err?.message || 'Failed to send request'}`);
+    }
   };
 
   const handleRespondCollaboration = async (requestId: string, decision: CollaborationDecision) => {
@@ -309,6 +354,7 @@ export default function ClassroomLivePage() {
         decision,
       }),
     });
+    fetchRoomState(participantId);
   };
 
   const handleEndCollaboration = async (sessionId: string) => {
@@ -321,19 +367,30 @@ export default function ClassroomLivePage() {
         sessionId,
       }),
     });
+    fetchRoomState(participantId);
   };
 
   const handleRequestFileDownload = async (ownerId: string, fileId: string) => {
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'request_download',
-        participantId,
-        ownerId,
-        fileId,
-      }),
-    });
+    try {
+      const res = await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request_download',
+          participantId,
+          ownerId,
+          fileId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to request download');
+      }
+      const owner = room?.participants[ownerId];
+      showToast(`Download permission requested from ${owner?.name || 'owner'}! Waiting for response...`);
+    } catch (err: any) {
+      showToast(`⚠️ ${err?.message || 'Failed to request download'}`);
+    }
   };
 
   const handleRespondDownload = async (requestId: string, decision: FileDownloadDecision) => {
@@ -587,7 +644,7 @@ export default function ClassroomLivePage() {
             onCodeChangeB={handleCodeChangeB}
             onEndCollaboration={handleEndCollaboration}
             onRequestViewAccess={(targetId) => {
-              // trigger view request
+              handleRequestCollaboration(targetId);
             }}
             onDownloadFile={(ownerId, fileId) => {
               handleRequestFileDownload(ownerId, fileId);
@@ -639,6 +696,21 @@ export default function ClassroomLivePage() {
           privacy={currentParticipant.privacy}
           onUpdatePrivacy={handleUpdatePrivacy}
         />
+      )}
+
+      {/* Outgoing Request & Action Notification Toast */}
+      {toastMessage && (
+        <div className="fixed top-14 right-4 z-50 max-w-sm w-full animate-in slide-in-from-top-2 fade-in duration-200 select-none">
+          <div className="bg-[#12141c]/95 backdrop-blur-md border border-cyan-500/50 rounded-xl p-3.5 shadow-2xl text-xs text-cyan-200 flex items-center justify-between">
+            <span className="font-medium leading-tight">{toastMessage}</span>
+            <button
+              onClick={() => setToastMessage(null)}
+              className="text-gray-400 hover:text-white ml-2 p-0.5 rounded hover:bg-[#1e202c] transition"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
