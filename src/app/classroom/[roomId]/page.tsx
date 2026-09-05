@@ -54,6 +54,7 @@ export default function ClassroomLivePage() {
 
   // Modals & Panels
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [lastReadChatCount, setLastReadChatCount] = useState<number>(0);
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
@@ -1056,6 +1057,17 @@ export default function ClassroomLivePage() {
     room.state !== 'active' &&
     !room.admin?.enteredArena;
 
+  const totalChatMessages = room?.chatMessages?.length || 0;
+  const unreadChatCount = !isChatOpen && totalChatMessages > lastReadChatCount
+    ? totalChatMessages - lastReadChatCount
+    : 0;
+
+  useEffect(() => {
+    if (isChatOpen && room?.chatMessages) {
+      setLastReadChatCount(room.chatMessages.length);
+    }
+  }, [isChatOpen, room?.chatMessages?.length]);
+
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">
       {/* 1. Global Header Bar */}
@@ -1161,13 +1173,25 @@ export default function ClassroomLivePage() {
 
           {/* Chat Toggle */}
           <button
-            onClick={() => setIsChatOpen(!isChatOpen)}
+            onClick={() => {
+              setIsChatOpen((prev) => {
+                if (!prev) {
+                  setLastReadChatCount(room?.chatMessages?.length || 0);
+                }
+                return !prev;
+              });
+            }}
             className={`p-1.5 rounded transition relative ${
               isChatOpen ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-gray-400 hover:text-white hover:bg-[#1a1c22]'
             }`}
             title="Toggle Classroom Chat"
           >
             <MessageSquare className="w-4 h-4" />
+            {unreadChatCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#ff9100] text-black font-bold text-[9px] flex items-center justify-center shadow-md animate-pulse">
+                {unreadChatCount > 9 ? '9+' : unreadChatCount}
+              </span>
+            )}
           </button>
 
           {/* Admin Settings Modal Toggle */}
@@ -1220,173 +1244,192 @@ export default function ClassroomLivePage() {
         </div>
       )}
 
-      {/* 3. Main Body: Live Waiting Room for Students OR Full Collaborative Arena */}
-      {isWaitingForAdmin ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#0e1017] to-[#07080a] relative overflow-hidden select-none">
-          {/* Ambient background glow */}
-          <div className="absolute top-1/3 w-96 h-96 bg-[#ff9100]/5 rounded-full blur-3xl pointer-events-none" />
+      {/* 3. Main Body Container with Accessible Classroom Chat */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {isWaitingForAdmin ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#0e1017] to-[#07080a] relative overflow-y-auto select-none">
+            {/* Ambient background glow */}
+            <div className="absolute top-1/3 w-96 h-96 bg-[#ff9100]/5 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="relative max-w-lg w-full bg-[#12141c]/90 border border-[#222533] backdrop-blur-xl rounded-2xl p-8 shadow-2xl space-y-6">
-            {/* Animated Pulse Icon */}
-            <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-[#ff9100]/20 animate-ping" />
-              <div className="relative w-16 h-16 rounded-full bg-[#ff9100]/10 border border-[#ff9100]/40 flex items-center justify-center text-[#ff9100]">
-                <Clock className="w-8 h-8" />
+            <div className="relative max-w-lg w-full bg-[#12141c]/90 border border-[#222533] backdrop-blur-xl rounded-2xl p-8 shadow-2xl space-y-6">
+              {/* Animated Pulse Icon */}
+              <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-[#ff9100]/20 animate-ping" />
+                <div className="relative w-16 h-16 rounded-full bg-[#ff9100]/10 border border-[#ff9100]/40 flex items-center justify-center text-[#ff9100]">
+                  <Clock className="w-8 h-8" />
+                </div>
               </div>
-            </div>
 
-            {/* Title & Status */}
-            <div className="space-y-2">
-              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-semibold">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span>Waiting for Admin to enter the arena...</span>
+              {/* Title & Status */}
+              <div className="space-y-2">
+                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span>Waiting for Admin to enter the arena...</span>
+                </div>
+                <h2 className="text-xl font-heading font-bold text-gray-100">
+                  Classroom Waiting Room
+                </h2>
+                <p className="text-xs text-gray-400 leading-relaxed max-w-md mx-auto">
+                  Welcome <strong className="text-gray-200">{participantName}</strong>! The Admin is preparing the classroom session. As soon as the Admin enters the Code Arena, your workspace will automatically launch in real-time.
+                </p>
               </div>
-              <h2 className="text-xl font-heading font-bold text-gray-100">
-                Classroom Waiting Room
-              </h2>
-              <p className="text-xs text-gray-400 leading-relaxed max-w-md mx-auto">
-                Welcome <strong className="text-gray-200">{participantName}</strong>! The Admin is preparing the classroom session. As soon as the Admin enters the Code Arena, your workspace will automatically launch in real-time.
-              </p>
-            </div>
 
-            {/* Realtime No-Refresh Banner */}
-            <div className="p-3 bg-[#181a24] border border-[#262938] rounded-xl flex items-center space-x-3 text-left">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
-                <Radio className="w-4 h-4 animate-pulse" />
+              {/* Realtime No-Refresh Banner */}
+              <div className="p-3 bg-[#181a24] border border-[#262938] rounded-xl flex items-center space-x-3 text-left">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                  <Radio className="w-4 h-4 animate-pulse" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-emerald-300">Live edge synchronization active</div>
+                  <div className="text-[11px] text-gray-400">Do not refresh your browser — updates happen automatically.</div>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold text-emerald-300">Live edge synchronization active</div>
-                <div className="text-[11px] text-gray-400">Do not refresh your browser — updates happen automatically.</div>
-              </div>
-            </div>
 
-            {/* Waiting Lobby Participants */}
-            <div className="space-y-2 text-left">
-              <div className="flex items-center justify-between text-xs font-semibold text-gray-400 px-1">
-                <span>Connected Participants:</span>
-                <span className="text-[11px] font-mono text-emerald-400 font-bold">{onlineParticipantsCount} ready</span>
+              {/* Waiting Lobby Participants */}
+              <div className="space-y-2 text-left">
+                <div className="flex items-center justify-between text-xs font-semibold text-gray-400 px-1">
+                  <span>Connected Participants:</span>
+                  <span className="text-[11px] font-mono text-emerald-400 font-bold">{onlineParticipantsCount} ready</span>
+                </div>
+                <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2.5 bg-[#0c0d12] rounded-lg border border-[#1e202b]">
+                  {validParticipants.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#161822] border border-[#262838] text-xs"
+                    >
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="font-medium text-gray-200">{p.name}</span>
+                      {p.role === 'admin' && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono font-bold">Admin</span>
+                      )}
+                      {p.id === participantId && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded font-mono font-bold">You</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2.5 bg-[#0c0d12] rounded-lg border border-[#1e202b]">
-                {validParticipants.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#161822] border border-[#262838] text-xs"
+
+              {/* Action footer */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs border-t border-[#1e202b]">
+                <span className="font-mono text-gray-500">Room: <strong className="text-[#ff9100] font-bold">{roomId}</strong></span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => {
+                      setIsChatOpen(true);
+                      setLastReadChatCount(room?.chatMessages?.length || 0);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#ff9100]/15 hover:bg-[#ff9100]/25 text-[#ff9100] border border-[#ff9100]/30 transition flex items-center space-x-1.5"
+                    title="Open Classroom Chat & Announcements"
                   >
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="font-medium text-gray-200">{p.name}</span>
-                    {p.role === 'admin' && (
-                      <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono font-bold">Admin</span>
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Chat & Announcements</span>
+                    {unreadChatCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-[#ff9100] text-black font-bold text-[9px]">
+                        {unreadChatCount}
+                      </span>
                     )}
-                    {p.id === participantId && (
-                      <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded font-mono font-bold">You</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Action footer */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs border-t border-[#1e202b]">
-              <span className="font-mono text-gray-500">Room: <strong className="text-[#ff9100] font-bold">{roomId}</strong></span>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    fetchRoomState(participantId, participantName, participantRole);
-                    collabClientRef.current?.triggerImmediateSync();
-                    showToast('Checking arena status...');
-                  }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#20222f] hover:bg-[#2b2e40] text-gray-200 border border-[#34384e] transition flex items-center space-x-1.5"
-                  title="Check if Admin has entered the arena"
-                >
-                  <Radio className="w-3 h-3 text-[#ff9100] animate-pulse" />
-                  <span>Check Status</span>
-                </button>
-                <button
-                  onClick={handleLeaveClassroom}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center space-x-1"
-                >
-                  <LogOut className="w-3 h-3" />
-                  <span>Leave Classroom</span>
-                </button>
+                  </button>
+                  <button
+                    onClick={() => {
+                      fetchRoomState(participantId, participantName, participantRole);
+                      collabClientRef.current?.triggerImmediateSync();
+                      showToast('Checking arena status...');
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#20222f] hover:bg-[#2b2e40] text-gray-200 border border-[#34384e] transition flex items-center space-x-1.5"
+                    title="Check if Admin has entered the arena"
+                  >
+                    <Radio className="w-3 h-3 text-[#ff9100] animate-pulse" />
+                    <span>Check Status</span>
+                  </button>
+                  <button
+                    onClick={handleLeaveClassroom}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center space-x-1"
+                  >
+                    <LogOut className="w-3 h-3" />
+                    <span>Leave Classroom</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : (
-        /* 3. Main Body Arena (Left: User List | Center: Two Workspaces | Right: Chat Drawer) */
-        <div className="flex-1 flex overflow-hidden relative">
-          {/* Mobile Drawer Backdrop */}
-          {isUserListOpen && (
+        ) : (
+          /* Main Body Arena (Left: User List | Center: Two Workspaces) */
+          <div className="flex-1 flex overflow-hidden relative">
+            {/* Mobile Drawer Backdrop */}
+            {isUserListOpen && (
+              <div
+                onClick={() => setIsUserListOpen(false)}
+                className="lg:hidden fixed inset-0 z-20 bg-black/60 backdrop-blur-xs"
+              />
+            )}
+
+            {/* Left Sidebar: All Classroom Users (Responsive Drawer on < lg) */}
             <div
-              onClick={() => setIsUserListOpen(false)}
-              className="lg:hidden fixed inset-0 z-20 bg-black/60 backdrop-blur-xs"
-            />
-          )}
+              className={`fixed inset-y-12 left-0 z-30 lg:static lg:inset-auto w-64 sm:w-72 flex-shrink-0 h-[calc(100%-3rem)] lg:h-full transition-transform duration-200 ${
+                isUserListOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+              }`}
+            >
+              <UserListPanel
+                participants={room?.participants || {}}
+                currentUserId={participantId}
+                currentUserRole={participantRole}
+                currentUserName={participantName}
+                slotAUserId={slotAUserId}
+                slotBUserId={slotBUserId}
+                onSelectSlotA={(uid) => {
+                  handleSelectSlotA(uid);
+                  setIsUserListOpen(false);
+                }}
+                onSelectSlotB={(uid) => {
+                  handleSelectSlotB(uid);
+                  setIsUserListOpen(false);
+                }}
+                onRequestCollaboration={handleRequestCollaboration}
+                onRequestFileDownload={handleRequestFileDownload}
+                onAdminAction={handleAdminAction}
+                onOpenPrivacyModal={() => setIsPrivacyOpen(true)}
+              />
+            </div>
 
-          {/* Left Sidebar: All Classroom Users (Responsive Drawer on < lg) */}
-          <div
-            className={`fixed inset-y-12 left-0 z-30 lg:static lg:inset-auto w-64 sm:w-72 flex-shrink-0 h-[calc(100%-3rem)] lg:h-full transition-transform duration-200 ${
-              isUserListOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
-            }`}
-          >
-            <UserListPanel
-              participants={room?.participants || {}}
-              currentUserId={participantId}
-              currentUserRole={participantRole}
-              currentUserName={participantName}
-              slotAUserId={slotAUserId}
-              slotBUserId={slotBUserId}
-              onSelectSlotA={(uid) => {
-                handleSelectSlotA(uid);
-                setIsUserListOpen(false);
-              }}
-              onSelectSlotB={(uid) => {
-                handleSelectSlotB(uid);
-                setIsUserListOpen(false);
-              }}
-              onRequestCollaboration={handleRequestCollaboration}
-              onRequestFileDownload={handleRequestFileDownload}
-              onAdminAction={handleAdminAction}
-              onOpenPrivacyModal={() => setIsPrivacyOpen(true)}
-            />
+            {/* Center: Strict Two-Workspace Model (Workspace A | Workspace B) */}
+            <div className="flex-1 h-full min-w-0">
+              <TwoWorkspaceContainer
+                userA={userA}
+                userB={userB}
+                currentUserId={participantId}
+                currentUserRole={participantRole}
+                activeSession={
+                  room ? Object.values(room.collaborationSessions).find(s => s.participantIds.includes(participantId)) : null
+                }
+                collabClient={collabClient}
+                onCodeChangeA={handleCodeChangeA}
+                onCodeChangeB={handleCodeChangeB}
+                onLanguageChangeA={handleLanguageChangeA}
+                onLanguageChangeB={handleLanguageChangeB}
+                onEndCollaboration={handleEndCollaboration}
+                onRequestViewAccess={(targetId) => {
+                  handleRequestCollaboration(targetId);
+                }}
+                onDownloadFile={(ownerId, fileId) => {
+                  handleRequestFileDownload(ownerId, fileId);
+                }}
+              />
+            </div>
           </div>
+        )}
 
-          {/* Center: Strict Two-Workspace Model (Workspace A | Workspace B) */}
-          <div className="flex-1 h-full min-w-0">
-            <TwoWorkspaceContainer
-              userA={userA}
-              userB={userB}
-              currentUserId={participantId}
-              currentUserRole={participantRole}
-              activeSession={
-                room ? Object.values(room.collaborationSessions).find(s => s.participantIds.includes(participantId)) : null
-              }
-              collabClient={collabClient}
-              onCodeChangeA={handleCodeChangeA}
-              onCodeChangeB={handleCodeChangeB}
-              onLanguageChangeA={handleLanguageChangeA}
-              onLanguageChangeB={handleLanguageChangeB}
-              onEndCollaboration={handleEndCollaboration}
-              onRequestViewAccess={(targetId) => {
-                handleRequestCollaboration(targetId);
-              }}
-              onDownloadFile={(ownerId, fileId) => {
-                handleRequestFileDownload(ownerId, fileId);
-              }}
-            />
-          </div>
-
-          {/* Right Drawer: Classroom Chat & Announcements */}
-          <ClassroomChatDrawer
-            isOpen={isChatOpen}
-            onClose={() => setIsChatOpen(false)}
-            messages={room?.chatMessages || []}
-            currentUserId={participantId}
-            currentUserRole={participantRole}
-            onSendMessage={handleSendChat}
-          />
-        </div>
-      )}
+        {/* Right Drawer: Classroom Chat & Announcements */}
+        <ClassroomChatDrawer
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          messages={room?.chatMessages || []}
+          currentUserId={participantId}
+          currentUserName={participantName}
+          currentUserRole={participantRole}
+          onSendMessage={handleSendChat}
+        />
+      </div>
 
       {/* Incoming Collaboration Request Modal (Mutual Consent) */}
       <CollaborationPromptModal
