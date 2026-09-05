@@ -239,26 +239,30 @@ export class ClassroomRoomManager {
       throw new Error(`Classroom has reached its capacity limit of ${room.settings.maxUsers} users.`);
     }
 
-    // Check if room has an active admin participant
+    // Check if room has an active human admin participant
     const hasActiveAdmin = Boolean(
       room.admin.id &&
       room.admin.name &&
       room.admin.name !== 'Classroom Host' &&
-      room.participants[room.admin.id] &&
-      room.participants[room.admin.id].role === 'admin'
+      room.participants[room.admin.id]
     );
-    const effectiveRole: ClassroomRole = (role === 'admin' || !hasActiveAdmin) ? 'admin' : 'user';
 
-    // Reconnection of existing participant
-    if (existingId && room.participants[existingId]) {
-      const existing = room.participants[existingId];
+    // Reconnection of existing participant by ID or by matching name
+    const existingById = existingId ? room.participants[existingId] : null;
+    const existingByName = Object.values(room.participants).find(
+      (p) => p && p.name && p.name.trim().toLowerCase() === name.trim().toLowerCase() && p.name !== 'Classroom Host'
+    );
+    const existing = existingById || existingByName;
+
+    if (existing) {
       existing.online = true;
       existing.lastActive = Date.now();
       existing.name = name || existing.name;
-      if (effectiveRole === 'admin') {
+      // Admin role preservation: only the genuine room admin has admin role
+      if (room.admin.id === existing.id) {
         existing.role = 'admin';
-        room.admin.id = existing.id;
-        room.admin.name = existing.name;
+      } else {
+        existing.role = 'user';
       }
       this.broadcast(normRoomId, {
         type: 'presence',
@@ -271,6 +275,8 @@ export class ClassroomRoomManager {
       return { room, participant: existing };
     }
 
+    // New participant: only admin if room has no active admin yet
+    const effectiveRole: ClassroomRole = !hasActiveAdmin ? 'admin' : (role === 'admin' && !room.admin.id ? 'admin' : 'user');
     const participantId = existingId || (effectiveRole === 'admin' ? generateId('admin') : generateId('user'));
     const userFiles = createDefaultFiles(name);
 
@@ -412,10 +418,14 @@ export class ClassroomRoomManager {
             online: now - (p.lastActive || 0) < 60000,
           };
           if (p.role === 'admin') {
-            room.admin.id = p.id;
-            room.admin.name = p.name;
-            room.admin.enteredArena = true;
-            room.state = 'active';
+            if (!room.admin.id || room.admin.name === 'Classroom Host' || room.admin.id === p.id) {
+              room.admin.id = p.id;
+              room.admin.name = p.name;
+              room.admin.enteredArena = true;
+              room.state = 'active';
+            } else {
+              p.role = 'user';
+            }
           }
         } else {
           if (!existing.privacy) {
@@ -430,10 +440,14 @@ export class ClassroomRoomManager {
             }
           }
           if (p.role === 'admin') {
-            room.admin.id = p.id;
-            room.admin.name = p.name;
-            room.admin.enteredArena = true;
-            room.state = 'active';
+            if (!room.admin.id || room.admin.name === 'Classroom Host' || room.admin.id === p.id) {
+              room.admin.id = p.id;
+              room.admin.name = p.name;
+              room.admin.enteredArena = true;
+              room.state = 'active';
+            } else {
+              existing.role = 'user';
+            }
           }
         }
       }
@@ -467,6 +481,29 @@ export class ClassroomRoomManager {
         p.status = 'offline';
       } else {
         p.online = true;
+      }
+    }
+
+    // 3. Deduplicate participants sharing the exact same name (keep most recently active)
+    const seenNames = new Map<string, string>();
+    for (const [id, p] of Object.entries(room.participants)) {
+      if (!p || !p.name || p.name === 'Classroom Host') continue;
+      const normName = p.name.trim().toLowerCase();
+      if (seenNames.has(normName)) {
+        const prevId = seenNames.get(normName)!;
+        const prevP = room.participants[prevId];
+        if ((p.lastActive || 0) >= (prevP?.lastActive || 0)) {
+          delete room.participants[prevId];
+          if (room.activeWorkspaces.slotAUserId === prevId) room.activeWorkspaces.slotAUserId = id;
+          if (room.activeWorkspaces.slotBUserId === prevId) room.activeWorkspaces.slotBUserId = id;
+          seenNames.set(normName, id);
+        } else {
+          delete room.participants[id];
+          if (room.activeWorkspaces.slotAUserId === id) room.activeWorkspaces.slotAUserId = prevId;
+          if (room.activeWorkspaces.slotBUserId === id) room.activeWorkspaces.slotBUserId = prevId;
+        }
+      } else {
+        seenNames.set(normName, id);
       }
     }
 

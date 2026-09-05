@@ -151,7 +151,7 @@ export class CollaborationClient {
 
       this.ws.onclose = () => {
         clearTimeout(connectTimeout);
-        if (this.isDestroyed) return;
+        if (this.isDestroyed || this.sse) return;
         this.setLifecycle('reconnecting');
         this.scheduleReconnect();
       };
@@ -162,6 +162,17 @@ export class CollaborationClient {
 
   private fallbackToSSE() {
     if (this.isDestroyed || this.sse) return;
+
+    if (this.ws) {
+      try {
+        this.ws.onopen = null;
+        this.ws.onmessage = null;
+        this.ws.onerror = null;
+        this.ws.onclose = null;
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
 
     try {
       const sseUrl = `/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}`;

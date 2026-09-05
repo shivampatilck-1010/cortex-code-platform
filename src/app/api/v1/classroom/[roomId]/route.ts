@@ -34,11 +34,15 @@ export async function GET(
       room.participants[requesterId].lastActive = Date.now();
       room.participants[requesterId].online = true;
       if (requesterRole === 'admin') {
-        room.participants[requesterId].role = 'admin';
-        room.admin.id = requesterId;
-        room.admin.name = requesterName;
-        room.admin.enteredArena = true;
-        room.state = 'active';
+        if (!room.admin.id || room.admin.name === 'Classroom Host' || room.admin.id === requesterId) {
+          room.participants[requesterId].role = 'admin';
+          room.admin.id = requesterId;
+          room.admin.name = requesterName;
+          room.admin.enteredArena = true;
+          room.state = 'active';
+        } else {
+          room.participants[requesterId].role = 'user';
+        }
       }
     }
 
@@ -129,9 +133,13 @@ export async function POST(
           room.participants[participantId].lastActive = Date.now();
           room.participants[participantId].online = true;
           if (requesterRole === 'admin' || room.participants[participantId].role === 'admin') {
-            room.admin.id = participantId;
-            room.admin.enteredArena = true;
-            room.state = 'active';
+            if (!room.admin.id || room.admin.name === 'Classroom Host' || room.admin.id === participantId) {
+              room.admin.id = participantId;
+              room.admin.enteredArena = true;
+              room.state = 'active';
+            } else {
+              room.participants[participantId].role = 'user';
+            }
           }
         }
         if (clientRoomState === 'active' || clientAdminEntered) {

@@ -87,8 +87,11 @@ ClassroomRoomManager.setExternalBroadcaster((roomId: string, event: any) => {
  */
 export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | null> {
   if (typeof window !== 'undefined') return null;
-  if (globalThis.__cortex_node_ws_port) {
-    return globalThis.__cortex_node_ws_port;
+  if (globalThis.__cortex_node_ws_server && globalThis.__cortex_node_ws_port) {
+    try {
+      const addr = globalThis.__cortex_node_ws_server.address();
+      if (addr) return globalThis.__cortex_node_ws_port;
+    } catch {}
   }
 
   try {

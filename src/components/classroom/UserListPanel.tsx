@@ -22,6 +22,7 @@ interface UserListPanelProps {
   participants: Record<string, ClassroomParticipant>;
   currentUserId: string;
   currentUserRole: ClassroomRole;
+  currentUserName?: string;
   slotAUserId?: string;
   slotBUserId?: string;
   onSelectSlotA: (userId: string) => void;
@@ -36,6 +37,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
   participants,
   currentUserId,
   currentUserRole,
+  currentUserName,
   slotAUserId,
   slotBUserId,
   onSelectSlotA,
@@ -117,7 +119,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
           </div>
         ) : (
           filtered.map((user) => {
-            const isSelf = user.id === currentUserId;
+            const isSelf = user.id === currentUserId || Boolean(currentUserName && user.name.trim().toLowerCase() === currentUserName.trim().toLowerCase());
             const isAdmin = user.role === 'admin';
             const isSlotA = slotAUserId === user.id;
             const isSlotB = slotBUserId === user.id;

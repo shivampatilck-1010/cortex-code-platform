@@ -76,13 +76,35 @@ export default function ClassroomLivePage() {
   const collabClientRef = useRef<CollaborationClient | null>(null);
   const codeSaveTimersRef = useRef<{ [key: string]: any }>({});
 
-  // 1. Restore participant from localStorage or prompt to join
+  // Session storage helpers to ensure browser tabs/windows don't clobber each other's identity
+  const getTabSession = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem(`cortex_${key}_${roomId}`) || localStorage.getItem(`cortex_${key}_${roomId}`);
+  };
+
+  const setTabSession = (key: string, val: string) => {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem(`cortex_${key}_${roomId}`, val);
+    try {
+      localStorage.setItem(`cortex_${key}_${roomId}`, val);
+    } catch {}
+  };
+
+  const removeTabSession = (key: string) => {
+    if (typeof window === 'undefined') return;
+    sessionStorage.removeItem(`cortex_${key}_${roomId}`);
+    try {
+      localStorage.removeItem(`cortex_${key}_${roomId}`);
+    } catch {}
+  };
+
+  // 1. Restore participant from sessionStorage/localStorage or prompt to join
   useEffect(() => {
     if (typeof window === 'undefined' || !roomId) return;
 
-    const savedId = localStorage.getItem(`cortex_participant_${roomId}`);
-    const savedName = localStorage.getItem(`cortex_name_${roomId}`);
-    const savedRole = (localStorage.getItem(`cortex_role_${roomId}`) as ClassroomRole) || 'user';
+    const savedId = getTabSession('participant');
+    const savedName = getTabSession('name');
+    const savedRole = (getTabSession('role') as ClassroomRole) || 'user';
 
     if (savedId && savedName) {
       setParticipantId(savedId);
@@ -146,16 +168,18 @@ export default function ClassroomLivePage() {
     });
 
     // 1. Maintain Workspaces Slots without background clobbering:
+    let resolvedSlotA: string | undefined = undefined;
     setSlotAUserId((prevA) => {
-      // If already set to a valid participant, keep it!
-      if (prevA && newRoom.participants && newRoom.participants[prevA]) {
-        return prevA;
-      }
-      // If user has their own participant ID, default Workspace A to themselves!
       if (myId && newRoom.participants && newRoom.participants[myId]) {
+        resolvedSlotA = myId;
         return myId;
       }
-      return newRoom.activeWorkspaces?.slotAUserId || Object.keys(newRoom.participants || {})[0] || prevA;
+      if (prevA && newRoom.participants && newRoom.participants[prevA]) {
+        resolvedSlotA = prevA;
+        return prevA;
+      }
+      resolvedSlotA = newRoom.activeWorkspaces?.slotAUserId || Object.keys(newRoom.participants || {})[0] || prevA;
+      return resolvedSlotA;
     });
 
     setSlotBUserId((prevB) => {
@@ -165,22 +189,35 @@ export default function ClassroomLivePage() {
       );
       if (myCollabSession && myCollabSession.participantIds) {
         const partnerId = myCollabSession.participantIds.find((pid: string) => pid !== myId);
-        if (partnerId) return partnerId;
+        if (partnerId && newRoom.participants[partnerId]) return partnerId;
       }
 
-      // If already set to a valid participant, keep it!
-      if (prevB && newRoom.participants && newRoom.participants[prevB]) {
+      const activeA = resolvedSlotA || slotAUserId || myId;
+
+      // If already set to a valid participant who is NOT slot A, keep it!
+      if (prevB && prevB !== activeA && newRoom.participants && newRoom.participants[prevB]) {
         return prevB;
       }
 
-      // Otherwise auto-mount another participant into Slot B
+      // If server activeWorkspaces has a slot B user who is NOT slot A, use it
+      if (
+        newRoom.activeWorkspaces?.slotBUserId &&
+        newRoom.activeWorkspaces.slotBUserId !== activeA &&
+        newRoom.participants[newRoom.activeWorkspaces.slotBUserId]
+      ) {
+        return newRoom.activeWorkspaces.slotBUserId;
+      }
+
+      // Otherwise auto-mount another participant into Slot B who is NOT Slot A
       if (newRoom.participants) {
         const otherUser = Object.values(newRoom.participants).find(
-          (p) => p && p.id && p.id !== myId && p.name !== 'Classroom Host'
+          (p) => p && p.id && p.id !== activeA && p.name !== 'Classroom Host'
         );
         if (otherUser) return otherUser.id;
       }
-      return prevB;
+
+      // Never duplicate Slot A! If no other user exists, Slot B is empty.
+      return undefined;
     });
 
     // 3. Track active collaboration sessions & trigger toast when collaboration is established
@@ -898,11 +935,9 @@ export default function ClassroomLivePage() {
   };
 
   const handleLeaveClassroom = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(`cortex_participant_${roomId}`);
-      localStorage.removeItem(`cortex_name_${roomId}`);
-      localStorage.removeItem(`cortex_role_${roomId}`);
-    }
+    removeTabSession('participant');
+    removeTabSession('name');
+    removeTabSession('role');
     router.push('/classroom');
   };
 
@@ -923,11 +958,9 @@ export default function ClassroomLivePage() {
             });
             const data = await res.json();
             if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create classroom');
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(`cortex_participant_${data.roomId}`, data.participantId);
-              localStorage.setItem(`cortex_name_${data.roomId}`, data.participantName);
-              localStorage.setItem(`cortex_role_${data.roomId}`, data.role);
-            }
+            setTabSession('participant', data.participantId);
+            setTabSession('name', data.participantName);
+            setTabSession('role', data.role);
             router.push(`/classroom/${data.roomId}`);
             return data;
           }}
@@ -944,11 +977,9 @@ export default function ClassroomLivePage() {
             const data = await res.json();
             if (!res.ok || !data.success) throw new Error(data.error || 'Failed to join classroom');
 
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(`cortex_participant_${data.roomId}`, data.participantId);
-              localStorage.setItem(`cortex_name_${data.roomId}`, data.participantName);
-              localStorage.setItem(`cortex_role_${data.roomId}`, data.role);
-            }
+            setTabSession('participant', data.participantId);
+            setTabSession('name', data.participantName);
+            setTabSession('role', data.role);
 
             setParticipantId(data.participantId);
             setParticipantName(data.participantName);
@@ -1259,6 +1290,7 @@ export default function ClassroomLivePage() {
               participants={room?.participants || {}}
               currentUserId={participantId}
               currentUserRole={participantRole}
+              currentUserName={participantName}
               slotAUserId={slotAUserId}
               slotBUserId={slotBUserId}
               onSelectSlotA={(uid) => {
