@@ -76,6 +76,7 @@ export default function ClassroomLivePage() {
 
   const collabClientRef = useRef<CollaborationClient | null>(null);
   const codeSaveTimersRef = useRef<{ [key: string]: any }>({});
+  const roomRef = useRef<ClassroomRoom | null>(null);
 
   // Session storage helpers to ensure browser tabs/windows don't clobber each other's identity
   const getTabSession = (key: string): string | null => {
@@ -162,10 +163,27 @@ export default function ClassroomLivePage() {
 
     // Only update state if room data actually changed to eliminate UI flickering and fluctuation
     setRoom((prev) => {
-      if (prev && !isRoomDifferent(prev, newRoom)) {
+      // Merge chat messages so local/optimistic or peer-received messages are NEVER lost
+      const existingMap = new Map<string, ChatMessage>();
+      (prev?.chatMessages || []).forEach((m) => {
+        if (m && m.id) existingMap.set(m.id, m);
+      });
+      (newRoom?.chatMessages || []).forEach((m) => {
+        if (m && m.id) existingMap.set(m.id, m);
+      });
+      const mergedChat = Array.from(existingMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+
+      const resolvedRoom: ClassroomRoom = {
+        ...newRoom,
+        chatMessages: mergedChat,
+      };
+
+      roomRef.current = resolvedRoom;
+
+      if (prev && !isRoomDifferent(prev, resolvedRoom)) {
         return prev;
       }
-      return newRoom;
+      return resolvedRoom;
     });
 
     // 1. Maintain Workspaces Slots without background clobbering:
@@ -290,8 +308,9 @@ export default function ClassroomLivePage() {
         queryParams.set('clientParticipants', JSON.stringify(known));
       }
 
-      if (room?.chatMessages && room.chatMessages.length > 0) {
-        queryParams.set('clientChatMessages', JSON.stringify(room.chatMessages.slice(-20)));
+      const latestChat = roomRef.current?.chatMessages || room?.chatMessages || [];
+      if (latestChat.length > 0) {
+        queryParams.set('clientChatMessages', JSON.stringify(latestChat.slice(-30)));
       }
 
       const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
@@ -520,15 +539,33 @@ export default function ClassroomLivePage() {
         break;
       }
 
-      case 'chat_message':
+      case 'chat_message': {
+        const rawMsg = event.payload?.message || event.payload;
+        if (!rawMsg || (!rawMsg.text && !rawMsg.id)) break;
+        const msg: ChatMessage = {
+          id: rawMsg.id || `chat_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          senderId: rawMsg.senderId || event.senderId || 'unknown',
+          senderName: rawMsg.senderName || event.senderName || 'Classmate',
+          role: rawMsg.role || 'user',
+          text: (rawMsg.text || '').trim(),
+          timestamp: rawMsg.timestamp || event.timestamp || Date.now(),
+          isAnnouncement: Boolean(rawMsg.isAnnouncement),
+        };
         setRoom((prev) => {
           if (!prev) return prev;
-          return {
+          const currentList = prev.chatMessages || [];
+          if (currentList.some((m) => m.id === msg.id)) {
+            return prev;
+          }
+          const updated = {
             ...prev,
-            chatMessages: [...prev.chatMessages, event.payload],
+            chatMessages: [...currentList, msg].sort((a, b) => a.timestamp - b.timestamp),
           };
+          roomRef.current = updated;
+          return updated;
         });
         break;
+      }
 
       case 'admin_action':
         fetchRoomState(participantId);
@@ -934,10 +971,14 @@ export default function ClassroomLivePage() {
     // 1. Instant optimistic local UI update (0ms feedback)
     setRoom((prev) => {
       if (!prev) return prev;
-      return {
+      const currentList = prev.chatMessages || [];
+      if (currentList.some((m) => m.id === newMsg.id)) return prev;
+      const updated = {
         ...prev,
-        chatMessages: [...(prev.chatMessages || []), newMsg],
+        chatMessages: [...currentList, newMsg].sort((a, b) => a.timestamp - b.timestamp),
       };
+      roomRef.current = updated;
+      return updated;
     });
 
     // 2. Real-time broadcast over WebRTC DataChannels, BroadcastChannel & WebSockets
@@ -950,7 +991,7 @@ export default function ClassroomLivePage() {
       timestamp: Date.now(),
     });
 
-    // 3. Persist to server
+    // 3. Persist to server with complete metadata
     try {
       await fetch(`/api/v1/classroom/${roomId}`, {
         method: 'POST',
@@ -958,6 +999,9 @@ export default function ClassroomLivePage() {
         body: JSON.stringify({
           action: 'send_chat',
           participantId,
+          senderName: participantName,
+          role: participantRole,
+          id: newMsg.id,
           text: text.trim(),
           isAnnouncement,
         }),

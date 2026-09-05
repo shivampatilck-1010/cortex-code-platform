@@ -956,25 +956,68 @@ export class ClassroomRoomManager {
   /**
    * Send chat message or room announcement
    */
-  public static sendChat(roomId: string, senderId: string, text: string, isAnnouncement = false): ChatMessage {
-    const room = this.getRoom(roomId);
+  public static sendChat(
+    roomId: string,
+    senderId: string,
+    text: string,
+    isAnnouncement = false,
+    senderName?: string,
+    senderRole?: ClassroomRole,
+    forcedMessageId?: string
+  ): ChatMessage {
+    const normRoomId = roomId.toUpperCase().trim();
+    const room = this.getRoom(normRoomId, true);
     if (!room) throw new Error('Room not found');
-    const sender = room.participants[senderId];
-    if (!sender) throw new Error('Sender not recognized');
+
+    let sender = room.participants[senderId];
+    if (!sender) {
+      const resolvedRole = senderRole || (room.admin.id === senderId ? 'admin' : 'user');
+      sender = {
+        id: senderId,
+        name: senderName || 'Classmate',
+        role: resolvedRole,
+        currentLanguage: 'python',
+        activeFileName: 'main.py',
+        activeCode: '',
+        files: createDefaultFiles(senderName || 'Classmate'),
+        lastActive: Date.now(),
+        online: true,
+        status: 'idle',
+        isLocked: false,
+        canRun: true,
+        privacy: {
+          workspaceVisibility: resolvedRole === 'admin' ? 'public' : 'private',
+          allowCollaboration: true,
+          requireDownloadPermission: resolvedRole !== 'admin',
+        },
+      };
+      room.participants[senderId] = sender;
+    } else {
+      if (senderName && (sender.name === 'Classmate' || sender.name === 'Participant')) {
+        sender.name = senderName;
+      }
+      if (senderRole) {
+        sender.role = senderRole;
+      }
+    }
 
     const msg: ChatMessage = {
-      id: generateId('chat'),
+      id: forcedMessageId || generateId('chat'),
       senderId,
       senderName: sender.name,
       role: sender.role,
-      text,
+      text: (text || '').trim(),
       timestamp: Date.now(),
       isAnnouncement,
     };
 
-    room.chatMessages.push(msg);
-    if (room.chatMessages.length > 200) {
-      room.chatMessages.shift();
+    if (!room.chatMessages) room.chatMessages = [];
+    const exists = room.chatMessages.some((m) => m.id === msg.id);
+    if (!exists) {
+      room.chatMessages.push(msg);
+      if (room.chatMessages.length > 200) {
+        room.chatMessages.shift();
+      }
     }
 
     this.broadcast(room.roomId, {

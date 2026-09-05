@@ -221,9 +221,23 @@ export async function POST(
         return NextResponse.json({ success: true });
       }
 
+      case 'chat_message':
       case 'send_chat': {
-        const { text, isAnnouncement } = body;
-        const msg = ClassroomRoomManager.sendChat(roomId, participantId, text, Boolean(isAnnouncement));
+        const text = body.text || body.payload?.text || body.message?.text || '';
+        const isAnnouncement = Boolean(body.isAnnouncement || body.payload?.isAnnouncement);
+        const senderName = body.senderName || body.payload?.senderName || body.message?.senderName;
+        const role = body.role || body.payload?.role || body.message?.role;
+        const messageId = body.id || body.payload?.id || body.message?.id;
+
+        const msg = ClassroomRoomManager.sendChat(
+          roomId,
+          participantId,
+          text,
+          isAnnouncement,
+          senderName,
+          role,
+          messageId
+        );
         return NextResponse.json({ success: true, message: msg });
       }
 
