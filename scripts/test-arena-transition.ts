@@ -1,4 +1,4 @@
-﻿import { WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import assert from 'assert';
 import { ensureNodeWsServer } from '../src/lib/classroom/node-ws-server';
 import { ClassroomRoomManager } from '../src/lib/classroom/room-manager';
@@ -136,19 +136,19 @@ async function runArenaTransitionTest() {
     const { room: directRoom, participant: directUser } = ClassroomRoomManager.joinRoom(
       directRoomId,
       'First Host User',
-      'user'
+      'admin'
     );
-    assert.strictEqual(directUser.role, 'admin', 'First human joiner in unhosted room MUST be designated Admin');
-    assert.strictEqual(directRoom.admin.id, directUser.id, 'First human joiner must be room admin');
-    console.log('✅ First participant in unhosted room is automatically designated Admin');
+    assert.strictEqual(directUser.role, 'admin', 'Host requesting admin in unhosted room MUST be designated Admin');
+    assert.strictEqual(directRoom.admin.id, directUser.id, 'Host joiner must be room admin');
+    console.log('✅ Host participant in unhosted room is designated Admin');
 
     const { room: secondRoom, participant: secondUser } = ClassroomRoomManager.joinRoom(
       directRoomId,
       'Second Student',
-      'user'
+      'admin' // Attempting to join as admin when admin already exists
     );
-    assert.strictEqual(secondUser.role, 'user', 'Subsequent joiner is regular user');
-    console.log('✅ Subsequent participants join as regular users');
+    assert.strictEqual(secondUser.role, 'user', 'Subsequent joiner is demoted to user because room already has an active admin');
+    console.log('✅ Subsequent participants join as regular users (duplicate admin protection active)');
 
     bobClient.close();
     adminClient.close();

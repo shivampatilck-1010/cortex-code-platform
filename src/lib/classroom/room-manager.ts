@@ -258,9 +258,20 @@ export class ClassroomRoomManager {
       existing.online = true;
       existing.lastActive = Date.now();
       existing.name = name || existing.name;
-      // Admin role preservation: only the genuine room admin has admin role
-      if (room.admin.id === existing.id) {
+      // Admin role preservation & immediate arena activation when host enters
+      if (room.admin.id === existing.id || role === 'admin') {
         existing.role = 'admin';
+        room.admin.id = existing.id;
+        room.admin.name = existing.name;
+        room.admin.enteredArena = true;
+        room.state = 'active';
+        this.broadcast(normRoomId, {
+          type: 'start_classroom',
+          roomId: normRoomId,
+          senderId: existing.id,
+          payload: { state: 'active', adminEntered: true },
+          timestamp: Date.now(),
+        });
       } else {
         existing.role = 'user';
       }
@@ -377,7 +388,9 @@ export class ClassroomRoomManager {
     clientParticipants: ClassroomParticipant[],
     clientRoomState?: string,
     clientAdminEntered?: boolean,
-    clientChatMessages?: ChatMessage[]
+    clientChatMessages?: ChatMessage[],
+    clientCollabRequests?: CollaborationRequest[],
+    clientCollabSessions?: CollaborationSession[]
   ): ClassroomRoom | null {
     const normRoomId = roomId.toUpperCase().trim();
     const room = this.getRoom(normRoomId, true);
@@ -524,6 +537,31 @@ export class ClassroomRoomManager {
       }
     }
 
+    // 5. Merge collaboration requests: adopt resolved statuses (accepted/declined) from client gossip
+    if (Array.isArray(clientCollabRequests)) {
+      if (!room.collaborationRequests) room.collaborationRequests = {};
+      clientCollabRequests.forEach((cr) => {
+        if (!cr || !cr.id) return;
+        const existingCr = room.collaborationRequests[cr.id];
+        if (!existingCr) {
+          room.collaborationRequests[cr.id] = cr;
+        } else if (cr.status !== 'pending') {
+          existingCr.status = cr.status;
+        }
+      });
+    }
+
+    // 6. Merge active collaboration sessions
+    if (Array.isArray(clientCollabSessions)) {
+      if (!room.collaborationSessions) room.collaborationSessions = {};
+      clientCollabSessions.forEach((cs) => {
+        if (!cs || !cs.id) return;
+        if (!room.collaborationSessions[cs.id]) {
+          room.collaborationSessions[cs.id] = cs;
+        }
+      });
+    }
+
     return room;
   }
 
@@ -663,48 +701,87 @@ export class ClassroomRoomManager {
   /**
    * Respond to collaboration request (Accept / Decline)
    */
-  public static respondCollaboration(roomId: string, requestId: string, responderId: string, decision: CollaborationDecision): CollaborationSession | null {
+  public static respondCollaboration(
+    roomId: string, 
+    requestId: string, 
+    responderId: string, 
+    decision: CollaborationDecision, 
+    fromId?: string
+  ): CollaborationSession | null {
     const room = this.getRoom(roomId);
     if (!room) throw new Error('Room not found');
-    const req = room.collaborationRequests[requestId];
-    if (!req) throw new Error('Collaboration request expired or not found');
-    if (req.toId !== responderId) throw new Error('Unauthorized response');
+    if (!room.collaborationRequests) room.collaborationRequests = {};
 
-    req.status = decision;
+    let req: CollaborationRequest | undefined = room.collaborationRequests[requestId];
+    if (!req) {
+      // Find by responder or fallback from fromId
+      req = Object.values(room.collaborationRequests || {}).find(
+        (r) => r.toId === responderId && (fromId ? r.fromId === fromId : true) && r.status === 'pending'
+      );
+    }
 
-    // Automatically resolve ALL other pending requests between these two participants!
-    // No user should ever have to accept multiple separate requests from the same user.
-    Object.values(room.collaborationRequests || {}).forEach((r) => {
-      if (
-        ((r.fromId === req.fromId && r.toId === req.toId) ||
-         (r.fromId === req.toId && r.toId === req.fromId)) &&
-        r.status === 'pending'
-      ) {
-        r.status = decision;
-      }
-    });
+    if (!req) {
+      // Auto-heal missing request in this isolate without crashing
+      req = {
+        id: requestId,
+        fromId: fromId || '',
+        fromName: (fromId && room.participants[fromId]?.name) || 'Participant',
+        toId: responderId,
+        toName: room.participants[responderId]?.name || 'You',
+        status: decision,
+        createdAt: Date.now(),
+      };
+      room.collaborationRequests[requestId] = req;
+    } else {
+      req.status = decision;
+    }
+
+    // Automatically resolve ALL pending requests between these two participants!
+    const partnerId = req.fromId || fromId;
+    if (partnerId) {
+      Object.values(room.collaborationRequests || {}).forEach((r) => {
+        if (
+          ((r.fromId === partnerId && r.toId === responderId) ||
+           (r.fromId === responderId && r.toId === partnerId) ||
+           r.id === requestId) &&
+          r.status === 'pending'
+        ) {
+          r.status = decision;
+        }
+      });
+    }
 
     let session: CollaborationSession | null = null;
-    if (decision === 'accepted') {
-      const sessionId = generateId('collab_session');
-      const fromUser = room.participants[req.fromId];
-      const toUser = room.participants[req.toId];
+    if (decision === 'accepted' && partnerId) {
+      if (!room.collaborationSessions) room.collaborationSessions = {};
+      const existing = Object.values(room.collaborationSessions).find(
+        (s) => s.participantIds.includes(partnerId) && s.participantIds.includes(responderId)
+      );
 
-      session = {
-        id: sessionId,
-        participantIds: [req.fromId, req.toId],
-        mode: 'shared',
-        sharedDocId: `doc_${sessionId}`,
-        sharedCode: fromUser?.activeCode || toUser?.activeCode || '',
-        createdAt: Date.now(),
-        lastSynced: Date.now(),
-      };
+      if (existing) {
+        session = existing;
+      } else {
+        const sessionId = generateId('collab_session');
+        const fromUser = room.participants[partnerId];
+        const toUser = room.participants[responderId];
 
-      room.collaborationSessions[sessionId] = session;
+        session = {
+          id: sessionId,
+          participantIds: [partnerId, responderId],
+          mode: 'shared',
+          sharedDocId: `doc_${sessionId}`,
+          sharedCode: fromUser?.activeCode || toUser?.activeCode || '',
+          createdAt: Date.now(),
+          lastSynced: Date.now(),
+        };
+
+        room.collaborationSessions[sessionId] = session;
+      }
+
       // Automatically mount collaborating users into Workspace A and Workspace B
       room.activeWorkspaces = {
-        slotAUserId: req.fromId,
-        slotBUserId: req.toId,
+        slotAUserId: partnerId,
+        slotBUserId: responderId,
       };
     }
 

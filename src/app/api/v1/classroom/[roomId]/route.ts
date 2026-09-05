@@ -62,8 +62,32 @@ export async function GET(
       } catch {}
     }
 
-    // Multi-isolate gossip sync: keeps participant lists, room state, and chat identical across all devices and isolates
-    ClassroomRoomManager.syncParticipants(roomId, clientParticipants, clientRoomState, clientAdminEntered, clientChatMessages);
+    const clientCollabRequestsRaw = searchParams.get('clientCollabRequests');
+    let clientCollabRequests: any[] = [];
+    if (clientCollabRequestsRaw) {
+      try {
+        clientCollabRequests = JSON.parse(clientCollabRequestsRaw);
+      } catch {}
+    }
+
+    const clientCollabSessionsRaw = searchParams.get('clientCollabSessions');
+    let clientCollabSessions: any[] = [];
+    if (clientCollabSessionsRaw) {
+      try {
+        clientCollabSessions = JSON.parse(clientCollabSessionsRaw);
+      } catch {}
+    }
+
+    // Multi-isolate gossip sync: keeps participant lists, room state, chat, and collab requests identical across all devices and isolates
+    ClassroomRoomManager.syncParticipants(
+      roomId,
+      clientParticipants,
+      clientRoomState,
+      clientAdminEntered,
+      clientChatMessages,
+      clientCollabRequests,
+      clientCollabSessions
+    );
 
     const requester = requesterId ? room.participants[requesterId] : null;
     const isAdmin = requester?.role === 'admin';
@@ -192,8 +216,8 @@ export async function POST(
       }
 
       case 'respond_collaboration': {
-        const { requestId, decision } = body;
-        const session = ClassroomRoomManager.respondCollaboration(roomId, requestId, participantId, decision);
+        const { requestId, decision, fromId } = body;
+        const session = ClassroomRoomManager.respondCollaboration(roomId, requestId, participantId, decision, fromId);
         return NextResponse.json({ success: true, session });
       }
 

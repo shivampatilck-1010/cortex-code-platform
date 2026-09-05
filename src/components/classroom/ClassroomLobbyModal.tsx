@@ -13,13 +13,14 @@ import {
   ShieldCheck,
   X
 } from 'lucide-react';
+import { ClassroomRole } from '@/lib/classroom/types';
 
 interface ClassroomLobbyModalProps {
   isOpen: boolean;
   onClose?: () => void;
   defaultRoomId?: string;
   onCreateRoom: (adminName: string) => Promise<any>;
-  onJoinRoom: (roomId: string, name: string) => Promise<any>;
+  onJoinRoom: (roomId: string, name: string, role?: ClassroomRole) => Promise<any>;
   onEnterRoom?: (roomId: string) => void;
 }
 
@@ -36,6 +37,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
   // Join form
   const [roomId, setRoomId] = useState(defaultRoomId);
   const [userName, setUserName] = useState('');
+  const [selectedRole, setSelectedRole] = useState<ClassroomRole>('user');
   
   // Create form
   const [adminName, setAdminName] = useState('');
@@ -103,7 +105,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      await onJoinRoom(roomId.trim(), userName.trim());
+      await onJoinRoom(roomId.trim(), userName.trim(), selectedRole);
     } catch (err: any) {
       setError(err?.message || 'Failed to join classroom');
     } finally {
@@ -122,9 +124,11 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
             </div>
             <div>
               <h2 className="font-heading font-bold text-base text-gray-100">
-                Cortex Classroom
+                {defaultRoomId ? 'Classroom Invitation' : 'Cortex Classroom'}
               </h2>
-              <p className="text-xs text-gray-400">Collaborative Coding &amp; Workspace Arena</p>
+              <p className="text-xs text-gray-400">
+                {defaultRoomId ? `You are invited to join ${defaultRoomId}` : 'Collaborative Coding & Workspace Arena'}
+              </p>
             </div>
           </div>
 
@@ -135,8 +139,8 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
           )}
         </div>
 
-        {/* Tab Toggle (Join vs Create) */}
-        {!createdInfo && (
+        {/* Tab Toggle (Only shown when not invited to a specific room) */}
+        {!createdInfo && !defaultRoomId && (
           <div className="flex border-b border-[#20222d] bg-[#0e0f13] text-xs font-heading font-semibold">
             <button
               type="button"
@@ -288,25 +292,98 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
           ) : activeTab === 'join' ? (
             /* Join Form */
             <form onSubmit={handleJoin} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-300 block">Classroom Room ID</label>
-                <input
-                  type="text"
-                  placeholder="e.g. CORTEX-7K92"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs font-mono font-bold text-[#ff9100] placeholder-gray-600 focus:outline-none focus:border-[#ff9100]"
-                  required
-                />
+              {defaultRoomId ? (
+                <div className="p-3 bg-[#161722] border border-[#27293a] rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                      Invited Room:
+                    </span>
+                    <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-full font-bold">
+                      Verified Room
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-base text-[#ff9100] tracking-wider">
+                      {roomId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(roomId);
+                        setCopiedId(true);
+                        setTimeout(() => setCopiedId(false), 1500);
+                      }}
+                      className="px-2 py-0.5 rounded bg-[#212330] hover:bg-[#2c3042] text-[11px] text-gray-300 transition flex items-center space-x-1"
+                    >
+                      {copiedId ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedId ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-300 block">Classroom Room ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CORTEX-7K92"
+                    value={roomId}
+                    onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs font-mono font-bold text-[#ff9100] placeholder-gray-600 focus:outline-none focus:border-[#ff9100]"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Role Selection */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-300 block">Select Your Role</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('user')}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                      selectedRole === 'user'
+                        ? 'bg-[#ff9100]/10 border-[#ff9100] text-gray-100 shadow-sm'
+                        : 'bg-[#15161d] border-[#252735] text-gray-400 hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1.5 font-semibold text-xs text-white">
+                      <Users className={`w-3.5 h-3.5 ${selectedRole === 'user' ? 'text-[#ff9100]' : 'text-gray-400'}`} />
+                      <span>Student</span>
+                    </div>
+                    <span className="text-[10.5px] text-gray-400 mt-1 leading-snug">
+                      Collaborate, code, and participate in challenges.
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('admin')}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                      selectedRole === 'admin'
+                        ? 'bg-amber-500/10 border-amber-400 text-gray-100 shadow-sm'
+                        : 'bg-[#15161d] border-[#252735] text-gray-400 hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1.5 font-semibold text-xs text-white">
+                      <Crown className={`w-3.5 h-3.5 ${selectedRole === 'admin' ? 'text-amber-400' : 'text-gray-400'}`} />
+                      <span>Teacher / Host</span>
+                    </div>
+                    <span className="text-[10.5px] text-gray-400 mt-1 leading-snug">
+                      Lead session, monitor arenas, and manage participants.
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-300 block">Your Name</label>
+                <label className="text-xs font-semibold text-gray-300 block">Your Display Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. Shivam"
+                  placeholder={selectedRole === 'admin' ? 'e.g. Professor Sharma' : 'e.g. Shivam'}
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
+                  autoFocus
                   className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#ff9100]"
                   required
                 />
@@ -315,9 +392,19 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
               <button
                 type="submit"
                 disabled={isLoading || !roomId.trim() || !userName.trim()}
-                className="w-full py-2.5 rounded-lg bg-[#ff9100] hover:bg-[#e08000] text-black font-heading font-bold text-xs transition shadow-md disabled:opacity-50 flex items-center justify-center space-x-1.5"
+                className={`w-full py-2.5 rounded-lg font-heading font-bold text-xs transition shadow-md disabled:opacity-50 flex items-center justify-center space-x-1.5 text-black ${
+                  selectedRole === 'admin'
+                    ? 'bg-gradient-to-r from-amber-500 to-[#ff9100] hover:from-amber-400 hover:to-[#ffa229]'
+                    : 'bg-[#ff9100] hover:bg-[#e08000]'
+                }`}
               >
-                <span>{isLoading ? 'Joining Room...' : 'Join Classroom'}</span>
+                <span>
+                  {isLoading
+                    ? 'Connecting to Classroom...'
+                    : selectedRole === 'admin'
+                    ? 'Join as Teacher & Launch Arena'
+                    : 'Join Classroom'}
+                </span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>

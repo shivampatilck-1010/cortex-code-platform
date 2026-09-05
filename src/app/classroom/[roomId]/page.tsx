@@ -17,7 +17,8 @@ import {
   X,
   Play,
   Clock,
-  Sparkles
+  Sparkles,
+  Crown
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { ClassroomRoom, ClassroomParticipant, ClassroomRole, CollaborationRequest, FileDownloadRequest, FileDownloadDecision, CollaborationDecision, ChatMessage } from '@/lib/classroom/types';
@@ -62,6 +63,8 @@ export default function ClassroomLivePage() {
 
   // Pending incoming requests
   const [incomingCollabReq, setIncomingCollabReq] = useState<CollaborationRequest | null>(null);
+  const handledCollabRequestIdsRef = useRef<Set<string>>(new Set());
+  const dismissedPartnerCooldownRef = useRef<Map<string, number>>(new Map());
   const [incomingDownloadReq, setIncomingDownloadReq] = useState<FileDownloadRequest | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'syncing' | 'offline'>('syncing');
   const [collabClient, setCollabClient] = useState<CollaborationClient | null>(null);
@@ -272,9 +275,22 @@ export default function ClassroomLivePage() {
         }
       });
 
-      const myCollabReq = Object.values(newRoom.collaborationRequests).find(
-        (r: any) => r.toId === myId && r.status === 'pending' && !activePartnerIds.has(r.fromId)
-      );
+      // Respect current user's privacy preference
+      const myParticipant = newRoom.participants?.[myId];
+      const allowsCollaboration = myParticipant?.privacy?.allowCollaboration !== false;
+
+      const now = Date.now();
+      const myCollabReq = allowsCollaboration
+        ? Object.values(newRoom.collaborationRequests).find((r: any) => {
+            if (!r || r.toId !== myId || r.status !== 'pending') return false;
+            if (activePartnerIds.has(r.fromId)) return false;
+            if (handledCollabRequestIdsRef.current.has(r.id)) return false;
+            const cooldownUntil = dismissedPartnerCooldownRef.current.get(r.fromId) || 0;
+            if (now < cooldownUntil) return false;
+            return true;
+          })
+        : null;
+
       setIncomingCollabReq(myCollabReq ? (myCollabReq as any) : null);
     } else {
       setIncomingCollabReq(null);
@@ -311,6 +327,19 @@ export default function ClassroomLivePage() {
       const latestChat = roomRef.current?.chatMessages || room?.chatMessages || [];
       if (latestChat.length > 0) {
         queryParams.set('clientChatMessages', JSON.stringify(latestChat.slice(-30)));
+      }
+
+      const currentState = roomRef.current?.state || (activeRole === 'admin' ? 'active' : undefined);
+      if (currentState) {
+        queryParams.set('clientRoomState', currentState);
+      }
+      if (roomRef.current?.admin?.enteredArena || activeRole === 'admin') {
+        queryParams.set('clientAdminEntered', 'true');
+      }
+
+      const latestRequests = Object.values(roomRef.current?.collaborationRequests || room?.collaborationRequests || {});
+      if (latestRequests.length > 0) {
+        queryParams.set('clientCollabRequests', JSON.stringify(latestRequests.slice(-10)));
       }
 
       const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
@@ -476,7 +505,14 @@ export default function ClassroomLivePage() {
 
       case 'collaboration_request': {
         const req = event.payload;
-        if (req?.toId === participantId) {
+        if (req?.toId === participantId && req?.id) {
+          const now = Date.now();
+          if (handledCollabRequestIdsRef.current.has(req.id)) break;
+          const cooldownUntil = dismissedPartnerCooldownRef.current.get(req.fromId) || 0;
+          if (now < cooldownUntil) break;
+          const myParticipant = room?.participants?.[participantId];
+          if (myParticipant?.privacy?.allowCollaboration === false) break;
+
           // Check if already in an active session with this user
           const isAlreadyPartner = room && Object.values(room.collaborationSessions || {}).some(
             (s: any) => s.participantIds?.includes(participantId) && s.participantIds?.includes(req.fromId)
@@ -836,10 +872,70 @@ export default function ClassroomLivePage() {
   };
 
   const handleRespondCollaboration = async (requestId: string, decision: CollaborationDecision) => {
-    const targetReq = incomingCollabReq;
+    const targetReq = incomingCollabReq || (roomRef.current?.collaborationRequests?.[requestId] as any);
+    const partnerId = targetReq?.fromId;
+
+    // Immediately mark request as handled to permanently prevent recurring popups
+    handledCollabRequestIdsRef.current.add(requestId);
+    if (decision === 'declined' && partnerId) {
+      dismissedPartnerCooldownRef.current.set(partnerId, Date.now() + 5 * 60 * 1000);
+    }
     setIncomingCollabReq(null);
+
+    // Optimistically update local room state immediately
+    if (partnerId) {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        const updatedCollabRequests = { ...prev.collaborationRequests };
+        Object.keys(updatedCollabRequests).forEach((id) => {
+          const r = updatedCollabRequests[id];
+          if (
+            (r.fromId === partnerId && r.toId === participantId) ||
+            (r.fromId === participantId && r.toId === partnerId) ||
+            id === requestId
+          ) {
+            r.status = decision;
+            handledCollabRequestIdsRef.current.add(id);
+          }
+        });
+        return {
+          ...prev,
+          collaborationRequests: updatedCollabRequests,
+        };
+      });
+    }
+
+    if (decision === 'accepted' && partnerId) {
+      setSlotAUserId(participantId);
+      setSlotBUserId(partnerId);
+      showToast(`🎉 Access approved! Real-time collaboration active.`);
+    } else if (decision === 'declined') {
+      showToast('Access request declined.');
+    }
+
+    // Broadcast realtime event over WebRTC, BroadcastChannel, and WebSocket
+    collabClientRef.current?.sendRaw({
+      type: 'collaboration_response',
+      roomId,
+      clientId: participantId,
+      senderName: participantName,
+      payload: {
+        request: {
+          id: requestId,
+          fromId: partnerId,
+          toId: participantId,
+          status: decision,
+        },
+        activeWorkspaces: decision === 'accepted' ? {
+          slotAUserId: participantId,
+          slotBUserId: partnerId,
+        } : undefined,
+      },
+      timestamp: Date.now(),
+    });
+
     try {
-      const res = await fetch(`/api/v1/classroom/${roomId}`, {
+      await fetch(`/api/v1/classroom/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -847,46 +943,23 @@ export default function ClassroomLivePage() {
           participantId,
           requestId,
           decision,
+          fromId: partnerId,
         }),
       });
-      const data = await res.json();
-      if (decision === 'accepted') {
-        const partnerId = targetReq?.fromId;
-        if (partnerId) {
-          setSlotAUserId(participantId);
-          setSlotBUserId(partnerId);
-          showToast(`🎉 Access approved! Real-time collaboration active with ${targetReq.fromName || 'participant'}.`);
-        }
-      } else {
-        showToast('Access request declined.');
-      }
-
-      // Instantly clear all requests from/to this user locally
-      if (targetReq?.fromId) {
-        setRoom((prev) => {
-          if (!prev) return prev;
-          const updatedCollabRequests = { ...prev.collaborationRequests };
-          Object.keys(updatedCollabRequests).forEach((id) => {
-            const r = updatedCollabRequests[id];
-            if (
-              (r.fromId === targetReq.fromId && r.toId === participantId) ||
-              (r.fromId === participantId && r.toId === targetReq.fromId)
-            ) {
-              r.status = decision;
-            }
-          });
-          return {
-            ...prev,
-            collaborationRequests: updatedCollabRequests,
-          };
-        });
-      }
-
-      collabClientRef.current?.triggerImmediateSync();
-      fetchRoomState(participantId);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to report respond_collaboration to backend', e);
     }
+  };
+
+  const handleDismissCollaboration = (requestId: string) => {
+    const targetReq = incomingCollabReq || (roomRef.current?.collaborationRequests?.[requestId] as any);
+    const partnerId = targetReq?.fromId;
+    handledCollabRequestIdsRef.current.add(requestId);
+    if (partnerId) {
+      dismissedPartnerCooldownRef.current.set(partnerId, Date.now() + 5 * 60 * 1000);
+    }
+    setIncomingCollabReq(null);
+    handleRespondCollaboration(requestId, 'declined');
   };
 
   const handleEndCollaboration = async (sessionId: string) => {
@@ -1055,12 +1128,13 @@ export default function ClassroomLivePage() {
           onEnterRoom={(newRoomId) => {
             router.push(`/classroom/${newRoomId}`);
           }}
-          onJoinRoom={async (rid, name) => {
+          onJoinRoom={async (rid, name, role) => {
             const targetId = rid.toUpperCase().trim() || roomId;
+            const targetRole = role || 'user';
             const res = await fetch('/api/v1/classroom', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'join', roomId: targetId, name, role: 'user' }),
+              body: JSON.stringify({ action: 'join', roomId: targetId, name, role: targetRole }),
             });
             const data = await res.json();
             if (!res.ok || !data.success) throw new Error(data.error || 'Failed to join classroom');
@@ -1073,6 +1147,13 @@ export default function ClassroomLivePage() {
             setParticipantName(data.participantName);
             setParticipantRole(data.role);
             setIsJoinNeeded(false);
+
+            if (data.role === 'admin') {
+              setTimeout(() => {
+                handleStartClassroom();
+              }, 100);
+            }
+
             if (targetId !== roomId) {
               router.push(`/classroom/${targetId}`);
             } else {
@@ -1374,6 +1455,30 @@ export default function ClassroomLivePage() {
                       </span>
                     )}
                   </button>
+                  {(!room?.admin?.id || room.admin.name === 'Classroom Host' || !validParticipants.some(p => p.role === 'admin')) && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          setParticipantRole('admin');
+                          setTabSession('role', 'admin');
+                          await fetch(`/api/v1/classroom/${roomId}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'start_classroom', participantId }),
+                          });
+                          await handleStartClassroom();
+                          showToast('👑 Elevated to Teacher / Host!');
+                        } catch (e) {
+                          console.error('Failed to claim host role', e);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-md transition flex items-center space-x-1.5"
+                      title="No host active. Claim host role to launch arena"
+                    >
+                      <Crown className="w-3.5 h-3.5 fill-current" />
+                      <span>Claim Host Role</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       fetchRoomState(participantId, participantName, participantRole);
@@ -1480,6 +1585,7 @@ export default function ClassroomLivePage() {
         request={incomingCollabReq}
         onAccept={(id) => handleRespondCollaboration(id, 'accepted')}
         onDecline={(id) => handleRespondCollaboration(id, 'declined')}
+        onDismiss={(id) => handleDismissCollaboration(id)}
       />
 
       {/* Incoming File Download Request Modal */}

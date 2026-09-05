@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { ClassroomLobbyModal } from '@/components/classroom/ClassroomLobbyModal';
 import { Users, Shield, Zap, Handshake, Scale, ArrowLeft } from 'lucide-react';
+import { ClassroomRole } from '@/lib/classroom/types';
 
 export default function ClassroomHubPage() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export default function ClassroomHubPage() {
     return data;
   };
 
-  const handleJoinRoom = async (roomId: string, name: string) => {
+  const handleJoinRoom = async (roomId: string, name: string, role?: ClassroomRole) => {
     const res = await fetch('/api/v1/classroom', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -43,6 +44,7 @@ export default function ClassroomHubPage() {
         action: 'join',
         roomId,
         name,
+        role: role || 'user',
       }),
     });
 

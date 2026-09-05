@@ -234,7 +234,9 @@ export class CollaborationClient {
 
       const normRoom = this.roomId.toLowerCase().replace(/[^a-z0-9]/g, '');
       const normUser = this.participantId.replace(/[^a-z0-9]/g, '');
-      const myPeerId = `cortex-${normRoom}-${normUser}`;
+      const hostPeerId = `cortex-${normRoom}-host`;
+      const isHost = this.participantRole === 'admin';
+      const myPeerId = isHost ? hostPeerId : `cortex-${normRoom}-${normUser}`;
 
       this.peer = new Peer(myPeerId, {
         debug: 0,
@@ -255,7 +257,23 @@ export class CollaborationClient {
       });
 
       this.peer.on('error', (err: any) => {
-        // Silently tolerate if peer ID exists or transient signaling issue
+        if (err?.type === 'unavailable-id' && isHost && this.peer?.id === hostPeerId) {
+          try {
+            this.peer.destroy();
+            this.peer = new Peer(`cortex-${normRoom}-${normUser}`, {
+              debug: 0,
+              config: {
+                iceServers: [
+                  { urls: 'stun:stun.l.google.com:19302' },
+                  { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+              }
+            });
+            this.peer.on('open', () => this.connectToKnownPeers());
+            this.peer.on('connection', (c: any) => this.setupPeerConnection(c));
+          } catch {}
+          return;
+        }
         if (err?.type !== 'unavailable-id') {
           console.warn('[CollabClient] WebRTC notice:', err?.type || err);
         }
@@ -269,6 +287,18 @@ export class CollaborationClient {
     if (!this.peer || this.peer.destroyed) return;
     const normRoom = this.roomId.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+    // 1. Direct Rendezvous: Students proactively connect to host peer
+    if (this.participantRole !== 'admin') {
+      const hostPeerId = `cortex-${normRoom}-host`;
+      if (!this.peerConnections.has(hostPeerId)) {
+        try {
+          const conn = this.peer.connect(hostPeerId, { reliable: true });
+          this.setupPeerConnection(conn);
+        } catch {}
+      }
+    }
+
+    // 2. Connect to all discovered participants in mesh
     for (const p of this.lastKnownParticipants) {
       if (!p || !p.id || p.id === this.participantId) continue;
       const targetPeerId = `cortex-${normRoom}-${p.id.replace(/[^a-z0-9]/g, '')}`;
@@ -287,6 +317,19 @@ export class CollaborationClient {
 
     conn.on('open', () => {
       this.peerConnections.set(peerId, conn);
+      // If host or if room is active, immediately inform the incoming peer so they transition out of the waiting room instantly!
+      if (this.participantRole === 'admin' || this.lastRoomState === 'active' || this.lastAdminEntered) {
+        try {
+          conn.send({
+            type: 'start_classroom',
+            roomId: this.roomId,
+            clientId: this.participantId,
+            senderName: this.participantName,
+            payload: { state: 'active', adminEntered: true },
+            timestamp: Date.now(),
+          });
+        } catch {}
+      }
     });
 
     conn.on('data', (data: any) => {
