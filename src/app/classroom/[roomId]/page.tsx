@@ -1,0 +1,611 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { 
+  Copy, 
+  Check, 
+  Crown, 
+  Users, 
+  MessageSquare, 
+  Settings, 
+  LogOut, 
+  Scale, 
+  AlertTriangle,
+  Radio,
+  SlidersHorizontal
+} from 'lucide-react';
+import { CortexLogo } from '@/components/brand/CortexLogo';
+import { ClassroomRoom, ClassroomParticipant, ClassroomRole, CollaborationRequest, FileDownloadRequest, FileDownloadDecision, CollaborationDecision } from '@/lib/classroom/types';
+import { CollaborationClient } from '@/lib/classroom/collab-sync';
+import { UserListPanel } from '@/components/classroom/UserListPanel';
+import { TwoWorkspaceContainer } from '@/components/classroom/TwoWorkspaceContainer';
+import { CollaborationPromptModal } from '@/components/classroom/CollaborationPromptModal';
+import { FileDownloadModal } from '@/components/classroom/FileDownloadModal';
+import { ClassroomAdminSettingsModal } from '@/components/classroom/ClassroomAdminSettingsModal';
+import { UserPrivacyModal } from '@/components/classroom/UserPrivacyModal';
+import { ClassroomChatDrawer } from '@/components/classroom/ClassroomChatDrawer';
+import { ClassroomLobbyModal } from '@/components/classroom/ClassroomLobbyModal';
+
+export default function ClassroomLivePage() {
+  const params = useParams();
+  const router = useRouter();
+  const rawRoomId = (params?.roomId as string) || '';
+  const roomId = rawRoomId.toUpperCase().trim();
+
+  // Participant session state
+  const [participantId, setParticipantId] = useState<string>('');
+  const [participantName, setParticipantName] = useState<string>('');
+  const [participantRole, setParticipantRole] = useState<ClassroomRole>('user');
+  const [isJoinNeeded, setIsJoinNeeded] = useState(false);
+
+  // Room state
+  const [room, setRoom] = useState<ClassroomRoom | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Slot selections
+  const [slotAUserId, setSlotAUserId] = useState<string | undefined>(undefined);
+  const [slotBUserId, setSlotBUserId] = useState<string | undefined>(undefined);
+
+  // Modals & Panels
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Pending incoming requests
+  const [incomingCollabReq, setIncomingCollabReq] = useState<CollaborationRequest | null>(null);
+  const [incomingDownloadReq, setIncomingDownloadReq] = useState<FileDownloadRequest | null>(null);
+
+  const collabClientRef = useRef<CollaborationClient | null>(null);
+
+  // 1. Restore participant from localStorage or prompt to join
+  useEffect(() => {
+    if (typeof window === 'undefined' || !roomId) return;
+
+    const savedId = localStorage.getItem(`cortex_participant_${roomId}`);
+    const savedName = localStorage.getItem(`cortex_name_${roomId}`);
+    const savedRole = (localStorage.getItem(`cortex_role_${roomId}`) as ClassroomRole) || 'user';
+
+    if (savedId && savedName) {
+      setParticipantId(savedId);
+      setParticipantName(savedName);
+      setParticipantRole(savedRole);
+      fetchRoomState(savedId);
+    } else {
+      setIsJoinNeeded(true);
+      setIsLoading(false);
+    }
+  }, [roomId]);
+
+  // 2. Fetch Room State
+  const fetchRoomState = async (pId?: string) => {
+    try {
+      const pidQuery = pId ? `?requesterId=${pId}` : '';
+      const res = await fetch(`/api/v1/classroom/${roomId}${pidQuery}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load classroom state');
+      }
+
+      setRoom(data.room);
+      setSlotAUserId(data.room.activeWorkspaces?.slotAUserId);
+      setSlotBUserId(data.room.activeWorkspaces?.slotBUserId);
+    } catch (err: any) {
+      setError(err?.message || 'Error loading classroom');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 3. Connect Real-time event transport
+  useEffect(() => {
+    if (!roomId || !participantId || !participantName) return;
+
+    const client = new CollaborationClient(roomId, participantId, participantName);
+    collabClientRef.current = client;
+
+    const unsubscribe = client.onEvent((event) => {
+      handleIncomingRealtimeEvent(event);
+    });
+
+    return () => {
+      unsubscribe();
+      client.cleanup();
+    };
+  }, [roomId, participantId, participantName]);
+
+  // 4. Handle incoming real-time events
+  const handleIncomingRealtimeEvent = (event: any) => {
+    switch (event.type) {
+      case 'room_state':
+        if (event.payload?.room) {
+          setRoom(event.payload.room);
+        }
+        break;
+
+      case 'join':
+      case 'presence':
+      case 'user_updated':
+        fetchRoomState(participantId);
+        break;
+
+      case 'select_workspaces':
+        if (event.payload) {
+          setSlotAUserId(event.payload.slotAUserId);
+          setSlotBUserId(event.payload.slotBUserId);
+        }
+        break;
+
+      case 'collaboration_request':
+        if (event.payload?.toId === participantId) {
+          setIncomingCollabReq(event.payload);
+        }
+        break;
+
+      case 'collaboration_response':
+      case 'end_collaboration':
+        fetchRoomState(participantId);
+        break;
+
+      case 'file_download_request':
+        if (event.payload?.ownerId === participantId) {
+          setIncomingDownloadReq(event.payload);
+        }
+        break;
+
+      case 'file_download_response':
+        // If requester is self and approved, trigger download
+        if (event.payload?.request?.requesterId === participantId && event.payload?.token) {
+          const { fileId, token } = event.payload;
+          window.open(`/api/v1/classroom/${roomId}/file-download?fileId=${fileId}&token=${token}&requesterId=${participantId}`);
+        }
+        break;
+
+      case 'chat_message':
+        setRoom((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            chatMessages: [...prev.chatMessages, event.payload],
+          };
+        });
+        break;
+
+      case 'admin_action':
+        fetchRoomState(participantId);
+        break;
+
+      case 'classroom_ended':
+        setError('The Admin has ended this classroom session.');
+        break;
+    }
+  };
+
+  // Actions
+  const handleCodeChangeA = async (code: string) => {
+    if (!slotAUserId) return;
+    setRoom((prev) => {
+      if (!prev || !prev.participants[slotAUserId]) return prev;
+      return {
+        ...prev,
+        participants: {
+          ...prev.participants,
+          [slotAUserId]: {
+            ...prev.participants[slotAUserId],
+            activeCode: code,
+          },
+        },
+      };
+    });
+
+    if (slotAUserId === participantId) {
+      await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_code',
+          participantId,
+          code,
+        }),
+      });
+    }
+  };
+
+  const handleCodeChangeB = async (code: string) => {
+    if (!slotBUserId) return;
+    setRoom((prev) => {
+      if (!prev || !prev.participants[slotBUserId]) return prev;
+      return {
+        ...prev,
+        participants: {
+          ...prev.participants,
+          [slotBUserId]: {
+            ...prev.participants[slotBUserId],
+            activeCode: code,
+          },
+        },
+      };
+    });
+
+    if (slotBUserId === participantId) {
+      await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_code',
+          participantId,
+          code,
+        }),
+      });
+    }
+  };
+
+  const handleSelectSlotA = async (userId: string) => {
+    setSlotAUserId(userId);
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'select_workspaces',
+        participantId,
+        slotAUserId: userId,
+        slotBUserId,
+      }),
+    });
+  };
+
+  const handleSelectSlotB = async (userId: string) => {
+    setSlotBUserId(userId);
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'select_workspaces',
+        participantId,
+        slotAUserId,
+        slotBUserId: userId,
+      }),
+    });
+  };
+
+  const handleRequestCollaboration = async (targetUserId: string) => {
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'request_collaboration',
+        participantId,
+        targetUserId,
+      }),
+    });
+  };
+
+  const handleRespondCollaboration = async (requestId: string, decision: CollaborationDecision) => {
+    setIncomingCollabReq(null);
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'respond_collaboration',
+        participantId,
+        requestId,
+        decision,
+      }),
+    });
+  };
+
+  const handleEndCollaboration = async (sessionId: string) => {
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'end_collaboration',
+        participantId,
+        sessionId,
+      }),
+    });
+  };
+
+  const handleRequestFileDownload = async (ownerId: string, fileId: string) => {
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'request_download',
+        participantId,
+        ownerId,
+        fileId,
+      }),
+    });
+  };
+
+  const handleRespondDownload = async (requestId: string, decision: FileDownloadDecision) => {
+    setIncomingDownloadReq(null);
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'respond_download',
+        participantId,
+        requestId,
+        decision,
+      }),
+    });
+  };
+
+  const handleAdminAction = async (adminAction: any) => {
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'admin_action',
+        participantId,
+        adminAction,
+      }),
+    });
+  };
+
+  const handleSendChat = async (text: string, isAnnouncement = false) => {
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'send_chat',
+        participantId,
+        text,
+        isAnnouncement,
+      }),
+    });
+  };
+
+  const handleUpdatePrivacy = async (privacy: any) => {
+    await fetch(`/api/v1/classroom/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_privacy',
+        participantId,
+        privacy,
+      }),
+    });
+    fetchRoomState(participantId);
+  };
+
+  const handleLeaveClassroom = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(`cortex_participant_${roomId}`);
+    }
+    router.push('/classroom');
+  };
+
+  if (isJoinNeeded) {
+    return (
+      <div className="h-screen w-screen bg-[#0b0c0e]">
+        <ClassroomLobbyModal
+          isOpen={true}
+          defaultRoomId={roomId}
+          onCreateRoom={async () => {}}
+          onJoinRoom={async (rid, name) => {
+            const res = await fetch('/api/v1/classroom', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'join', roomId: rid, name }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error);
+
+            localStorage.setItem(`cortex_participant_${data.roomId}`, data.participantId);
+            localStorage.setItem(`cortex_name_${data.roomId}`, data.participantName);
+            localStorage.setItem(`cortex_role_${data.roomId}`, data.role);
+
+            setParticipantId(data.participantId);
+            setParticipantName(data.participantName);
+            setParticipantRole(data.role);
+            setIsJoinNeeded(false);
+            fetchRoomState(data.participantId);
+          }}
+        />
+      </div>
+    );
+  }
+
+  const userA = room && slotAUserId ? room.participants[slotAUserId] : null;
+  const userB = room && slotBUserId ? room.participants[slotBUserId] : null;
+
+  const currentParticipant = room?.participants[participantId];
+  const onlineParticipantsCount = room ? Object.values(room.participants).filter(p => p.online).length : 0;
+  const totalParticipantsCount = room ? Object.keys(room.participants).length : 0;
+
+  return (
+    <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">
+      {/* 1. Global Header Bar */}
+      <header className="h-12 bg-[#101116] border-b border-[#1f2026] px-4 flex items-center justify-between z-30">
+        <div className="flex items-center space-x-3">
+          <Link href="/" className="flex items-center group transition" title="Return to IDE">
+            <CortexLogo variant="header" size="sm" />
+          </Link>
+
+          <span className="text-gray-600">/</span>
+
+          {/* Room ID Badge & Copy Link */}
+          <div className="flex items-center space-x-2">
+            <span className="font-mono font-bold text-xs text-[#ff9100] tracking-wider">
+              {roomId}
+            </span>
+
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/classroom/${roomId}`;
+                navigator.clipboard.writeText(url);
+                setCopiedLink(true);
+                setTimeout(() => setCopiedLink(false), 1500);
+              }}
+              className="px-2 py-0.5 rounded bg-[#1b1c24] hover:bg-[#252834] text-[10.5px] text-gray-300 transition flex items-center space-x-1"
+              title="Copy student invitation link"
+            >
+              {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              <span className="hidden sm:inline">{copiedLink ? 'Copied' : 'Copy Invite'}</span>
+            </button>
+          </div>
+
+          {/* Admin Label */}
+          {room && (
+            <div className="hidden md:flex items-center space-x-1.5 pl-3 border-l border-[#20222a] text-xs text-gray-400">
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <span>Admin: <strong className="text-gray-200">{room.admin.name}</strong></span>
+            </div>
+          )}
+        </div>
+
+        {/* Center / Right Controls */}
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Quick link to Benchmark with current pair */}
+          <Link
+            href={`/compare?room=${roomId}&userA=${slotAUserId || ''}&userB=${slotBUserId || ''}`}
+            className="flex items-center space-x-1 px-3 py-1 rounded bg-[#181920] hover:bg-[#242634] text-xs font-semibold text-cyan-300 border border-cyan-800/40 transition"
+            title="Benchmark this pair in compare view"
+          >
+            <Scale className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden md:inline">Benchmark Pair</span>
+          </Link>
+
+          {/* Online Counter Badge */}
+          <span className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#16171e] text-[11px] font-mono text-emerald-400 border border-[#262834]">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{onlineParticipantsCount} Online</span>
+          </span>
+
+          {/* Chat Toggle */}
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            className={`p-1.5 rounded transition relative ${
+              isChatOpen ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-gray-400 hover:text-white hover:bg-[#1a1c22]'
+            }`}
+            title="Toggle Classroom Chat"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+
+          {/* Admin Settings Modal Toggle */}
+          {participantRole === 'admin' && (
+            <button
+              onClick={() => setIsAdminSettingsOpen(true)}
+              className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-[#1a1c22] transition"
+              title="Classroom Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Leave Classroom */}
+          <button
+            onClick={handleLeaveClassroom}
+            className="p-1.5 rounded text-gray-400 hover:text-rose-400 hover:bg-rose-950/30 transition"
+            title="Leave Classroom"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* 2. Error Notice if any */}
+      {error && (
+        <div className="bg-rose-950/60 border-b border-rose-800/60 p-2 text-center text-xs text-rose-300 font-medium flex items-center justify-center space-x-2">
+          <AlertTriangle className="w-4 h-4 text-rose-400" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* 3. Main Body Arena (Left: User List | Center: Two Workspaces | Right: Chat Drawer) */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar: All Classroom Users */}
+        <div className="w-64 sm:w-72 flex-shrink-0 h-full">
+          <UserListPanel
+            participants={room?.participants || {}}
+            currentUserId={participantId}
+            currentUserRole={participantRole}
+            slotAUserId={slotAUserId}
+            slotBUserId={slotBUserId}
+            onSelectSlotA={handleSelectSlotA}
+            onSelectSlotB={handleSelectSlotB}
+            onRequestCollaboration={handleRequestCollaboration}
+            onRequestFileDownload={handleRequestFileDownload}
+            onAdminAction={handleAdminAction}
+            onOpenPrivacyModal={() => setIsPrivacyOpen(true)}
+          />
+        </div>
+
+        {/* Center: Strict Two-Workspace Model (Workspace A | Workspace B) */}
+        <div className="flex-1 h-full min-w-0">
+          <TwoWorkspaceContainer
+            userA={userA}
+            userB={userB}
+            currentUserId={participantId}
+            currentUserRole={participantRole}
+            activeSession={
+              room ? Object.values(room.collaborationSessions).find(s => s.participantIds.includes(participantId)) : null
+            }
+            onCodeChangeA={handleCodeChangeA}
+            onCodeChangeB={handleCodeChangeB}
+            onEndCollaboration={handleEndCollaboration}
+            onRequestViewAccess={(targetId) => {
+              // trigger view request
+            }}
+            onDownloadFile={(ownerId, fileId) => {
+              handleRequestFileDownload(ownerId, fileId);
+            }}
+          />
+        </div>
+
+        {/* Right Drawer: Classroom Chat & Announcements */}
+        <ClassroomChatDrawer
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          messages={room?.chatMessages || []}
+          currentUserId={participantId}
+          currentUserRole={participantRole}
+          onSendMessage={handleSendChat}
+        />
+      </div>
+
+      {/* Incoming Collaboration Request Modal (Mutual Consent) */}
+      <CollaborationPromptModal
+        request={incomingCollabReq}
+        onAccept={(id) => handleRespondCollaboration(id, 'accepted')}
+        onDecline={(id) => handleRespondCollaboration(id, 'declined')}
+      />
+
+      {/* Incoming File Download Request Modal */}
+      <FileDownloadModal
+        request={incomingDownloadReq}
+        onRespond={handleRespondDownload}
+      />
+
+      {/* Admin Settings Modal */}
+      {room && (
+        <ClassroomAdminSettingsModal
+          isOpen={isAdminSettingsOpen}
+          onClose={() => setIsAdminSettingsOpen(false)}
+          settings={room.settings}
+          onUpdateSettings={(newSettings) => handleAdminAction({ type: 'update_settings', settings: newSettings })}
+          onBroadcastAnnouncement={(text) => handleSendChat(text, true)}
+          onEndClassroom={() => handleAdminAction({ type: 'end_classroom' })}
+        />
+      )}
+
+      {/* Personal Privacy Modal */}
+      {currentParticipant && (
+        <UserPrivacyModal
+          isOpen={isPrivacyOpen}
+          onClose={() => setIsPrivacyOpen(false)}
+          privacy={currentParticipant.privacy}
+          onUpdatePrivacy={handleUpdatePrivacy}
+        />
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,439 @@
+'use client';
+
+import React, { useState } from 'react';
+import { 
+  Play, 
+  Lock, 
+  Unlock, 
+  Handshake, 
+  Terminal, 
+  Copy, 
+  Check, 
+  FileText, 
+  Download, 
+  ShieldAlert, 
+  Eye, 
+  AlertCircle,
+  Users
+} from 'lucide-react';
+import Editor from '@monaco-editor/react';
+import { ClassroomParticipant, ClassroomRole, CollaborationSession } from '@/lib/classroom/types';
+import { SUPPORTED_LANGUAGES, getLanguageConfig } from '@/config/languages';
+import { executeInCloudSandbox } from '@/lib/execution/engine';
+import { ExecutionResult } from '@/lib/execution/types';
+
+interface TwoWorkspaceContainerProps {
+  userA?: ClassroomParticipant | null;
+  userB?: ClassroomParticipant | null;
+  currentUserId: string;
+  currentUserRole: ClassroomRole;
+  activeSession?: CollaborationSession | null;
+  onCodeChangeA?: (code: string) => void;
+  onCodeChangeB?: (code: string) => void;
+  onLanguageChangeA?: (lang: string) => void;
+  onLanguageChangeB?: (lang: string) => void;
+  onEndCollaboration?: (sessionId: string) => void;
+  onRequestViewAccess?: (targetUserId: string) => void;
+  onDownloadFile?: (ownerId: string, fileId: string) => void;
+}
+
+export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
+  userA,
+  userB,
+  currentUserId,
+  currentUserRole,
+  activeSession,
+  onCodeChangeA,
+  onCodeChangeB,
+  onLanguageChangeA,
+  onLanguageChangeB,
+  onEndCollaboration,
+  onRequestViewAccess,
+  onDownloadFile,
+}) => {
+  // Individual execution states
+  const [resultA, setResultA] = useState<ExecutionResult | null>(null);
+  const [isRunningA, setIsRunningA] = useState(false);
+
+  const [resultB, setResultB] = useState<ExecutionResult | null>(null);
+  const [isRunningB, setIsRunningB] = useState(false);
+
+  const [copiedA, setCopiedA] = useState(false);
+  const [copiedB, setCopiedB] = useState(false);
+
+  const handleRunA = async () => {
+    if (!userA || isRunningA) return;
+    setIsRunningA(true);
+    try {
+      const res = await executeInCloudSandbox({
+        language: userA.currentLanguage || 'python',
+        files: userA.files || [{ id: '1', name: 'main.py', path: '/main.py', content: userA.activeCode }],
+      });
+      setResultA(res);
+    } catch (err: any) {
+      setResultA({
+        status: 'runtime_error',
+        stdout: '',
+        stderr: err?.message || 'Execution error in Workspace A',
+        exitCode: 1,
+        executionTimeMs: 0,
+        memoryUsageMb: 0,
+        timestamp: new Date().toISOString(),
+        provider: 'cloud_sandbox',
+      });
+    } finally {
+      setIsRunningA(false);
+    }
+  };
+
+  const handleRunB = async () => {
+    if (!userB || isRunningB) return;
+    setIsRunningB(true);
+    try {
+      const res = await executeInCloudSandbox({
+        language: userB.currentLanguage || 'python',
+        files: userB.files || [{ id: '2', name: 'main.py', path: '/main.py', content: userB.activeCode }],
+      });
+      setResultB(res);
+    } catch (err: any) {
+      setResultB({
+        status: 'runtime_error',
+        stdout: '',
+        stderr: err?.message || 'Execution error in Workspace B',
+        exitCode: 1,
+        executionTimeMs: 0,
+        memoryUsageMb: 0,
+        timestamp: new Date().toISOString(),
+        provider: 'cloud_sandbox',
+      });
+    } finally {
+      setIsRunningB(false);
+    }
+  };
+
+  const isSharedCollab = Boolean(
+    activeSession &&
+    activeSession.mode === 'shared' &&
+    userA &&
+    userB &&
+    activeSession.participantIds.includes(userA.id) &&
+    activeSession.participantIds.includes(userB.id)
+  );
+
+  return (
+    <div className="h-full w-full flex flex-col sm:flex-row overflow-hidden divide-y sm:divide-y-0 sm:divide-x divide-[#1f2026] bg-[#0c0d10]">
+      {/* ================= WORKSPACE A ================= */}
+      <WorkspaceColumn
+        slotLabel="Workspace A"
+        slotColor="cyan"
+        user={userA}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
+        isSharedCollab={isSharedCollab}
+        activeSession={activeSession}
+        isRunning={isRunningA}
+        result={resultA}
+        copied={copiedA}
+        onRun={handleRunA}
+        onCodeChange={onCodeChangeA}
+        onLanguageChange={onLanguageChangeA}
+        onEndCollaboration={onEndCollaboration}
+        onRequestViewAccess={onRequestViewAccess}
+        onDownloadFile={onDownloadFile}
+        onCopyOutput={() => {
+          if (resultA?.stdout) {
+            navigator.clipboard.writeText(resultA.stdout);
+            setCopiedA(true);
+            setTimeout(() => setCopiedA(false), 1200);
+          }
+        }}
+      />
+
+      {/* ================= WORKSPACE B ================= */}
+      <WorkspaceColumn
+        slotLabel="Workspace B"
+        slotColor="purple"
+        user={userB}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
+        isSharedCollab={isSharedCollab}
+        activeSession={activeSession}
+        isRunning={isRunningB}
+        result={resultB}
+        copied={copiedB}
+        onRun={handleRunB}
+        onCodeChange={onCodeChangeB}
+        onLanguageChange={onLanguageChangeB}
+        onEndCollaboration={onEndCollaboration}
+        onRequestViewAccess={onRequestViewAccess}
+        onDownloadFile={onDownloadFile}
+        onCopyOutput={() => {
+          if (resultB?.stdout) {
+            navigator.clipboard.writeText(resultB.stdout);
+            setCopiedB(true);
+            setTimeout(() => setCopiedB(false), 1200);
+          }
+        }}
+      />
+    </div>
+  );
+};
+
+interface WorkspaceColumnProps {
+  slotLabel: string;
+  slotColor: 'cyan' | 'purple';
+  user?: ClassroomParticipant | null;
+  currentUserId: string;
+  currentUserRole: ClassroomRole;
+  isSharedCollab: boolean;
+  activeSession?: CollaborationSession | null;
+  isRunning: boolean;
+  result: ExecutionResult | null;
+  copied: boolean;
+  onRun: () => void;
+  onCodeChange?: (code: string) => void;
+  onLanguageChange?: (lang: string) => void;
+  onEndCollaboration?: (sessionId: string) => void;
+  onRequestViewAccess?: (targetUserId: string) => void;
+  onDownloadFile?: (ownerId: string, fileId: string) => void;
+  onCopyOutput: () => void;
+}
+
+const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
+  slotLabel,
+  slotColor,
+  user,
+  currentUserId,
+  currentUserRole,
+  isSharedCollab,
+  activeSession,
+  isRunning,
+  result,
+  copied,
+  onRun,
+  onCodeChange,
+  onLanguageChange,
+  onEndCollaboration,
+  onRequestViewAccess,
+  onDownloadFile,
+  onCopyOutput,
+}) => {
+  if (!user) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-500 bg-[#0c0d10] space-y-3">
+        <div className="w-12 h-12 rounded-full bg-[#16171d] border border-[#232530] flex items-center justify-center text-gray-400">
+          <Users className="w-6 h-6" />
+        </div>
+        <div>
+          <h4 className="text-sm font-heading font-semibold text-gray-300">{slotLabel} is Empty</h4>
+          <p className="text-xs text-gray-500 mt-1 max-w-xs">
+            Select a participant from the user list on the left to mount their workspace into {slotLabel}.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const isSelf = user.id === currentUserId;
+  const isAdmin = currentUserRole === 'admin';
+  const isPublic = user.privacy.workspaceVisibility === 'public';
+  const hasAccess = isSelf || isAdmin || isPublic || isSharedCollab;
+
+  const isLocked = Boolean(user.isLocked);
+  const canEdit = hasAccess && (isSelf || isSharedCollab) && !isLocked;
+
+  const lang = user.currentLanguage || 'python';
+  const monacoLang = getLanguageConfig(lang).monacoLang;
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-[#0c0d10] overflow-hidden">
+      {/* 1. Header Bar */}
+      <div className="h-10 bg-[#121317] border-b border-[#1f2026] px-3 flex items-center justify-between z-10">
+        <div className="flex items-center space-x-2.5 min-w-0">
+          {/* Presence Indicator */}
+          <span
+            className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+              user.online
+                ? user.status === 'coding'
+                  ? 'bg-emerald-400 animate-pulse'
+                  : 'bg-emerald-400'
+                : 'bg-gray-600'
+            }`}
+          />
+
+          {/* User Name & Slot Tag */}
+          <div className="flex items-center space-x-1.5 truncate">
+            <span className="font-heading font-bold text-xs text-gray-100 truncate">
+              {user.name}
+            </span>
+            <span
+              className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${
+                slotColor === 'cyan'
+                  ? 'bg-cyan-950/60 text-cyan-300 border-cyan-700/50'
+                  : 'bg-purple-950/60 text-purple-300 border-purple-700/50'
+              }`}
+            >
+              {slotLabel}
+            </span>
+            {isLocked && (
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-950/60 text-amber-300 border border-amber-800/40 flex items-center space-x-0.5">
+                <Lock className="w-2.5 h-2.5" />
+                <span>Locked</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right Header: Language, Files & Run */}
+        <div className="flex items-center space-x-2">
+          {/* Language Selector */}
+          <select
+            value={lang}
+            disabled={!canEdit}
+            onChange={(e) => onLanguageChange && onLanguageChange(e.target.value)}
+            className="bg-[#181920] text-gray-300 text-[11px] font-mono border border-[#2b2d38] rounded px-2 py-0.5 focus:outline-none focus:border-[#ff9100] disabled:opacity-60"
+          >
+            {SUPPORTED_LANGUAGES.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+
+          {/* File Download (Own or Permitted) */}
+          {user.files && user.files.length > 0 && (
+            <button
+              onClick={() => onDownloadFile && onDownloadFile(user.id, user.files[0].id)}
+              className="p-1 rounded bg-[#181920] hover:bg-[#22242e] text-gray-300 border border-[#2b2d38] transition"
+              title={`Download ${user.files[0].name}`}
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Run Button */}
+          <button
+            onClick={onRun}
+            disabled={isRunning || !user.canRun}
+            className={`flex items-center space-x-1 px-3 py-1 rounded text-xs font-heading font-bold transition shadow ${
+              !user.canRun
+                ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                : isRunning
+                ? 'bg-emerald-900 text-emerald-300 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95'
+            }`}
+            title={user.canRun ? 'Execute Code' : 'Execution disabled by Admin'}
+          >
+            <Play className={`w-3 h-3 ${isRunning ? 'animate-spin' : 'fill-current'}`} />
+            <span>{isRunning ? 'Running...' : 'Run'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Shared Collaboration Mode Banner */}
+      {isSharedCollab && activeSession && (
+        <div className="h-7 bg-amber-950/40 border-b border-amber-800/40 px-3 flex items-center justify-between text-[11px] text-amber-300">
+          <div className="flex items-center space-x-1.5 font-medium">
+            <Handshake className="w-3.5 h-3.5 text-[#ff9100]" />
+            <span>Shared Collaboration Active • Changes synchronize in real time</span>
+          </div>
+          {onEndCollaboration && (
+            <button
+              onClick={() => onEndCollaboration(activeSession.id)}
+              className="px-2 py-0.5 rounded bg-amber-900/60 hover:bg-amber-800 text-white font-bold text-[10px] transition"
+            >
+              End Collaboration
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 3. Editor Area or Private Workspace Shield */}
+      <div className="flex-1 min-h-0 relative">
+        {hasAccess ? (
+          <Editor
+            height="100%"
+            language={monacoLang}
+            value={user.activeCode}
+            theme="vs-dark"
+            onChange={(v) => onCodeChange && onCodeChange(v || '')}
+            options={{
+              readOnly: !canEdit,
+              fontSize: 13,
+              fontFamily: "'Fira Code', 'JetBrains Mono', Consolas, monospace",
+              minimap: { enabled: false },
+              lineNumbers: 'on',
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+            }}
+          />
+        ) : (
+          /* Secure Private Shield */
+          <div className="h-full w-full flex flex-col items-center justify-center p-6 text-center bg-[#0e0f14] space-y-3 select-none">
+            <div className="w-12 h-12 rounded-full bg-amber-950/30 border border-amber-800/40 flex items-center justify-center text-amber-400">
+              <Lock className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-heading font-semibold text-gray-200">
+                {user.name}&apos;s Workspace is Private
+              </h4>
+              <p className="text-xs text-gray-500 mt-1 max-w-xs">
+                This participant has enabled private workspace protection. Source code is secure and hidden.
+              </p>
+            </div>
+            {onRequestViewAccess && !isSelf && (
+              <button
+                onClick={() => onRequestViewAccess(user.id)}
+                className="px-3.5 py-1.5 rounded bg-[#20222b] hover:bg-[#ff9100]/20 hover:text-[#ff9100] text-gray-200 border border-[#2e313d] text-xs font-semibold transition"
+              >
+                Request Access
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 4. Terminal Output Dock */}
+      <div className="h-44 sm:h-48 border-t border-[#1f2026] bg-[#090a0d] flex flex-col">
+        <div className="h-6 px-3 bg-[#0f1014] border-b border-[#1a1b22] flex items-center justify-between text-[11px] text-gray-400">
+          <div className="flex items-center space-x-2">
+            <Terminal className="w-3.5 h-3.5 text-gray-400" />
+            <span className="font-heading font-semibold text-gray-300">
+              {user.name}&apos;s Output {result ? `(exit ${result.exitCode})` : ''}
+            </span>
+            {result && (
+              <span className="text-[10px] font-mono text-gray-500">
+                {result.executionTimeMs} ms • {result.memoryUsageMb} MB
+              </span>
+            )}
+          </div>
+
+          {result?.stdout && (
+            <button
+              onClick={onCopyOutput}
+              className="hover:text-white transition flex items-center space-x-1"
+              title="Copy output"
+            >
+              {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              <span className="text-[10px]">{copied ? 'Copied' : 'Copy'}</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 p-3 font-mono text-xs overflow-y-auto select-text text-gray-300">
+          {isRunning ? (
+            <span className="text-gray-500 italic animate-pulse">Running code in isolated cloud sandbox...</span>
+          ) : result ? (
+            <>
+              {result.stdout && <pre className="whitespace-pre-wrap leading-relaxed">{result.stdout}</pre>}
+              {result.stderr && <pre className="text-rose-400 whitespace-pre-wrap leading-relaxed">{result.stderr}</pre>}
+              {!result.stdout && !result.stderr && (
+                <span className="text-gray-500 italic">Program finished with exit code 0 (no output written).</span>
+              )}
+            </>
+          ) : (
+            <span className="text-gray-600 italic">Press Run to execute this workspace.</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
