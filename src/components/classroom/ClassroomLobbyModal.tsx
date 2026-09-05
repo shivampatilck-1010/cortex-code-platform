@@ -19,6 +19,7 @@ interface ClassroomLobbyModalProps {
   defaultRoomId?: string;
   onCreateRoom: (adminName: string) => Promise<any>;
   onJoinRoom: (roomId: string, name: string) => Promise<any>;
+  onEnterRoom?: (roomId: string) => void;
 }
 
 export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
@@ -27,6 +28,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
   defaultRoomId = '',
   onCreateRoom,
   onJoinRoom,
+  onEnterRoom,
 }) => {
   const [activeTab, setActiveTab] = useState<'join' | 'create'>(defaultRoomId ? 'join' : 'join');
   
@@ -231,6 +233,13 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
               <div className="flex justify-end">
                 <button
                   onClick={() => {
+                    if (createdInfo) {
+                      if (onEnterRoom) {
+                        onEnterRoom(createdInfo.roomId);
+                      } else {
+                        window.location.href = `/classroom/${createdInfo.roomId}`;
+                      }
+                    }
                     if (onClose) onClose();
                   }}
                   className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-heading font-bold text-xs transition shadow-md"

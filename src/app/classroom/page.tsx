@@ -152,6 +152,7 @@ export default function ClassroomHubPage() {
         onClose={() => setIsModalOpen(false)}
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
+        onEnterRoom={(rid) => router.push(`/classroom/${rid}`)}
       />
     </div>
   );

@@ -58,6 +58,7 @@ export default function ClassroomLivePage() {
   // Pending incoming requests
   const [incomingCollabReq, setIncomingCollabReq] = useState<CollaborationRequest | null>(null);
   const [incomingDownloadReq, setIncomingDownloadReq] = useState<FileDownloadRequest | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'syncing' | 'offline'>('syncing');
 
   const collabClientRef = useRef<CollaborationClient | null>(null);
 
@@ -94,6 +95,7 @@ export default function ClassroomLivePage() {
       setRoom(data.room);
       setSlotAUserId(data.room.activeWorkspaces?.slotAUserId);
       setSlotBUserId(data.room.activeWorkspaces?.slotBUserId);
+      setError(null);
     } catch (err: any) {
       setError(err?.message || 'Error loading classroom');
     } finally {
@@ -101,19 +103,30 @@ export default function ClassroomLivePage() {
     }
   };
 
-  // 3. Connect Real-time event transport
+  // 3. Connect Real-time event transport with resilient polling
   useEffect(() => {
     if (!roomId || !participantId || !participantName) return;
 
     const client = new CollaborationClient(roomId, participantId, participantName);
     collabClientRef.current = client;
 
-    const unsubscribe = client.onEvent((event) => {
+    const unsubscribeEvents = client.onEvent((event) => {
       handleIncomingRealtimeEvent(event);
     });
 
+    const unsubscribeStatus = client.onStatusChange((status) => {
+      setConnectionStatus(status);
+    });
+
+    // Infallible polling fallback every 2.5 seconds to guarantee zero lag or desync
+    const pollInterval = setInterval(() => {
+      fetchRoomState(participantId);
+    }, 2500);
+
     return () => {
-      unsubscribe();
+      clearInterval(pollInterval);
+      unsubscribeEvents();
+      unsubscribeStatus();
       client.cleanup();
     };
   }, [roomId, participantId, participantName]);
@@ -423,38 +436,49 @@ export default function ClassroomLivePage() {
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">
       {/* 1. Global Header Bar */}
-      <header className="h-12 bg-[#101116] border-b border-[#1f2026] px-4 flex items-center justify-between z-30">
-        <div className="flex items-center space-x-3">
+      <header className="h-12 bg-[#101116] border-b border-[#1f2026] px-3 sm:px-4 flex items-center justify-between z-30">
+        <div className="flex items-center space-x-2 sm:space-x-3">
           <Link href="/" className="flex items-center group transition" title="Return to IDE">
             <CortexLogo variant="header" size="sm" />
           </Link>
 
-          <span className="text-gray-600">/</span>
+          {/* Breadcrumbs */}
+          <div className="flex items-center space-x-1.5 text-xs font-heading">
+            <span className="text-gray-600">/</span>
+            <Link href="/" className="text-gray-400 hover:text-white transition">
+              IDE
+            </Link>
+            <span className="text-gray-600">/</span>
+            <Link href="/classroom" className="text-gray-400 hover:text-white transition">
+              Classroom
+            </Link>
+            <span className="text-gray-600">/</span>
+            
+            {/* Room ID Badge & Copy Link */}
+            <div className="flex items-center space-x-1.5">
+              <span className="font-mono font-bold text-xs text-[#ff9100] tracking-wider">
+                {roomId}
+              </span>
 
-          {/* Room ID Badge & Copy Link */}
-          <div className="flex items-center space-x-2">
-            <span className="font-mono font-bold text-xs text-[#ff9100] tracking-wider">
-              {roomId}
-            </span>
-
-            <button
-              onClick={() => {
-                const url = `${window.location.origin}/classroom/${roomId}`;
-                navigator.clipboard.writeText(url);
-                setCopiedLink(true);
-                setTimeout(() => setCopiedLink(false), 1500);
-              }}
-              className="px-2 py-0.5 rounded bg-[#1b1c24] hover:bg-[#252834] text-[10.5px] text-gray-300 transition flex items-center space-x-1"
-              title="Copy student invitation link"
-            >
-              {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-              <span className="hidden sm:inline">{copiedLink ? 'Copied' : 'Copy Invite'}</span>
-            </button>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/classroom/${roomId}`;
+                  navigator.clipboard.writeText(url);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 1500);
+                }}
+                className="px-1.5 py-0.5 rounded bg-[#1b1c24] hover:bg-[#252834] text-[10.5px] text-gray-300 transition flex items-center space-x-1"
+                title="Copy student invitation link"
+              >
+                {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span className="hidden md:inline">{copiedLink ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Admin Label */}
           {room && (
-            <div className="hidden md:flex items-center space-x-1.5 pl-3 border-l border-[#20222a] text-xs text-gray-400">
+            <div className="hidden lg:flex items-center space-x-1.5 pl-2 border-l border-[#20222a] text-xs text-gray-400">
               <Crown className="w-3.5 h-3.5 text-amber-400" />
               <span>Admin: <strong className="text-gray-200">{room.admin.name}</strong></span>
             </div>
@@ -466,17 +490,26 @@ export default function ClassroomLivePage() {
           {/* Quick link to Benchmark with current pair */}
           <Link
             href={`/compare?room=${roomId}&userA=${slotAUserId || ''}&userB=${slotBUserId || ''}`}
-            className="flex items-center space-x-1 px-3 py-1 rounded bg-[#181920] hover:bg-[#242634] text-xs font-semibold text-cyan-300 border border-cyan-800/40 transition"
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#181920] hover:bg-[#242634] text-xs font-semibold text-cyan-300 border border-cyan-800/40 transition"
             title="Benchmark this pair in compare view"
           >
             <Scale className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden md:inline">Benchmark Pair</span>
+            <span className="hidden sm:inline">Benchmark</span>
           </Link>
 
+          {/* Connection Status Badge */}
+          <span className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-[#16171e] text-[11px] font-mono border border-[#262834]">
+            <span className={`w-2 h-2 rounded-full ${
+              connectionStatus === 'online' ? 'bg-emerald-400 animate-pulse' : connectionStatus === 'syncing' ? 'bg-amber-400 animate-ping' : 'bg-rose-400'
+            }`} />
+            <span className={connectionStatus === 'online' ? 'text-emerald-400' : connectionStatus === 'syncing' ? 'text-amber-400' : 'text-rose-400'}>
+              {connectionStatus === 'online' ? 'Live' : connectionStatus === 'syncing' ? 'Syncing' : 'Offline'}
+            </span>
+          </span>
+
           {/* Online Counter Badge */}
-          <span className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#16171e] text-[11px] font-mono text-emerald-400 border border-[#262834]">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>{onlineParticipantsCount} Online</span>
+          <span className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded bg-[#16171e] text-[11px] font-mono text-gray-300 border border-[#262834]">
+            <span>{onlineParticipantsCount} online</span>
           </span>
 
           {/* Chat Toggle */}
@@ -504,10 +537,11 @@ export default function ClassroomLivePage() {
           {/* Leave Classroom */}
           <button
             onClick={handleLeaveClassroom}
-            className="p-1.5 rounded text-gray-400 hover:text-rose-400 hover:bg-rose-950/30 transition"
+            className="px-2.5 py-1 rounded text-xs font-medium text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center space-x-1"
             title="Leave Classroom"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Leave</span>
           </button>
         </div>
       </header>

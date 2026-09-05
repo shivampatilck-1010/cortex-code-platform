@@ -506,6 +506,18 @@ Please provide a concise, structured comparative analysis with:
 
           <span className="text-gray-600">/</span>
 
+          <Link href="/" className="text-xs font-semibold text-gray-400 hover:text-white transition hidden md:inline">
+            IDE
+          </Link>
+
+          <span className="text-gray-600 hidden md:inline">/</span>
+
+          <Link href="/classroom" className="text-xs font-semibold text-gray-400 hover:text-white transition hidden md:inline">
+            Classroom
+          </Link>
+
+          <span className="text-gray-600 hidden md:inline">/</span>
+
           <span className="text-xs font-heading font-bold text-[#ff9100] tracking-wide flex items-center space-x-1">
             <span>Benchmark</span>
           </span>

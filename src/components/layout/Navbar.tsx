@@ -10,6 +10,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { SUPPORTED_LANGUAGES, LanguageConfig } from '@/config/languages';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { LanguageSelector } from '@/components/common/LanguageSelector';
@@ -40,6 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   onOpenShare,
 }) => {
+  const pathname = usePathname() || '/';
   return (
     <header className="h-12 border-b bg-[#0b0c0e] border-[#1f2024] text-[#e6edf3] flex items-center justify-between px-3.5 text-sm z-30 select-none">
       {/* Left: C1 Logo & Cortex Global Navigation */}
@@ -49,22 +51,34 @@ export const Navbar: React.FC<NavbarProps> = ({
         </Link>
 
         {/* Global Hub Navigation */}
-        <nav className="hidden lg:flex items-center space-x-1 pl-3 border-l border-[#1f2024]">
+        <nav className="flex items-center space-x-1 pl-2 sm:pl-3 border-l border-[#1f2024]">
           <Link
             href="/"
-            className="px-2.5 py-1 rounded text-xs font-heading font-semibold text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c] transition"
+            className={`px-2 sm:px-2.5 py-1 rounded text-[11px] sm:text-xs font-heading font-semibold transition ${
+              pathname === '/' || pathname.endsWith('-online-compiler')
+                ? 'bg-[#1e1f26] text-[#ff9100]'
+                : 'text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c]'
+            }`}
           >
             IDE
           </Link>
           <Link
             href="/classroom"
-            className="px-2.5 py-1 rounded text-xs font-heading font-semibold text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c] transition"
+            className={`px-2 sm:px-2.5 py-1 rounded text-[11px] sm:text-xs font-heading font-semibold transition ${
+              pathname.startsWith('/classroom') || pathname.startsWith('/room')
+                ? 'bg-[#1e1f26] text-[#ff9100]'
+                : 'text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c]'
+            }`}
           >
             Classroom
           </Link>
           <Link
             href="/compare"
-            className="px-2.5 py-1 rounded text-xs font-heading font-semibold text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c] transition"
+            className={`px-2 sm:px-2.5 py-1 rounded text-[11px] sm:text-xs font-heading font-semibold transition ${
+              pathname.startsWith('/compare')
+                ? 'bg-[#1e1f26] text-[#ff9100]'
+                : 'text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c]'
+            }`}
           >
             Benchmark
           </Link>

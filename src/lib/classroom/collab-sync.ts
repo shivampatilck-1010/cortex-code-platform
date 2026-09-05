@@ -1,6 +1,8 @@
 import * as Y from 'yjs';
 import { ClassroomEventMessage, LiveCursor } from './types';
 
+export type ConnectionStatus = 'online' | 'syncing' | 'offline';
+
 export class CollaborationClient {
   private roomId: string;
   private participantId: string;
@@ -9,8 +11,14 @@ export class CollaborationClient {
   private sse: EventSource | null = null;
   private listeners: Set<(event: ClassroomEventMessage) => void> = new Set();
   private cursorListeners: Set<(cursor: LiveCursor) => void> = new Set();
+  private statusListeners: Set<(status: ConnectionStatus) => void> = new Set();
+  
   private isConnected = false;
-  private reconnectTimer: any = null;
+  private currentStatus: ConnectionStatus = 'syncing';
+  private wsAttemptFailed = false;
+  private pollTimer: any = null;
+  private isDestroyed = false;
+
   private ydoc: Y.Doc | null = null;
   private ytext: Y.Text | null = null;
   private isApplyingRemoteUpdate = false;
@@ -20,22 +28,40 @@ export class CollaborationClient {
     this.participantId = participantId;
     this.participantName = participantName;
     this.connect();
+    this.startBackgroundHeartbeat();
   }
 
   public connect() {
-    if (typeof window === 'undefined') return;
-    this.cleanup();
+    if (typeof window === 'undefined' || this.isDestroyed) return;
+
+    // If WebSocket previously failed or closed with an error on this device/network, directly use robust SSE
+    if (this.wsAttemptFailed) {
+      this.connectSSE();
+      return;
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}`;
 
-    // Try WebSocket first
+    let wsHandshakeTimeout: any = null;
+
     try {
       this.ws = new WebSocket(wsUrl);
 
+      // Fast handshake timeout: if WS doesn't open within 2s, switch to SSE immediately
+      wsHandshakeTimeout = setTimeout(() => {
+        if (!this.isConnected && this.ws?.readyState !== WebSocket.OPEN) {
+          this.wsAttemptFailed = true;
+          try { this.ws?.close(); } catch {}
+          this.ws = null;
+          this.connectSSE();
+        }
+      }, 2000);
+
       this.ws.onopen = () => {
+        if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
         this.isConnected = true;
-        this.emitStatus('online');
+        this.setStatus('online');
       };
 
       this.ws.onmessage = (event) => {
@@ -48,30 +74,41 @@ export class CollaborationClient {
       };
 
       this.ws.onerror = () => {
-        // Fallback to Server-Sent Events if WebSocket fails
+        if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
         if (!this.isConnected) {
+          this.wsAttemptFailed = true;
+          try { this.ws?.close(); } catch {}
+          this.ws = null;
           this.connectSSE();
         }
       };
 
       this.ws.onclose = () => {
+        if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
+        if (this.isDestroyed) return;
         this.isConnected = false;
-        this.emitStatus('reconnecting');
-        this.scheduleReconnect();
+        this.wsAttemptFailed = true;
+        this.ws = null;
+        // Fallback to SSE immediately without flapping
+        this.connectSSE();
       };
     } catch {
+      if (wsHandshakeTimeout) clearTimeout(wsHandshakeTimeout);
+      this.wsAttemptFailed = true;
       this.connectSSE();
     }
   }
 
   private connectSSE() {
+    if (typeof window === 'undefined' || this.isDestroyed || this.sse) return;
+
     try {
       const sseUrl = `/api/v1/classroom/${this.roomId}/events?participantId=${this.participantId}`;
       this.sse = new EventSource(sseUrl);
 
       this.sse.onopen = () => {
         this.isConnected = true;
-        this.emitStatus('online');
+        this.setStatus('online');
       };
 
       this.sse.onmessage = (event) => {
@@ -84,20 +121,51 @@ export class CollaborationClient {
       };
 
       this.sse.onerror = () => {
+        // EventSource will automatically reconnect in the browser
         this.isConnected = false;
-        this.emitStatus('reconnecting');
-        this.scheduleReconnect();
+        this.setStatus('syncing');
       };
     } catch (err) {
-      console.error('[CollabClient] SSE connection failed', err);
+      console.error('[CollabClient] SSE initialization failed', err);
+      this.setStatus('syncing');
     }
   }
 
-  private scheduleReconnect() {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => {
-      this.connect();
-    }, 3000);
+  /**
+   * Resilient Background Polling Heartbeat
+   * Ensures uninterrupted state sync even during transient drops, firewall restrictions, or edge disconnects
+   */
+  private startBackgroundHeartbeat() {
+    if (typeof window === 'undefined' || this.isDestroyed) return;
+
+    const poll = async () => {
+      if (this.isDestroyed) return;
+      try {
+        const res = await fetch(`/api/v1/classroom/${this.roomId}?requesterId=${this.participantId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.room) {
+            this.handleIncoming({
+              type: 'room_state',
+              roomId: this.roomId,
+              senderId: 'server',
+              payload: { room: data.room },
+              timestamp: Date.now(),
+            });
+            if (this.currentStatus === 'offline') {
+              this.setStatus(this.isConnected ? 'online' : 'syncing');
+            }
+          }
+        }
+      } catch {
+        if (!this.isConnected) {
+          this.setStatus('offline');
+        }
+      }
+    };
+
+    // Heartbeat every 2.5 seconds
+    this.pollTimer = setInterval(poll, 2500);
   }
 
   private handleIncoming(msg: ClassroomEventMessage) {
@@ -108,6 +176,8 @@ export class CollaborationClient {
           this.isApplyingRemoteUpdate = true;
           const binary = Uint8Array.from(atob(msg.payload.update), (c) => c.charCodeAt(0));
           Y.applyUpdate(this.ydoc, binary);
+        } catch (e) {
+          console.error('[CollabClient] CRDT update error', e);
         } finally {
           this.isApplyingRemoteUpdate = false;
         }
@@ -129,7 +199,14 @@ export class CollaborationClient {
     });
   }
 
-  private emitStatus(status: 'online' | 'reconnecting' | 'offline') {
+  private setStatus(status: ConnectionStatus) {
+    if (this.currentStatus === status) return;
+    this.currentStatus = status;
+    this.statusListeners.forEach((cb) => cb(status));
+    this.emitStatus(status);
+  }
+
+  private emitStatus(status: ConnectionStatus) {
     this.listeners.forEach((listener) => {
       listener({
         type: 'presence',
@@ -140,6 +217,16 @@ export class CollaborationClient {
         timestamp: Date.now(),
       });
     });
+  }
+
+  public getStatus(): ConnectionStatus {
+    return this.currentStatus;
+  }
+
+  public onStatusChange(callback: (status: ConnectionStatus) => void): () => void {
+    this.statusListeners.add(callback);
+    callback(this.currentStatus);
+    return () => this.statusListeners.delete(callback);
   }
 
   /**
@@ -217,8 +304,10 @@ export class CollaborationClient {
     };
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(fullMsg));
-      return;
+      try {
+        this.ws.send(JSON.stringify(fullMsg));
+        return;
+      } catch {}
     }
 
     // HTTP POST fallback
@@ -248,17 +337,21 @@ export class CollaborationClient {
   }
 
   public cleanup() {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.isDestroyed = true;
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
     if (this.ws) {
-      this.ws.close();
+      try { this.ws.close(); } catch {}
       this.ws = null;
     }
     if (this.sse) {
-      this.sse.close();
+      try { this.sse.close(); } catch {}
       this.sse = null;
     }
     if (this.ydoc) {
-      this.ydoc.destroy();
+      try { this.ydoc.destroy(); } catch {}
       this.ydoc = null;
     }
   }
