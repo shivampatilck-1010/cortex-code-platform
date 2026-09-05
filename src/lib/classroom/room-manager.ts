@@ -338,6 +338,23 @@ export class ClassroomRoomManager {
       throw new Error(`${toUser.name} has disabled incoming collaboration requests.`);
     }
 
+    // 1. Check if already actively collaborating
+    const existingSession = Object.values(room.collaborationSessions || {}).find(
+      (s) => s.participantIds.includes(fromId) && s.participantIds.includes(toId)
+    );
+    if (existingSession) {
+      throw new Error(`You are already actively collaborating with ${toUser.name}.`);
+    }
+
+    // 2. Check if a pending request already exists between these two users
+    const existingPending = Object.values(room.collaborationRequests || {}).find(
+      (r) => r.fromId === fromId && r.toId === toId && r.status === 'pending'
+    );
+    if (existingPending) {
+      // Reuse existing pending request without creating duplicates
+      return existingPending;
+    }
+
     const reqId = generateId('collab_req');
     const request: CollaborationRequest = {
       id: reqId,
@@ -374,6 +391,18 @@ export class ClassroomRoomManager {
     if (req.toId !== responderId) throw new Error('Unauthorized response');
 
     req.status = decision;
+
+    // Automatically resolve ALL other pending requests between these two participants!
+    // No user should ever have to accept multiple separate requests from the same user.
+    Object.values(room.collaborationRequests || {}).forEach((r) => {
+      if (
+        ((r.fromId === req.fromId && r.toId === req.toId) ||
+         (r.fromId === req.toId && r.toId === req.fromId)) &&
+        r.status === 'pending'
+      ) {
+        r.status = decision;
+      }
+    });
 
     let session: CollaborationSession | null = null;
     if (decision === 'accepted') {

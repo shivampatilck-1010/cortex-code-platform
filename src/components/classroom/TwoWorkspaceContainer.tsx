@@ -336,16 +336,67 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   onCopyOutput,
 }) => {
   const editorRef = useRef<any>(null);
+  const localEmittedCodeRef = useRef<string>(user?.activeCode || '');
+  const loadedUserFileKeyRef = useRef<string>('');
 
-  // Sync external changes into editor without disrupting local typing
+  const isSelf = Boolean(user && user.id === currentUserId);
+  const isAdmin = currentUserRole === 'admin';
+  const isPublic = Boolean(user && user.privacy?.workspaceVisibility === 'public');
+  const isCollaboratingWithUser = Boolean(
+    activeSession &&
+    activeSession.mode === 'shared' &&
+    user &&
+    activeSession.participantIds.includes(currentUserId) &&
+    activeSession.participantIds.includes(user.id)
+  );
+
+  const currentKey = user ? `${user.id}:${user.activeFileName || 'main.py'}` : '';
+
+  // Synchronize editor buffer safely without EVER shifting the cursor to line 1
   useEffect(() => {
-    if (editorRef.current && user?.activeCode !== undefined) {
-      const currentVal = editorRef.current.getValue();
-      if (currentVal !== user.activeCode) {
-        editorRef.current.setValue(user.activeCode);
-      }
+    if (!editorRef.current || !user) return;
+
+    // 1. Initial mount or user/file switch -> load new content
+    if (loadedUserFileKeyRef.current !== currentKey) {
+      loadedUserFileKeyRef.current = currentKey;
+      localEmittedCodeRef.current = user.activeCode || '';
+      editorRef.current.setValue(user.activeCode || '');
+      return;
     }
-  }, [user?.activeCode]);
+
+    // 2. If this update matches what was just typed locally, DO NOT touch Monaco!
+    if (user.activeCode === localEmittedCodeRef.current) {
+      return;
+    }
+
+    // 3. If local user is actively focused and typing in this editor, never overwrite with laggy state!
+    if (editorRef.current.hasTextFocus() && (isSelf || isCollaboratingWithUser)) {
+      return;
+    }
+
+    // 4. Remote change arrived: update value while strictly preserving cursor & scroll position
+    const currentVal = editorRef.current.getValue();
+    if (currentVal !== user.activeCode) {
+      localEmittedCodeRef.current = user.activeCode || '';
+      const position = editorRef.current.getPosition();
+      const selection = editorRef.current.getSelection();
+      const scrollTop = editorRef.current.getScrollTop();
+      const scrollLeft = editorRef.current.getScrollLeft();
+
+      editorRef.current.setValue(user.activeCode || '');
+
+      if (position) {
+        try { editorRef.current.setPosition(position); } catch {}
+      }
+      if (selection) {
+        try { editorRef.current.setSelection(selection); } catch {}
+      }
+      try {
+        editorRef.current.setScrollTop(scrollTop);
+        editorRef.current.setScrollLeft(scrollLeft);
+      } catch {}
+    }
+  }, [user?.activeCode, currentKey, isSelf, isCollaboratingWithUser]);
 
   if (!user) {
     return (
@@ -362,16 +413,6 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
       </div>
     );
   }
-
-  const isSelf = user.id === currentUserId;
-  const isAdmin = currentUserRole === 'admin';
-  const isPublic = user.privacy.workspaceVisibility === 'public';
-  const isCollaboratingWithUser = Boolean(
-    activeSession &&
-    activeSession.mode === 'shared' &&
-    activeSession.participantIds.includes(currentUserId) &&
-    activeSession.participantIds.includes(user.id)
-  );
   const hasAccess = isSelf || isAdmin || isPublic || isSharedCollab || isCollaboratingWithUser;
 
   const isLocked = Boolean(user.isLocked);
@@ -515,7 +556,13 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
             onMount={(editor) => {
               editorRef.current = editor;
             }}
-            onChange={(v) => onCodeChange && onCodeChange(v || '')}
+            onChange={(v) => {
+              const nextVal = v || '';
+              localEmittedCodeRef.current = nextVal;
+              if (onCodeChange) {
+                onCodeChange(nextVal);
+              }
+            }}
             options={{
               readOnly: !canEdit,
               fontSize: 13,

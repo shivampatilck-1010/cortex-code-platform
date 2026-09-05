@@ -108,8 +108,17 @@ export default function ClassroomLivePage() {
 
       // Synchronize pending incoming collaboration requests for this participant:
       if (data.room?.collaborationRequests && activeId) {
+        const activePartnerIds = new Set<string>();
+        Object.values(data.room.collaborationSessions || {}).forEach((s: any) => {
+          if (s.participantIds?.includes(activeId)) {
+            s.participantIds.forEach((pid: string) => {
+              if (pid !== activeId) activePartnerIds.add(pid);
+            });
+          }
+        });
+
         const myCollabReq = Object.values(data.room.collaborationRequests).find(
-          (r: any) => r.toId === activeId && r.status === 'pending'
+          (r: any) => r.toId === activeId && r.status === 'pending' && !activePartnerIds.has(r.fromId)
         );
         if (myCollabReq) {
           setIncomingCollabReq(myCollabReq as any);
@@ -230,11 +239,19 @@ export default function ClassroomLivePage() {
         }
         break;
 
-      case 'collaboration_request':
-        if (event.payload?.toId === participantId) {
-          setIncomingCollabReq(event.payload);
+      case 'collaboration_request': {
+        const req = event.payload;
+        if (req?.toId === participantId) {
+          // Check if already in an active session with this user
+          const isAlreadyPartner = room && Object.values(room.collaborationSessions || {}).some(
+            (s: any) => s.participantIds?.includes(participantId) && s.participantIds?.includes(req.fromId)
+          );
+          if (!isAlreadyPartner) {
+            setIncomingCollabReq(req);
+          }
         }
         break;
+      }
 
       case 'collaboration_response': {
         const { request, session, activeWorkspaces } = event.payload || {};
@@ -246,6 +263,8 @@ export default function ClassroomLivePage() {
           setSlotBUserId(session.participantIds[1]);
         }
         if (request && (request.fromId === participantId || request.toId === participantId)) {
+          // Dismiss any open incoming prompt from this partner immediately
+          setIncomingCollabReq(null);
           if (request.status === 'accepted') {
             const partner = request.fromId === participantId ? request.toName : request.fromName;
             showToast(`🎉 Access approved! Real-time collaboration active with ${partner}.`);
@@ -465,6 +484,28 @@ export default function ClassroomLivePage() {
       } else {
         showToast('Access request declined.');
       }
+
+      // Instantly clear all requests from/to this user locally
+      if (targetReq?.fromId) {
+        setRoom((prev) => {
+          if (!prev) return prev;
+          const updatedCollabRequests = { ...prev.collaborationRequests };
+          Object.keys(updatedCollabRequests).forEach((id) => {
+            const r = updatedCollabRequests[id];
+            if (
+              (r.fromId === targetReq.fromId && r.toId === participantId) ||
+              (r.fromId === participantId && r.toId === targetReq.fromId)
+            ) {
+              r.status = decision;
+            }
+          });
+          return {
+            ...prev,
+            collaborationRequests: updatedCollabRequests,
+          };
+        });
+      }
+
       fetchRoomState(participantId);
     } catch (e) {
       console.error(e);
