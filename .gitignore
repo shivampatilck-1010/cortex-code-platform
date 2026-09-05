@@ -34,3 +34,6 @@ next-env.d.ts
 *.log
 .vscode/
 .idea/
+/dist/
+.vinext/
+.wrangler/

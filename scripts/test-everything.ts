@@ -14,6 +14,9 @@ import { CHALLENGES } from '../src/lib/challenges/challenges-data';
 import { COURSES } from '../src/lib/learning/courses-data';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 
 let totalTests = 0;
 let passedTests = 0;
@@ -313,7 +316,7 @@ int main() {
   // SECTION 9: DATABASE SCHEMA INTEGRITY (24 TABLES)
   // -------------------------------------------------------------------------
   console.log('=== [SECTION 9] Testing Database Schema Integrity ===');
-  const schemaPath = path.join(__dirname, '../src/prisma/schema.prisma');
+  const schemaPath = path.join(scriptDir, '../src/prisma/schema.prisma');
   const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
 
   const expectedEntities = [

@@ -6,9 +6,9 @@ import { LANGUAGE_SEO_MAP } from '@/config/seo';
 import { CompilerClientView } from './CompilerClientView';
 
 interface CompilerPageProps {
-  params: {
+  params: Promise<{
     compiler: string;
-  };
+  }>;
 }
 
 // Generate static routes for all 16 supported languages at build time (SSG)
@@ -38,7 +38,8 @@ function resolveLangFromSlug(slug: string): string {
 
 // Dynamic SEO Metadata for Google #1 Ranking
 export async function generateMetadata({ params }: CompilerPageProps): Promise<Metadata> {
-  const langKey = resolveLangFromSlug(params.compiler);
+  const resolvedParams = await params;
+  const langKey = resolveLangFromSlug(resolvedParams.compiler);
   const seoData = LANGUAGE_SEO_MAP[langKey] || LANGUAGE_SEO_MAP['python'];
   const langConfig = getLanguageConfig(langKey);
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cortexcode.io';
@@ -61,12 +62,12 @@ export async function generateMetadata({ params }: CompilerPageProps): Promise<M
       'online code debugger',
     ],
     alternates: {
-      canonical: `/${params.compiler}`,
+      canonical: `/${resolvedParams.compiler}`,
     },
     openGraph: {
       title: seoData.title,
       description: seoData.description,
-      url: `${baseUrl}/${params.compiler}`,
+      url: `${baseUrl}/${resolvedParams.compiler}`,
       siteName: 'Cortex — Code Beyond Limits',
       type: 'website',
       images: [
@@ -88,8 +89,9 @@ export async function generateMetadata({ params }: CompilerPageProps): Promise<M
   };
 }
 
-export default function SEOCompilerPage({ params }: CompilerPageProps) {
-  const langKey = resolveLangFromSlug(params.compiler);
+export default async function SEOCompilerPage({ params }: CompilerPageProps) {
+  const resolvedParams = await params;
+  const langKey = resolveLangFromSlug(resolvedParams.compiler);
   const langConfig = getLanguageConfig(langKey);
   const seoData = LANGUAGE_SEO_MAP[langKey] || LANGUAGE_SEO_MAP['python'];
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cortexcode.io';
@@ -100,9 +102,9 @@ export default function SEOCompilerPage({ params }: CompilerPageProps) {
     '@graph': [
       {
         '@type': 'WebApplication',
-        '@id': `${baseUrl}/${params.compiler}#webapp`,
+        '@id': `${baseUrl}/${resolvedParams.compiler}#webapp`,
         name: `Cortex Online ${langConfig.name} Compiler`,
-        url: `${baseUrl}/${params.compiler}`,
+        url: `${baseUrl}/${resolvedParams.compiler}`,
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'All',
         browserRequirements: 'Requires modern web browser',
