@@ -165,6 +165,11 @@ export class CollaborationClient {
             status: p.status,
             currentLanguage: p.currentLanguage,
             activeFileName: p.activeFileName,
+            privacy: p.privacy || {
+              workspaceVisibility: p.role === 'admin' ? 'public' : 'private',
+              allowCollaboration: true,
+              requireDownloadPermission: p.role !== 'admin',
+            },
           }));
           query.set('clientParticipants', JSON.stringify(compact));
         }

@@ -347,10 +347,21 @@ export class ClassroomRoomManager {
         if (p.name === 'Classroom Host') continue; // Reject placeholder phantom
 
         const existing = room.participants[p.id];
+        const safePrivacy = p.privacy || {
+          workspaceVisibility: p.role === 'admin' ? 'public' : 'private',
+          allowCollaboration: true,
+          requireDownloadPermission: p.role !== 'admin',
+        };
+
         if (!existing) {
           if (now - (p.lastActive || 0) > 45000) continue;
           room.participants[p.id] = {
             ...p,
+            currentLanguage: p.currentLanguage || 'python',
+            activeFileName: p.activeFileName || 'main.py',
+            activeCode: p.activeCode || '',
+            files: p.files || [],
+            privacy: safePrivacy,
             online: now - (p.lastActive || 0) < 10000,
           };
           if (p.role === 'admin' && !room.admin.id) {
@@ -358,6 +369,9 @@ export class ClassroomRoomManager {
             room.admin.name = p.name;
           }
         } else {
+          if (!existing.privacy) {
+            existing.privacy = safePrivacy;
+          }
           if (p.lastActive && p.lastActive > existing.lastActive) {
             existing.lastActive = p.lastActive;
             existing.status = p.status || existing.status;
@@ -480,7 +494,7 @@ export class ClassroomRoomManager {
     const fromUser = room.participants[fromId];
     const toUser = room.participants[toId];
     if (!fromUser || !toUser) throw new Error('Participant not found');
-    if (!toUser.privacy.allowCollaboration) {
+    if (toUser.privacy && toUser.privacy.allowCollaboration === false) {
       throw new Error(`${toUser.name} has disabled incoming collaboration requests.`);
     }
 

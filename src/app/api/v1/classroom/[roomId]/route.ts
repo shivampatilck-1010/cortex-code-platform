@@ -42,18 +42,25 @@ export async function GET(
     // Sanitize participants' private code according to privacy rules
     const sanitizedParticipants: Record<string, any> = {};
     for (const [id, p] of Object.entries(room.participants)) {
+      if (!p) continue;
       const isSelf = id === requesterId;
-      const isPublic = p.privacy.workspaceVisibility === 'public';
-      const isCollaborating = Object.values(room.collaborationSessions).some(
-        (s) => s.participantIds.includes(id) && requesterId && s.participantIds.includes(requesterId)
+      const privacy = p.privacy || {
+        workspaceVisibility: p.role === 'admin' ? 'public' : 'private',
+        allowCollaboration: true,
+        requireDownloadPermission: p.role !== 'admin',
+      };
+      const isPublic = privacy.workspaceVisibility === 'public' || p.role === 'admin';
+      const isCollaborating = Object.values(room.collaborationSessions || {}).some(
+        (s) => s.participantIds?.includes(id) && requesterId && s.participantIds?.includes(requesterId)
       );
 
       const canViewCode = isSelf || isAdmin || isPublic || isCollaborating;
 
       sanitizedParticipants[id] = {
         ...p,
-        activeCode: canViewCode ? p.activeCode : '',
-        files: canViewCode ? p.files : p.files.map((f) => ({ ...f, content: '' })),
+        privacy,
+        activeCode: canViewCode ? (p.activeCode || '') : '',
+        files: canViewCode ? (p.files || []) : (p.files || []).map((f) => ({ ...f, content: '' })),
         isCodeHidden: !canViewCode,
       };
     }
@@ -174,7 +181,14 @@ export async function POST(
         const { privacy } = body;
         const p = room.participants[participantId];
         if (p && privacy) {
-          p.privacy = { ...p.privacy, ...privacy };
+          p.privacy = {
+            ...(p.privacy || {
+              workspaceVisibility: p.role === 'admin' ? 'public' : 'private',
+              allowCollaboration: true,
+              requireDownloadPermission: p.role !== 'admin',
+            }),
+            ...privacy,
+          };
         }
         return NextResponse.json({ success: true, privacy: p?.privacy });
       }

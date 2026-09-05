@@ -1124,7 +1124,11 @@ export default function ClassroomLivePage() {
         <UserPrivacyModal
           isOpen={isPrivacyOpen}
           onClose={() => setIsPrivacyOpen(false)}
-          privacy={currentParticipant.privacy}
+          privacy={currentParticipant.privacy || {
+            workspaceVisibility: currentParticipant.role === 'admin' ? 'public' : 'private',
+            allowCollaboration: true,
+            requireDownloadPermission: currentParticipant.role !== 'admin',
+          }}
           onUpdatePrivacy={handleUpdatePrivacy}
         />
       )}

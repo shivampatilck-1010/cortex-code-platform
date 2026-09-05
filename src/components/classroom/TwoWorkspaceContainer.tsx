@@ -369,21 +369,33 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
       return;
     }
 
-    // 3. If local user is actively focused and typing in this editor, never overwrite with laggy state!
-    if (editorRef.current.hasTextFocus() && (isSelf || isCollaboratingWithUser)) {
+    // 3. If local user is solely editing their own workspace alone, ignore laggy echoes
+    if (editorRef.current.hasTextFocus() && isSelf && !isCollaboratingWithUser) {
       return;
     }
 
-    // 4. Remote change arrived: update value while strictly preserving cursor & scroll position
+    // 4. Remote change arrived: update value smoothly while strictly preserving cursor & scroll position
     const currentVal = editorRef.current.getValue();
     if (currentVal !== user.activeCode) {
       localEmittedCodeRef.current = user.activeCode || '';
+      const model = editorRef.current.getModel();
       const position = editorRef.current.getPosition();
       const selection = editorRef.current.getSelection();
       const scrollTop = editorRef.current.getScrollTop();
       const scrollLeft = editorRef.current.getScrollLeft();
 
-      editorRef.current.setValue(user.activeCode || '');
+      if (model) {
+        editorRef.current.executeEdits('remote-sync', [
+          {
+            range: model.getFullModelRange(),
+            text: user.activeCode || '',
+            forceMoveMarkers: true,
+          },
+        ]);
+        editorRef.current.pushUndoStop();
+      } else {
+        editorRef.current.setValue(user.activeCode || '');
+      }
 
       if (position) {
         try { editorRef.current.setPosition(position); } catch {}

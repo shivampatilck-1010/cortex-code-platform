@@ -19,6 +19,12 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const safePrivacy: UserPrivacySettings = privacy || {
+    workspaceVisibility: 'public',
+    allowCollaboration: true,
+    requireDownloadPermission: false,
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
       <div className="bg-[#14151a] border border-[#2d303f] rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4 select-none">
@@ -44,7 +50,7 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
                   type="radio"
                   name="visibility"
                   value="private"
-                  checked={privacy.workspaceVisibility === 'private'}
+                  checked={safePrivacy.workspaceVisibility === 'private'}
                   onChange={() => onUpdatePrivacy({ workspaceVisibility: 'private' })}
                   className="accent-[#ff9100]"
                 />
@@ -55,7 +61,7 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
                   type="radio"
                   name="visibility"
                   value="public"
-                  checked={privacy.workspaceVisibility === 'public'}
+                  checked={safePrivacy.workspaceVisibility === 'public'}
                   onChange={() => onUpdatePrivacy({ workspaceVisibility: 'public' })}
                   className="accent-[#ff9100]"
                 />
@@ -72,7 +78,7 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
             </div>
             <input
               type="checkbox"
-              checked={privacy.allowCollaboration}
+              checked={safePrivacy.allowCollaboration}
               onChange={(e) => onUpdatePrivacy({ allowCollaboration: e.target.checked })}
               className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
             />
@@ -86,7 +92,7 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
             </div>
             <input
               type="checkbox"
-              checked={privacy.requireDownloadPermission}
+              checked={safePrivacy.requireDownloadPermission}
               onChange={(e) => onUpdatePrivacy({ requireDownloadPermission: e.target.checked })}
               className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer"
             />
