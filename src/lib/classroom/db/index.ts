@@ -38,6 +38,9 @@ class ClassroomDatabase {
   public db: DBInstance | null = null;
   private dbPath: string = '';
   private initialized: boolean = false;
+  private memoryUsers = new Map<string, User>();
+  private memoryClassrooms = new Map<string, Classroom>();
+  private memoryMembers = new Map<string, ClassroomMember>();
 
   constructor() {}
 
@@ -48,7 +51,7 @@ class ClassroomDatabase {
   }
 
   private init() {
-    if (this.initialized && this.db) return;
+    if (this.initialized) return;
 
     try {
       const dataDir = path.resolve(process.cwd(), 'data');
@@ -71,9 +74,9 @@ class ClassroomDatabase {
       sqliteDb.exec('PRAGMA journal_mode = WAL;');
       sqliteDb.exec('PRAGMA foreign_keys = ON;');
       this.db = sqliteDb;
+      this.initialized = true;
       this.createTables();
       this.seedDefaultClassroom();
-      this.initialized = true;
     } catch (err) {
       console.warn('[ClassroomDatabase] Falling back to in-memory fallback:', err);
       this.initFallback();
@@ -343,6 +346,93 @@ class ClassroomDatabase {
 
   private initFallback() {
     this.db = null;
+    this.initialized = true;
+    const now = Date.now();
+    const teacherId = 'usr_prof_elena';
+    const classId = 'C1-CS201-ADV';
+    const joinCode = 'CS201-LIVE';
+
+    this.memoryUsers.set(teacherId, {
+      id: teacherId,
+      name: 'Prof. Elena Rostova',
+      email: 'elena.rostova@cortex.edu',
+      role: 'teacher',
+      status: 'active',
+      createdAt: now - 30 * 86400000,
+      updatedAt: now,
+    });
+
+    const students = [
+      { id: 'usr_alex_chen', name: 'Alex Chen', email: 'alex.chen@student.cortex.edu' },
+      { id: 'usr_maya_patel', name: 'Maya Patel', email: 'maya.patel@student.cortex.edu' },
+      { id: 'usr_jordan_lee', name: 'Jordan Lee', email: 'jordan.lee@student.cortex.edu' },
+      { id: 'usr_sophia_ng', name: 'Sophia Nguyen', email: 'sophia.ng@student.cortex.edu' },
+      { id: 'usr_marcus_v', name: 'Marcus Vance', email: 'marcus.v@student.cortex.edu' },
+    ];
+
+    for (const s of students) {
+      this.memoryUsers.set(s.id, {
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        role: 'student',
+        status: 'active',
+        createdAt: now - 25 * 86400000,
+        updatedAt: now,
+      });
+    }
+
+    this.memoryClassrooms.set(classId, {
+      id: classId,
+      name: 'Advanced Algorithms & Concurrent Systems',
+      subject: 'Computer Science',
+      description: 'Master dynamic programming, graph theory, memory models, and lock-free concurrency in C++ and Python.',
+      courseCode: 'CS-201',
+      academicYear: '2026-2027',
+      section: 'Sec 04 (Honors)',
+      teacherId,
+      teacherName: 'Prof. Elena Rostova',
+      joinCode,
+      joinEnabled: true,
+      status: 'active',
+      createdAt: now - 20 * 86400000,
+      updatedAt: now,
+      settings: {
+        allowStudentPosting: true,
+        allowStudentMessaging: true,
+        allowCodeSharing: true,
+        leaderboardEnabled: true,
+        defaultAIPolicy: 'hints_only',
+      },
+    });
+
+    this.memoryMembers.set(`${classId}:${teacherId}`, {
+      id: `mem_${teacherId}`,
+      classroomId: classId,
+      userId: teacherId,
+      userName: 'Prof. Elena Rostova',
+      userEmail: 'elena.rostova@cortex.edu',
+      role: 'teacher',
+      status: 'active',
+      joinedAt: now - 20 * 86400000,
+      lastActiveAt: now,
+      isOnline: true,
+    });
+
+    for (const s of students) {
+      this.memoryMembers.set(`${classId}:${s.id}`, {
+        id: `mem_${s.id}`,
+        classroomId: classId,
+        userId: s.id,
+        userName: s.name,
+        userEmail: s.email,
+        role: 'student',
+        status: 'active',
+        joinedAt: now - 15 * 86400000,
+        lastActiveAt: now,
+        isOnline: false,
+      });
+    }
   }
 
   // --- SEEDING ---
@@ -767,6 +857,7 @@ int main() {
 
   // --- USERS ---
   createUser(user: User): User {
+    this.memoryUsers.set(user.id, user);
     if (!this.getDb()) return user;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO users (id, name, email, role, avatar, status, created_at, updated_at)
@@ -777,9 +868,13 @@ int main() {
   }
 
   getUser(id: string): User | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) {
+      return this.memoryUsers.get(id) || null;
+    }
     const row = this.getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
-    if (!row) return null;
+    if (!row) {
+      return this.memoryUsers.get(id) || null;
+    }
     return {
       id: row.id,
       name: row.name,
@@ -794,6 +889,7 @@ int main() {
 
   // --- CLASSROOMS ---
   createClassroom(classroom: Classroom): Classroom {
+    this.memoryClassrooms.set(classroom.id, classroom);
     if (!this.getDb()) return classroom;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO classrooms (
@@ -825,9 +921,13 @@ int main() {
   }
 
   getClassroom(id: string): Classroom | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) {
+      return this.memoryClassrooms.get(id) || null;
+    }
     const row = this.getDb().prepare('SELECT * FROM classrooms WHERE id = ?').get(id) as any;
-    if (!row) return null;
+    if (!row) {
+      return this.memoryClassrooms.get(id) || null;
+    }
     return this.mapClassroom(row);
   }
 
@@ -853,12 +953,18 @@ int main() {
 
   updateClassroom(id: string, updates: Partial<Classroom>): Classroom | null {
     if (!this.getDb()) return null;
-    const existing = this.getClassroom(id);
-    if (!existing) return null;
+    const current = this.getClassroom(id);
+    if (!current) return null;
 
-    const merged = { ...existing, ...updates, updatedAt: Date.now() };
+    const merged = { ...current, ...updates, updatedAt: Date.now() };
     this.createClassroom(merged);
     return merged;
+  }
+
+  deleteClassroom(id: string): boolean {
+    if (!this.getDb()) return false;
+    this.getDb().prepare('DELETE FROM classrooms WHERE id = ?').run(id);
+    return true;
   }
 
   archiveClassroom(id: string): Classroom | null {
@@ -909,12 +1015,13 @@ int main() {
       ? { ...maybeMember, classroomId: memberOrClassroomId }
       : memberOrClassroomId;
 
+    this.memoryMembers.set(`${member.classroomId}:${member.userId}`, member);
     if (!this.getDb()) return member;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO classroom_members (
         id, classroom_id, user_id, user_name, user_email, role, status,
         joined_at, last_active_at, is_online
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const id = member.id || `mem_${member.classroomId}_${member.userId}`;
     const userEmail = member.userEmail || `${member.userId}@cortex.edu`;
@@ -938,14 +1045,20 @@ int main() {
   }
 
   getMember(classroomId: string, userId: string): ClassroomMember | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) {
+      return this.memoryMembers.get(`${classroomId}:${userId}`) || null;
+    }
     const row = this.getDb().prepare('SELECT * FROM classroom_members WHERE classroom_id = ? AND user_id = ?').get(classroomId, userId) as any;
-    if (!row) return null;
+    if (!row) {
+      return this.memoryMembers.get(`${classroomId}:${userId}`) || null;
+    }
     return this.mapMember(row);
   }
 
   listMembers(classroomId: string): ClassroomMember[] {
-    if (!this.getDb()) return [];
+    if (!this.getDb()) {
+      return Array.from(this.memoryMembers.values()).filter((m) => m.classroomId === classroomId);
+    }
     const rows = this.getDb().prepare('SELECT * FROM classroom_members WHERE classroom_id = ? ORDER BY role DESC, user_name ASC').all(classroomId) as any[];
     return rows.map((r) => this.mapMember(r));
   }

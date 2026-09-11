@@ -7,13 +7,17 @@ import {
   base64ToUint8Array,
   uint8ArrayToBase64,
 } from './protocol';
+import { AuthenticatedClassroomUser, ClassroomAuth } from './auth';
 
 interface SessionMeta {
+  auth: AuthenticatedClassroomUser;
   participantId: string;
   name: string;
   role: string;
   authenticated: boolean;
   lastActive: number;
+  eventRateCount: number;
+  eventRateWindowStart: number;
 }
 
 /**
@@ -33,7 +37,6 @@ export class ClassroomRoomDO {
   private initialized: boolean = false;
   private latestTeacherCode: string | null = null;
   private latestTeacherOutput: any | null = null;
-
 
   constructor(state: any, env: any) {
     this.state = state;
@@ -62,7 +65,6 @@ export class ClassroomRoomDO {
         if (typeof storedCode === 'string') this.latestTeacherCode = storedCode;
         const storedOutput = await this.state.storage.get('latestTeacherOutput');
         if (storedOutput !== undefined) this.latestTeacherOutput = storedOutput;
-
       }
     } catch (e) {
       console.warn('[ClassroomRoomDO] Failed to restore state from storage', e);
@@ -106,6 +108,54 @@ export class ClassroomRoomDO {
     const upgradeHeader = request.headers.get('Upgrade');
 
     if (upgradeHeader === 'websocket') {
+      // 1. Authenticate WebSocket upgrade: Check internal token from Worker
+      const internalToken = request.headers.get('x-cortex-internal-auth');
+      let auth: AuthenticatedClassroomUser | null = internalToken
+        ? ClassroomAuth.verifyInternalAuthToken(internalToken)
+        : null;
+
+      // 2. Direct authentication fallback (for direct DO calls or testing)
+      if (!auth) {
+        const directUser = ClassroomAuth.authenticateRequest(request);
+        if (directUser) {
+          const url = new URL(request.url);
+          const parts = url.pathname.split('/');
+          const wsIdx = parts.indexOf('ws');
+          let reqClassroomId = url.searchParams.get('classroomId') || '';
+          if (!reqClassroomId && wsIdx > 0 && parts[wsIdx - 1]) {
+            reqClassroomId = parts[wsIdx - 1];
+          }
+          reqClassroomId = reqClassroomId.toUpperCase().trim();
+          const membership = ClassroomAuth.verifyClassroomMembership(directUser, reqClassroomId);
+          if (membership.authorized && membership.role) {
+            auth = {
+              userId: directUser.id,
+              classroomId: reqClassroomId,
+              role: membership.role,
+              displayName: directUser.name,
+              email: directUser.email,
+              authenticatedAt: Date.now(),
+            };
+          }
+        }
+      }
+
+      // Reject unauthenticated requests before accepting WebSocket
+      if (!auth) {
+        console.warn('[ClassroomRoomDO Security Alert] Rejected unauthenticated WebSocket upgrade request');
+        return new Response(
+          JSON.stringify({
+            error: 'Unauthorized',
+            code: 'UNAUTHORIZED_UPGRADE',
+            message: 'WebSocket upgrade rejected: missing or invalid authenticated session',
+          }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
       // @ts-ignore
       const [client, server] = Object.values(new WebSocketPair()) as [any, any];
       
@@ -113,18 +163,17 @@ export class ClassroomRoomDO {
         server.accept();
       }
 
-      const url = new URL(request.url);
-      const participantId = url.searchParams.get('participantId') || url.searchParams.get('userId') || 'usr_anonymous';
-      const participantName = url.searchParams.get('participantName') || url.searchParams.get('userName') || 'Anonymous User';
-      const participantRole = url.searchParams.get('participantRole') || url.searchParams.get('role') || 'student';
-      const classroomId = url.searchParams.get('classroomId') || '';
+      const classroomId = auth.classroomId;
 
       const sessionMeta: SessionMeta = {
-        participantId,
-        name: participantName,
-        role: participantRole,
+        auth,
+        participantId: auth.userId,
+        name: auth.displayName,
+        role: auth.role, // Derived authoritatively from server membership
         authenticated: true,
         lastActive: Date.now(),
+        eventRateCount: 0,
+        eventRateWindowStart: Date.now(),
       };
 
       this.sessions.set(server, sessionMeta);
@@ -144,6 +193,8 @@ export class ClassroomRoomDO {
           sequence: this.currentSequence,
           payload: {
             currentSequence: this.currentSequence,
+            userId: auth.userId,
+            role: auth.role,
             members: activeMembers,
             onlineCount: this.sessions.size,
           },
@@ -174,8 +225,62 @@ export class ClassroomRoomDO {
       server.addEventListener('message', async (event: any) => {
         try {
           const raw = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data);
+          
+          // Validate payload size (max 512KB)
+          if (raw.length > 512 * 1024) {
+            console.warn(`[Security Alert] Rejected oversized payload (${raw.length} bytes) from user ${sessionMeta.participantId}`);
+            server.send(
+              serializeRealtimeMessage({
+                type: 'error',
+                classroomId,
+                payload: {
+                  code: 'PAYLOAD_TOO_LARGE',
+                  message: 'Payload exceeds maximum allowed size of 512KB',
+                },
+                timestamp: Date.now(),
+              })
+            );
+            return;
+          }
+
+          // Rate limit: max 100 events per 10s window
+          const now = Date.now();
+          if (now - sessionMeta.eventRateWindowStart > 10_000) {
+            sessionMeta.eventRateWindowStart = now;
+            sessionMeta.eventRateCount = 0;
+          }
+          sessionMeta.eventRateCount++;
+          if (sessionMeta.eventRateCount > 100) {
+            console.warn(`[Security Alert] Rate limit exceeded by user ${sessionMeta.participantId}`);
+            server.send(
+              serializeRealtimeMessage({
+                type: 'error',
+                classroomId,
+                payload: {
+                  code: 'RATE_LIMITED',
+                  message: 'Rate limit exceeded. Please throttle your requests.',
+                },
+                timestamp: Date.now(),
+              })
+            );
+            return;
+          }
+
           const msg = parseRealtimeMessage(raw);
-          if (!msg) return;
+          if (!msg) {
+            server.send(
+              serializeRealtimeMessage({
+                type: 'error',
+                classroomId,
+                payload: {
+                  code: 'MALFORMED_EVENT',
+                  message: 'Invalid message JSON structure',
+                },
+                timestamp: Date.now(),
+              })
+            );
+            return;
+          }
 
           sessionMeta.lastActive = Date.now();
           await this.handleMessage(server, sessionMeta, msg);
@@ -262,6 +367,27 @@ export class ClassroomRoomDO {
 
   async handleMessage(senderWs: any, meta: SessionMeta, msg: RealtimeMessage) {
     switch (msg.type) {
+      case 'auth': {
+        // Re-affirm verified server-derived identity and role (ignore any client-provided role or identity)
+        senderWs.send(
+          serializeRealtimeMessage({
+            type: 'auth_ok',
+            classroomId: meta.auth.classroomId,
+            roomId: meta.auth.classroomId,
+            sequence: this.currentSequence,
+            payload: {
+              userId: meta.auth.userId,
+              name: meta.auth.displayName || meta.name,
+              role: meta.auth.role,
+              user: meta.auth,
+              currentSequence: this.currentSequence,
+            },
+            timestamp: Date.now(),
+          })
+        );
+        break;
+      }
+
       case 'ping': {
         senderWs.send(
           serializeRealtimeMessage({
@@ -280,13 +406,23 @@ export class ClassroomRoomDO {
         const oldestEvent = this.eventLog.length > 0 ? this.eventLog[0] : null;
         const isBufferOverflow = oldestEvent !== null && since < oldestEvent.sequence && this.eventLog.length >= 100;
 
-        const missedEvents = this.eventLog.filter((e) => e.sequence > since);
+        const isInstructor = meta.auth.role === 'teacher' || meta.auth.role === 'admin';
+        const missedEvents = this.eventLog.filter((e) => {
+          if (e.sequence <= since) return false;
+          // Privacy Filter: students must never receive private direct messages of other students
+          if (e.type === 'message.created' && e.payload?.message?.recipientType === 'direct') {
+            const dmSender = e.payload?.message?.senderId || e.actorId;
+            const dmRecipient = e.payload?.message?.recipientId;
+            return isInstructor || dmSender === meta.auth.userId || dmRecipient === meta.auth.userId;
+          }
+          return true;
+        });
 
         senderWs.send(
           serializeRealtimeMessage({
             type: 'resync_response',
-            classroomId: msg.classroomId,
-            roomId: msg.roomId,
+            classroomId: meta.auth.classroomId,
+            roomId: meta.auth.classroomId,
             sequence: this.currentSequence,
             payload: {
               isFullSnapshot: isBufferOverflow,
@@ -317,7 +453,7 @@ export class ClassroomRoomDO {
           return;
         }
 
-        // Authorization check for teacher-only events
+        // Authorization check for teacher-only events (Strictly from connection.auth.role)
         const teacherOnlyEvents = new Set([
           'announcement.created',
           'announcement.deleted',
@@ -333,6 +469,8 @@ export class ClassroomRoomDO {
           'session.ended',
           'session.created',
           'session.updated',
+          'session.recording.started',
+          'session.recording.stopped',
           'teacher.code.snapshot',
           'teacher.code.changed',
           'teacher.file.created',
@@ -342,17 +480,15 @@ export class ClassroomRoomDO {
           'teacher.output.created',
           'question.answered',
           'question.pinned',
-
-          'session.recording.started',
-          'session.recording.stopped',
         ]);
 
-        const isInstructor = meta.role === 'teacher' || meta.role === 'admin';
+        const isInstructor = meta.auth.role === 'teacher' || meta.auth.role === 'admin';
         if (teacherOnlyEvents.has(eventData.type) && !isInstructor) {
+          console.warn(`[Security Alert] Forbidden event attempted: user ${meta.auth.userId} (role: ${meta.auth.role}) tried to emit '${eventData.type}'`);
           senderWs.send(
             serializeRealtimeMessage({
               type: 'error',
-              classroomId: msg.classroomId || msg.roomId || '',
+              classroomId: meta.auth.classroomId,
               payload: {
                 code: 'FORBIDDEN_EVENT',
                 message: `Unauthorized: Only instructors can emit '${eventData.type}'.`,
@@ -364,27 +500,62 @@ export class ClassroomRoomDO {
         }
 
         const seq = this.getNextSequence();
+        const payloadObj = typeof eventData.payload === 'object' && eventData.payload !== null ? { ...eventData.payload } : {};
+
+        // Actor identity overwrite: Never trust client-provided actorId, senderId, or userId
+        if (payloadObj.userId && payloadObj.userId !== meta.auth.userId) {
+          console.warn(`[Security Alert] Impersonation prevented: user ${meta.auth.userId} tried to send userId ${payloadObj.userId}`);
+          payloadObj.userId = meta.auth.userId;
+        }
+        if (payloadObj.actorId && payloadObj.actorId !== meta.auth.userId) {
+          payloadObj.actorId = meta.auth.userId;
+        }
+        if (payloadObj.senderId && payloadObj.senderId !== meta.auth.userId) {
+          payloadObj.senderId = meta.auth.userId;
+        }
+
+        // Direct message privacy: Server derives sender identity authoritatively
+        if (eventData.type === 'message.created' && payloadObj.message) {
+          payloadObj.message = {
+            ...payloadObj.message,
+            senderId: meta.auth.userId,
+            senderName: meta.auth.displayName,
+            senderRole: meta.auth.role,
+          };
+          if (payloadObj.message.recipientType === 'direct') {
+            if (!payloadObj.message.recipientId || typeof payloadObj.message.recipientId !== 'string') {
+              senderWs.send(
+                serializeRealtimeMessage({
+                  type: 'error',
+                  classroomId: meta.auth.classroomId,
+                  payload: { code: 'INVALID_DM', message: 'Direct message requires a valid recipientId' },
+                  timestamp: Date.now(),
+                })
+              );
+              return;
+            }
+          }
+        }
 
         const fullEvent: ClassroomRealtimeEvent = {
           id: eventData.id || `evt_${Date.now()}_${seq}`,
-          classroomId: msg.classroomId || msg.roomId || '',
+          classroomId: meta.auth.classroomId,
           sequence: seq,
           type: eventData.type,
-          actorId: meta.participantId,
-          actorName: meta.name,
+          actorId: meta.auth.userId, // Authoritative overwrite
+          actorName: meta.auth.displayName, // Authoritative overwrite
           timestamp: Date.now(),
-          payload: eventData.payload ?? {},
+          payload: payloadObj,
         };
         
         if (fullEvent.type === 'teacher.code.changed' && fullEvent.payload.code !== undefined) {
-             this.latestTeacherCode = fullEvent.payload.code;
-             if (this.state?.storage) this.state.storage.put('latestTeacherCode', this.latestTeacherCode).catch(() => {});
+          this.latestTeacherCode = fullEvent.payload.code;
+          if (this.state?.storage) this.state.storage.put('latestTeacherCode', this.latestTeacherCode).catch(() => {});
         }
         if (fullEvent.type === 'teacher.output.created' && fullEvent.payload.output !== undefined) {
-             this.latestTeacherOutput = fullEvent.payload.output;
-             if (this.state?.storage) this.state.storage.put('latestTeacherOutput', this.latestTeacherOutput).catch(() => {});
+          this.latestTeacherOutput = fullEvent.payload.output;
+          if (this.state?.storage) this.state.storage.put('latestTeacherOutput', this.latestTeacherOutput).catch(() => {});
         }
-
 
         this.recordAndStoreEvent(fullEvent);
         this.broadcastEvent(fullEvent);
@@ -480,9 +651,9 @@ export class ClassroomRoomDO {
     this.sessions.forEach((session, ws) => {
       if (ws.readyState === 1 /* OPEN */) {
         if (isDirectMessage) {
-          const isRecipient = session.participantId === recipientId;
-          const isSender = session.participantId === senderId;
-          const isInstructor = session.role === 'teacher' || session.role === 'admin';
+          const isRecipient = session.auth.userId === recipientId;
+          const isSender = session.auth.userId === senderId;
+          const isInstructor = session.auth.role === 'teacher' || session.auth.role === 'admin';
           if (!isRecipient && !isSender && !isInstructor) {
             return;
           }

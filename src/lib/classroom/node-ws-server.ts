@@ -2,6 +2,7 @@ import * as Y from 'yjs';
 import { ClassroomRoomManager } from './room-manager';
 import { classroomDb } from './db';
 import { realtimeCoordinator, WsClientSession } from './realtime';
+import { ClassroomAuth } from './auth';
 import {
   RealtimeMessage,
   ClassroomRealtimeEvent,
@@ -56,17 +57,33 @@ interface ClientMeta {
 const connectedClients = new Set<ClientMeta>();
 
 /**
- * Broadcast message to other clients in the same room
+ * Broadcast message to other clients in the same room with DM privacy protection
  */
 export function broadcastToRoom(roomId: string, message: RealtimeMessage, excludeClientId?: string) {
   const normRoom = roomId.toUpperCase().trim();
   const raw = serializeRealtimeMessage(message);
+
+  const isDirectMessage =
+    (message.type === 'event' && message.payload?.event?.type === 'message.created' && message.payload?.event?.payload?.message?.recipientType === 'direct') ||
+    (message.payload?.type === 'message.created' && message.payload?.message?.recipientType === 'direct');
+
+  const dmMsg = message.payload?.event?.payload?.message || message.payload?.message;
+  const recipientId = dmMsg?.recipientId;
+  const senderId = dmMsg?.senderId;
 
   connectedClients.forEach((client) => {
     if (
       (client.roomId === normRoom || client.classroomId === normRoom) &&
       client.ws.readyState === 1 /* OPEN */
     ) {
+      if (isDirectMessage) {
+        const isRecipient = client.participantId === recipientId;
+        const isSender = client.participantId === senderId;
+        const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
+        if (!isRecipient && !isSender && !isInstructor) {
+          return;
+        }
+      }
       if (!excludeClientId || client.participantId !== excludeClientId) {
         try {
           client.ws.send(raw);
@@ -158,71 +175,38 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
         return;
       }
 
-      const classroom = classroomDb.getClassroom(classroomId);
-      if (!classroom) {
-        ws.send(serializeRealtimeMessage({
-          type: 'error',
-          classroomId,
-          payload: { code: 'NOT_FOUND', message: `Classroom ${classroomId} not found.` },
-          timestamp: Date.now(),
-        }));
-        ws.close(4404, 'Classroom not found');
-        return;
-      }
-
-      // 2. Authenticate User
-      if (!requestedUserId || requestedUserId === 'usr_anonymous') {
-        ws.send(serializeRealtimeMessage({
-          type: 'error',
-          classroomId,
-          payload: { code: 'UNAUTHORIZED', message: 'Authentication required. Missing user ID.' },
-          timestamp: Date.now(),
-        }));
-        ws.close(4401, 'Unauthorized: Missing user ID');
-        return;
-      }
-
-      const user = classroomDb.getUser(requestedUserId);
+      // 2. Authoritative User Authentication via ClassroomAuth
+      const user = ClassroomAuth.authenticateRequest(req);
       if (!user) {
+        console.warn(`[Security Alert] Rejected unauthenticated connection attempt to classroom ${classroomId}`);
         ws.send(serializeRealtimeMessage({
           type: 'error',
           classroomId,
-          payload: { code: 'UNAUTHORIZED', message: `Authentication failed: User ${requestedUserId} does not exist.` },
+          payload: { code: 'UNAUTHORIZED', message: 'Authentication required. Missing or invalid credentials.' },
           timestamp: Date.now(),
         }));
-        ws.close(4401, 'Unauthorized: User not found');
+        ws.close(4401, 'Unauthorized: Missing or invalid credentials');
         return;
       }
 
-      // 3. Authoritatively determine user role and validate classroom membership
-      let authoritativeRole: 'teacher' | 'student' | 'admin' = 'student';
-      let isAuthorized = false;
-
-      if (user.role === 'admin') {
-        authoritativeRole = 'admin';
-        isAuthorized = true;
-      } else if (classroom.teacherId === user.id) {
-        authoritativeRole = 'teacher';
-        isAuthorized = true;
-      } else {
-        const membership = classroomDb.getMember(classroomId, user.id);
-        if (membership && membership.status === 'active') {
-          authoritativeRole = membership.role === 'teacher' ? 'teacher' : 'student';
-          isAuthorized = true;
-        }
-      }
-
-      if (!isAuthorized) {
-        console.warn(`[Security Alert] Access Denied: User ${user.id} (${user.name}) is not enrolled in classroom ${classroomId}`);
+      // 3. Server-Side Classroom Membership & Role Verification
+      const membership = ClassroomAuth.verifyClassroomMembership(user, classroomId);
+      if (!membership.authorized) {
+        const isNotFound = membership.error?.toLowerCase().includes('not found');
+        const code = isNotFound ? 'NOT_FOUND' : 'FORBIDDEN';
+        const closeCode = isNotFound ? 4404 : 4403;
+        console.warn(`[Security Alert] Access Denied: User ${user.id} (${user.name}) is not authorized for classroom ${classroomId}. ${membership.error}`);
         ws.send(serializeRealtimeMessage({
           type: 'error',
           classroomId,
-          payload: { code: 'FORBIDDEN', message: `Access denied. You are not enrolled in classroom ${classroomId}.` },
+          payload: { code, message: membership.error || `Access denied. You are not enrolled in classroom ${classroomId}.` },
           timestamp: Date.now(),
         }));
-        ws.close(4403, 'Forbidden: Not enrolled in classroom');
+        ws.close(closeCode, membership.error || 'Forbidden: Not enrolled in classroom');
         return;
       }
+
+      const authoritativeRole = membership.role!;
 
       const clientMeta: ClientMeta = {
         ws,
@@ -230,7 +214,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
         classroomId,
         participantId: user.id,
         participantName: user.name,
-        participantRole: authoritativeRole,
+        participantRole: authoritativeRole, // Strictly from server-derived membership
         isAlive: true,
       };
 
@@ -413,6 +397,16 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
       const since = typeof msg.payload?.sinceSequence === 'number' ? msg.payload.sinceSequence : (msg.sequence || 0);
       const missed = realtimeCoordinator.getMissedEvents(normRoom, since);
 
+      const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
+      const filteredMissed = missed.filter((e) => {
+        if (e.type === 'message.created' && e.payload?.message?.recipientType === 'direct') {
+          const dmSender = e.payload.message.senderId || e.actorId;
+          const dmRecipient = e.payload.message.recipientId;
+          return isInstructor || dmSender === client.participantId || dmRecipient === client.participantId;
+        }
+        return true;
+      });
+
       // Check if client sequence is older than available ring-buffer / event retention
       const isBufferOverflow = since > 0 && currentSeq - since > 500;
 
@@ -421,7 +415,13 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         const announcements = classroomDb.listAnnouncements(normRoom);
         const assignments = classroomDb.listAssignments(normRoom);
         const members = classroomDb.listMembers(normRoom);
-        const recentMessages = classroomDb.listMessages(normRoom, 50);
+        const allMessages = classroomDb.listMessages(normRoom, 50);
+        const filteredMessages = allMessages.filter((m) => {
+          if (m.recipientType === 'direct') {
+            return isInstructor || m.senderId === client.participantId || m.recipientId === client.participantId;
+          }
+          return true;
+        });
 
         client.ws.send(
           serializeRealtimeMessage({
@@ -432,7 +432,7 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
               isFullSnapshot: true,
               currentSequence: Math.max(0, currentSeq),
               sinceSequence: since,
-              events: missed,
+              events: filteredMissed,
               snapshot: {
                 announcements,
                 assignments,
@@ -442,7 +442,7 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
                   role: m.role,
                   isOnline: m.isOnline,
                 })),
-                recentMessages,
+                recentMessages: filteredMessages,
               },
             },
             timestamp: Date.now(),
@@ -456,7 +456,7 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
             sequence: Math.max(0, currentSeq),
             payload: {
               isFullSnapshot: false,
-              events: missed,
+              events: filteredMissed,
               sinceSequence: since,
             },
             timestamp: Date.now(),
@@ -483,8 +483,19 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         'rollcall.closed',
         'session.started',
         'session.ended',
+        'session.created',
+        'session.updated',
         'session.recording.started',
         'session.recording.stopped',
+        'teacher.code.snapshot',
+        'teacher.code.changed',
+        'teacher.file.created',
+        'teacher.file.updated',
+        'teacher.file.deleted',
+        'teacher.cursor.updated',
+        'teacher.output.created',
+        'question.answered',
+        'question.pinned',
       ]);
 
       const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
@@ -502,6 +513,43 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
           })
         );
         return;
+      }
+
+      // Overwrite actor identity authoritatively
+      eventData.actorId = client.participantId;
+      eventData.actorName = client.participantName;
+
+      // Prevent payload spoofing
+      if (eventData.payload && typeof eventData.payload === 'object') {
+        if (eventData.payload.userId && eventData.payload.userId !== client.participantId) {
+          console.warn(`[Security Alert] Overwriting spoofed payload.userId ${eventData.payload.userId} with ${client.participantId}`);
+          eventData.payload.userId = client.participantId;
+        }
+        if (eventData.payload.actorId && eventData.payload.actorId !== client.participantId) {
+          eventData.payload.actorId = client.participantId;
+        }
+        if (eventData.payload.senderId && eventData.payload.senderId !== client.participantId) {
+          eventData.payload.senderId = client.participantId;
+        }
+
+        if (eventData.type === 'message.created' && eventData.payload.message) {
+          eventData.payload.message.senderId = client.participantId;
+          eventData.payload.message.senderName = client.participantName;
+          eventData.payload.message.senderRole = client.participantRole;
+          if (eventData.payload.message.recipientType === 'direct') {
+            if (!eventData.payload.message.recipientId) {
+              client.ws.send(
+                serializeRealtimeMessage({
+                  type: 'error',
+                  classroomId: normRoom,
+                  payload: { code: 'INVALID_DM', message: 'Direct message requires a recipientId' },
+                  timestamp: Date.now(),
+                })
+              );
+              return;
+            }
+          }
+        }
       }
 
       const recorded = realtimeCoordinator.handleIncomingClientEvent(

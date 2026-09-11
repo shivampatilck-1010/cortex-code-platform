@@ -246,6 +246,13 @@ export default function ClassroomLivePage() {
       return resolvedRoom;
     });
 
+    // Authoritative Server-Derived Role Synchronization
+    if (myId && newRoom.participants && newRoom.participants[myId]?.role) {
+      const serverRole = newRoom.participants[myId].role;
+      setParticipantRole(serverRole);
+      setTabSession('role', serverRole);
+    }
+
     // 1. Maintain Workspaces Slots without background clobbering:
     let resolvedSlotA: string | undefined = undefined;
     setSlotAUserId((prevA) => {

@@ -8,7 +8,6 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  allowedDevOrigins: ['*.run.app', 'localhost:3000', 'localhost:8080'],
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,

@@ -316,7 +316,9 @@ export interface ClassroomAnalytics {
   totalStudents: number;
   activeToday: number;
   classAverageScore: number;
+  averageScore?: number;
   submissionRate: number;
+  completionRate?: number;
   assignmentsCount: number;
   pendingGrading?: number;
   commonFailureStates?: Record<string, number>;

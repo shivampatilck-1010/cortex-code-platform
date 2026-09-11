@@ -32,7 +32,7 @@ export default function GradebookPage() {
   const handleExportCSV = () => {
     if (!data) return;
     const headers = ['Student Name', 'Email', ...data.assignments.map(a => a.title)];
-    const csvRows = [];
+    const csvRows: string[] = [];
     csvRows.push(headers.join(','));
 
     for (const row of data.rows) {
