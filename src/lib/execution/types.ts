@@ -28,8 +28,28 @@ export interface DiagnosticError {
   source?: string;
 }
 
+export type ExecutionMode = 'cloud' | 'docker' | 'development';
+
+export interface SecurityViolation {
+  code: string;
+  message: string;
+  field?: string;
+  target?: string;
+}
+
+export interface ExecutionLimits {
+  maxCpuTimeSec: number;
+  maxWallTimeSec: number;
+  maxMemoryMb: number;
+  maxProcesses: number;
+  maxFileSizeBytes: number;
+  maxProjectSizeBytes: number;
+  maxFileCount: number;
+  maxOutputSizeBytes: number;
+}
+
 export interface ExecutionResult {
-  status: 'success' | 'compilation_error' | 'runtime_error' | 'timeout' | 'memory_limit_exceeded';
+  status: 'success' | 'compilation_error' | 'runtime_error' | 'timeout' | 'memory_limit_exceeded' | 'system_error';
   exitCode: number;
   stdout: string;
   stderr: string;
@@ -39,6 +59,7 @@ export interface ExecutionResult {
   diagnostics?: DiagnosticError[];
   timestamp: string;
   provider: 'cloud_sandbox' | 'local_worker' | 'docker_isolated';
+  securityViolation?: SecurityViolation;
 }
 
 export interface TestCase {

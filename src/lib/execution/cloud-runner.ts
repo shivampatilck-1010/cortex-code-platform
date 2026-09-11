@@ -1,6 +1,7 @@
 import { ExecutionRequest, ExecutionResult, DiagnosticError } from './types';
 import { getLanguageConfig } from '@/config/languages';
 import { parseDiagnostics } from './diagnostics-parser';
+import { EXECUTION_LIMITS, getJudge0Config, SAFE_SYSTEM_ERROR_MESSAGE } from './config';
 
 export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
   python: 100,      // Python 3.12.5
@@ -105,32 +106,38 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
   const languageId = JUDGE0_LANGUAGE_IDS[langConfig.id] || JUDGE0_LANGUAGE_IDS['python'];
 
   const sourceCode = prepareSourceCode(req);
-  const timeLimit = Math.min(10, Math.max(1, Math.ceil((req.runTimeoutMs || langConfig.timeoutSec * 1000) / 1000)));
+  const requestedTimeoutSec = Math.ceil((req.runTimeoutMs || langConfig.timeoutSec * 1000) / 1000);
+  const cpuTimeLimit = Math.min(EXECUTION_LIMITS.maxCpuTimeSec, Math.max(1, requestedTimeoutSec));
+  const wallTimeLimit = Math.min(EXECUTION_LIMITS.maxWallTimeSec, Math.max(2, cpuTimeLimit * 2));
+
+  const { apiUrl, headers } = getJudge0Config();
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const abortTimeout = setTimeout(() => controller.abort(), (wallTimeLimit + 5) * 1000);
 
-    const response = await fetch('https://ce.judge0.com/submissions?wait=true', {
+    const response = await fetch(`${apiUrl}/submissions?wait=true`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         source_code: sourceCode,
         language_id: languageId,
         stdin: req.stdin || '',
-        cpu_time_limit: timeLimit,
-        wall_time_limit: timeLimit * 2,
+        cpu_time_limit: cpuTimeLimit,
+        wall_time_limit: wallTimeLimit,
+        memory_limit: (req.memoryLimitMb || EXECUTION_LIMITS.maxMemoryMb) * 1024, // in KB
+        max_processes_and_or_threads: EXECUTION_LIMITS.maxProcesses,
+        enable_network: false, // Strict network isolation
       }),
       signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
+    clearTimeout(abortTimeout);
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`Cloud runner returned HTTP ${response.status}: ${errText}`);
+      console.error(`[Judge0 Cloud Runner Error] HTTP ${response.status}: ${errText}`);
+      throw new Error(SAFE_SYSTEM_ERROR_MESSAGE);
     }
 
     const data = await response.json();
@@ -157,11 +164,20 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
       exitCode = 1;
     }
 
-    const stdout = data.stdout || '';
-    const stderr = data.stderr || (status === 'compilation_error' ? data.compile_output || '' : '');
+    let stdout = data.stdout || '';
+    let stderr = data.stderr || (status === 'compilation_error' ? data.compile_output || '' : '');
     const compileOutput = data.compile_output || '';
     const executionTimeMs = data.time ? Math.round(parseFloat(data.time) * 1000) : elapsedMs;
     const memoryUsageMb = data.memory ? Math.max(1, Math.round(data.memory / 1024)) : 16;
+
+    // Enforce output size limit to prevent memory exhaustion
+    if (stdout.length > EXECUTION_LIMITS.maxOutputSizeBytes) {
+      stdout = stdout.slice(0, EXECUTION_LIMITS.maxOutputSizeBytes) + '\n[Output truncated: exceeded maximum output limit]';
+    }
+    if (stderr.length > EXECUTION_LIMITS.maxOutputSizeBytes) {
+      stderr = stderr.slice(0, EXECUTION_LIMITS.maxOutputSizeBytes) + '\n[Output truncated: exceeded maximum output limit]';
+    }
+
     const diagnostics = parseDiagnostics(stderr || compileOutput, langConfig.id);
 
     return {
@@ -178,11 +194,13 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
     };
   } catch (err: any) {
     const elapsedMs = Date.now() - startTime;
+    console.error('[Judge0 Execution Exception]', err.message || err);
+
     return {
-      status: 'runtime_error',
+      status: 'system_error',
       exitCode: 1,
       stdout: '',
-      stderr: `Cloud execution error: ${err.message || String(err)}`,
+      stderr: SAFE_SYSTEM_ERROR_MESSAGE,
       executionTimeMs: elapsedMs,
       memoryUsageMb: 0,
       diagnostics: [],

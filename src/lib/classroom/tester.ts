@@ -2,6 +2,7 @@ import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 import { ExecutionRequest, ExecutionResult } from '@/lib/execution/types';
 import { getLanguageConfig } from '@/config/languages';
 import { TestCase, SubmissionTestCaseResult } from './models';
+import { getExecutionMode } from '@/lib/execution/config';
 
 export interface TestOutcome {
   passed: number;
@@ -22,6 +23,34 @@ export async function runAssignmentTestCases(
   let earnedScore = 0;
   let passedCount = 0;
 
+  const mode = getExecutionMode();
+
+  async function executeCode(execReq: ExecutionRequest): Promise<ExecutionResult> {
+    if (mode === 'docker') {
+      try {
+        const { executeInDockerSandbox } = await import('@/lib/execution/docker-sandbox');
+        return await executeInDockerSandbox(execReq);
+      } catch {
+        // Fallback to cloud runner
+      }
+    }
+
+    let execRes = await executeInCloudRunner(execReq);
+
+    // Development-only fallback: only allowed in local non-production environments
+    if (execRes.status === 'system_error' && mode === 'development' && process.env.NODE_ENV !== 'production') {
+      try {
+        const { executeInLocalSandbox } = await import('@/lib/execution/local-sandbox');
+        const localRes = await executeInLocalSandbox(execReq);
+        if (localRes) execRes = localRes;
+      } catch {
+        // ignore
+      }
+    }
+
+    return execRes;
+  }
+
   if (!testCases || testCases.length === 0) {
     // Single smoke execution test
     const execReq: ExecutionRequest = {
@@ -40,7 +69,7 @@ export async function runAssignmentTestCases(
       entrypoint: langConfig.defaultFileName,
     };
 
-    const res = await executeInCloudRunner(execReq);
+    const res = await executeCode(execReq);
     const passed = res.status === 'success' && res.exitCode === 0;
 
     return {
@@ -87,28 +116,17 @@ export async function runAssignmentTestCases(
 
     let execRes: ExecutionResult;
     try {
-      execRes = await executeInCloudRunner(execReq);
-
-      // Fallback to local sandbox if cloud runner failed with network error
-      if (execRes.status === 'runtime_error' && execRes.stderr.includes('Cloud execution error')) {
-        try {
-          const { executeInLocalSandbox } = await import('@/lib/execution/local-sandbox');
-          const localRes = await executeInLocalSandbox(execReq);
-          if (localRes) execRes = localRes;
-        } catch {
-          // ignore
-        }
-      }
+      execRes = await executeCode(execReq);
     } catch (err: any) {
       execRes = {
         status: 'runtime_error',
         stdout: '',
-        stderr: err?.message || 'Execution error',
+        stderr: 'Execution error occurred',
         exitCode: 1,
         executionTimeMs: 0,
         memoryUsageMb: 0,
         timestamp: new Date().toISOString(),
-        provider: 'local_worker',
+        provider: 'cloud_sandbox',
       };
     }
 
@@ -120,7 +138,7 @@ export async function runAssignmentTestCases(
 
     if (execRes.status === 'timeout') {
       status = 'timeout';
-    } else if (execRes.status === 'compilation_error' || execRes.status === 'runtime_error' || execRes.status === 'memory_limit_exceeded') {
+    } else if (execRes.status === 'compilation_error' || execRes.status === 'runtime_error' || execRes.status === 'memory_limit_exceeded' || execRes.status === 'system_error') {
       status = 'error';
     } else if (normActual === normExpected) {
       isMatch = true;
@@ -129,14 +147,17 @@ export async function runAssignmentTestCases(
       earnedScore += tc.weight;
     }
 
+    // STRICT HIDDEN TEST PRIVACY:
+    // When visibility === 'hidden', input, expectedOutput, and actualOutput are NEVER exposed.
+    const isPublic = tc.visibility === 'public';
     results.push({
       testCaseId: tc.id,
       status,
       visibility: tc.visibility,
-      input: tc.visibility === 'public' ? tc.input : undefined,
-      expectedOutput: tc.visibility === 'public' ? tc.expectedOutput : undefined,
-      actualOutput: tc.visibility === 'public' ? execRes.stdout : undefined,
-      error: tc.visibility === 'public' ? (execRes.stderr || undefined) : (execRes.stderr ? 'Hidden test execution error' : undefined),
+      input: isPublic ? tc.input : undefined,
+      expectedOutput: isPublic ? tc.expectedOutput : undefined,
+      actualOutput: isPublic ? execRes.stdout : undefined,
+      error: isPublic ? (execRes.stderr || undefined) : (isMatch ? undefined : 'Hidden test evaluation failed'),
       executionTimeMs: execRes.executionTimeMs || 40,
       memoryUsageMb: execRes.memoryUsageMb || 14,
       score: isMatch ? tc.weight : 0,
@@ -161,7 +182,6 @@ export function calculateCodeSimilarity(code1: string, code2: string): number {
   if (code1.trim() === code2.trim()) return 100;
 
   const tokenize = (s: string): string[] => {
-    // Strip comments, quotes, and tokenize keywords/identifiers
     const stripped = s
       .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
       .replace(/#.*/g, '')

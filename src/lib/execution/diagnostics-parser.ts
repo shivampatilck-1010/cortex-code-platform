@@ -4,28 +4,36 @@ export function parseDiagnostics(stderr: string, langId: string): DiagnosticErro
   const diagnostics: DiagnosticError[] = [];
   if (!stderr) return diagnostics;
 
-  const lines = stderr.split('\n');
+  // Security guard: Cap parsing window to 64 KB and max 200 lines to prevent ReDoS on massive outputs
+  const safeSnippet = stderr.length > 65536 ? stderr.slice(0, 65536) : stderr;
+  const lines = safeSnippet.split('\n');
+  const maxLines = Math.min(lines.length, 200);
 
-  for (const line of lines) {
+  for (let i = 0; i < maxLines; i++) {
+    const line = lines[i];
+    // Skip excessively long lines (compiler/interpreter errors are short single lines)
+    if (!line || line.length > 600) continue;
+
     // GCC / Clang format: filename:line:col: error: message
-    const gccMatch = line.match(/(?:.+?):(\d+):(?:(\d+):)?\s*(error|warning|fatal error):\s*(.+)/i);
+    // Use [^:\r\n]+ instead of .+? to prevent backtracking
+    const gccMatch = line.match(/^([^:\r\n]+):(\d+):(?:(\d+):)?\s*(error|warning|fatal error):\s*(.+)/i);
     if (gccMatch) {
       diagnostics.push({
-        line: parseInt(gccMatch[1], 10),
-        column: gccMatch[2] ? parseInt(gccMatch[2], 10) : undefined,
-        severity: gccMatch[3].toLowerCase().includes('error') ? 'error' : 'warning',
-        message: gccMatch[4].trim(),
+        line: parseInt(gccMatch[2], 10),
+        column: gccMatch[3] ? parseInt(gccMatch[3], 10) : undefined,
+        severity: gccMatch[4].toLowerCase().includes('error') ? 'error' : 'warning',
+        message: gccMatch[5].trim(),
       });
       continue;
     }
 
     // Python Traceback format: File "...", line 12, in <module>
-    const pyMatch = line.match(/File ".*?", line (\d+)(?:, in (.*))?/);
+    const pyMatch = line.match(/File "([^"\r\n]+)", line (\d+)(?:, in (.+))?/);
     if (pyMatch) {
-      const lineNum = parseInt(pyMatch[1], 10);
-      // Look ahead for the actual exception message (e.g. NameError: ..., SyntaxError: ...)
+      const lineNum = parseInt(pyMatch[2], 10);
       let errMsg = line.trim();
-      for (let j = lines.indexOf(line) + 1; j < lines.length; j++) {
+      const lookaheadLimit = Math.min(lines.length, i + 10);
+      for (let j = i + 1; j < lookaheadLimit; j++) {
         const nextLine = lines[j].trim();
         if (nextLine && /^[A-Z]\w*(?:Error|Exception|Warning):/.test(nextLine)) {
           errMsg = nextLine;
@@ -41,22 +49,22 @@ export function parseDiagnostics(stderr: string, langId: string): DiagnosticErro
     }
 
     // Java format: Main.java:14: error: ';' expected
-    const javaMatch = line.match(/(?:.+?\.java):(\d+):\s*(error|warning):\s*(.+)/i);
+    const javaMatch = line.match(/^([^:\r\n]+\.java):(\d+):\s*(error|warning):\s*(.+)/i);
     if (javaMatch) {
       diagnostics.push({
-        line: parseInt(javaMatch[1], 10),
-        severity: javaMatch[2].toLowerCase() === 'error' ? 'error' : 'warning',
-        message: javaMatch[3].trim(),
+        line: parseInt(javaMatch[2], 10),
+        severity: javaMatch[3].toLowerCase() === 'error' ? 'error' : 'warning',
+        message: javaMatch[4].trim(),
       });
       continue;
     }
 
     // Rust format: --> main.rs:12:5
-    const rustMatch = line.match(/--> (?:.+?):(\d+):(\d+)/);
+    const rustMatch = line.match(/--> ([^:\r\n]+):(\d+):(\d+)/);
     if (rustMatch) {
       diagnostics.push({
-        line: parseInt(rustMatch[1], 10),
-        column: parseInt(rustMatch[2], 10),
+        line: parseInt(rustMatch[2], 10),
+        column: parseInt(rustMatch[3], 10),
         severity: 'error',
         message: line.trim(),
       });
@@ -64,11 +72,11 @@ export function parseDiagnostics(stderr: string, langId: string): DiagnosticErro
     }
 
     // Node.js error: at main.js:15:9
-    const nodeMatch = line.match(/at (?:.+?):(\d+):(\d+)/);
+    const nodeMatch = line.match(/at ([^:\r\n]+):(\d+):(\d+)/);
     if (nodeMatch) {
       diagnostics.push({
-        line: parseInt(nodeMatch[1], 10),
-        column: parseInt(nodeMatch[2], 10),
+        line: parseInt(nodeMatch[2], 10),
+        column: parseInt(nodeMatch[3], 10),
         severity: 'error',
         message: line.trim(),
       });
