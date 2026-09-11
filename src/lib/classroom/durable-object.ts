@@ -410,10 +410,15 @@ export class ClassroomRoomDO {
         const missedEvents = this.eventLog.filter((e) => {
           if (e.sequence <= since) return false;
           // Privacy Filter: students must never receive private direct messages of other students
-          if (e.type === 'message.created' && e.payload?.message?.recipientType === 'direct') {
+          if (e.type === 'message.created' && (e.payload?.message?.recipientType === 'direct' || e.payload?.message?.recipientType === 'teacher')) {
             const dmSender = e.payload?.message?.senderId || e.actorId;
             const dmRecipient = e.payload?.message?.recipientId;
             return isInstructor || dmSender === meta.auth.userId || dmRecipient === meta.auth.userId;
+          }
+          // Privacy Filter: students must never receive grades of other students
+          if (e.type === 'grade.updated' || e.type === 'submission.graded') {
+            const gradeStudentId = e.payload?.submission?.studentId || e.payload?.studentId;
+            return isInstructor || gradeStudentId === meta.auth.userId;
           }
           return true;
         });
@@ -634,9 +639,12 @@ export class ClassroomRoomDO {
   }
 
   broadcastEvent(event: ClassroomRealtimeEvent) {
-    const isDirectMessage = event.type === 'message.created' && event.payload?.message?.recipientType === 'direct';
+    const isDirectMessage = event.type === 'message.created' && (event.payload?.message?.recipientType === 'direct' || event.payload?.message?.recipientType === 'teacher');
     const recipientId = event.payload?.message?.recipientId;
     const senderId = event.payload?.message?.senderId;
+
+    const isGradeEvent = event.type === 'grade.updated' || event.type === 'submission.graded';
+    const gradeStudentId = event.payload?.submission?.studentId || event.payload?.studentId;
 
     const raw = serializeRealtimeMessage({
       type: 'event',
@@ -655,6 +663,13 @@ export class ClassroomRoomDO {
           const isSender = session.auth.userId === senderId;
           const isInstructor = session.auth.role === 'teacher' || session.auth.role === 'admin';
           if (!isRecipient && !isSender && !isInstructor) {
+            return;
+          }
+        }
+        if (isGradeEvent) {
+          const isTargetStudent = session.auth.userId === gradeStudentId;
+          const isInstructor = session.auth.role === 'teacher' || session.auth.role === 'admin';
+          if (!isTargetStudent && !isInstructor) {
             return;
           }
         }

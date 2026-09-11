@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ProjectFile } from '@/lib/execution/types';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
+import { validateAndSanitizePath } from '@/lib/execution/path-sanitizer';
+import { executionRateLimiter } from '@/lib/execution/rate-limiter';
 
 export async function POST(req: NextRequest) {
   try {
@@ -76,7 +78,11 @@ export async function POST(req: NextRequest) {
     // Handle 'cat <filename>'
     if (trimmedCmd.startsWith('cat ')) {
       const targetName = trimmedCmd.replace(/^cat\s+/, '').trim();
-      const found = currentFiles.find((f) => !f.isFolder && (f.name === targetName || f.path === `/${targetName}`));
+      const pathCheck = validateAndSanitizePath(targetName);
+      if (!pathCheck.valid) {
+        return NextResponse.json({ stdout: '', stderr: `cat: ${pathCheck.error}\n`, exitCode: 1 });
+      }
+      const found = currentFiles.find((f) => !f.isFolder && (f.name === targetName || f.path === `/${targetName}` || f.path === `/${pathCheck.sanitizedPath}`));
       if (found) {
         return NextResponse.json({ stdout: `${found.content || ''}\n`, stderr: '', exitCode: 0 });
       } else {
@@ -93,11 +99,16 @@ export async function POST(req: NextRequest) {
     // Handle 'touch <filename>'
     if (trimmedCmd.startsWith('touch ')) {
       const filename = trimmedCmd.replace(/^touch\s+/, '').trim();
-      if (!currentFiles.some((f) => f.name === filename)) {
+      const pathCheck = validateAndSanitizePath(filename);
+      if (!pathCheck.valid) {
+        return NextResponse.json({ stdout: '', stderr: `touch: ${pathCheck.error}\n`, exitCode: 1 });
+      }
+      const safeName = pathCheck.sanitizedPath!;
+      if (!currentFiles.some((f) => f.name === safeName || f.path === `/${safeName}`)) {
         currentFiles.push({
           id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          name: filename,
-          path: `/${filename}`,
+          name: safeName,
+          path: `/${safeName}`,
           content: '',
           isFolder: false,
         });
@@ -109,11 +120,16 @@ export async function POST(req: NextRequest) {
     // Handle 'mkdir [-p] <dirname>'
     if (trimmedCmd.startsWith('mkdir ')) {
       const dirname = trimmedCmd.replace(/^mkdir\s+(-p\s+)?/, '').trim();
-      if (!currentFiles.some((f) => f.name === dirname)) {
+      const pathCheck = validateAndSanitizePath(dirname);
+      if (!pathCheck.valid) {
+        return NextResponse.json({ stdout: '', stderr: `mkdir: ${pathCheck.error}\n`, exitCode: 1 });
+      }
+      const safeDir = pathCheck.sanitizedPath!;
+      if (!currentFiles.some((f) => f.name === safeDir || f.path === `/${safeDir}`)) {
         currentFiles.push({
           id: `d_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          name: dirname,
-          path: `/${dirname}`,
+          name: safeDir,
+          path: `/${safeDir}`,
           content: '',
           isFolder: true,
         });
@@ -125,7 +141,12 @@ export async function POST(req: NextRequest) {
     // Handle 'rm [-rf] <target>'
     if (trimmedCmd.startsWith('rm ')) {
       const target = trimmedCmd.replace(/^rm\s+(-[rf]+\s+)?/, '').trim();
-      const updated = currentFiles.filter((f) => f.name !== target && f.path !== `/${target}` && !f.path?.startsWith(`/${target}/`));
+      const pathCheck = validateAndSanitizePath(target);
+      if (!pathCheck.valid) {
+        return NextResponse.json({ stdout: '', stderr: `rm: ${pathCheck.error}\n`, exitCode: 1 });
+      }
+      const safeTarget = pathCheck.sanitizedPath!;
+      const updated = currentFiles.filter((f) => f.name !== safeTarget && f.path !== `/${safeTarget}` && !f.path?.startsWith(`/${safeTarget}/`));
       syncFiles = updated;
       return NextResponse.json({ stdout: '', stderr: '', exitCode: 0, files: syncFiles });
     }
@@ -150,6 +171,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (targetFile) {
+      const clientIp = req.headers.get('x-forwarded-for') || '127.0.0.1';
+      const rateLimit = executionRateLimiter.checkRateLimit(clientIp);
+      if (!rateLimit.allowed) {
+        return NextResponse.json({
+          stdout: '',
+          stderr: 'cortex: execution rate limit exceeded. Please wait a moment before running again.\n',
+          exitCode: 129,
+        }, { status: 429 });
+      }
+
       if (targetFile.endsWith('.py')) runLang = 'python';
       else if (targetFile.endsWith('.js')) runLang = 'javascript';
       else if (targetFile.endsWith('.ts')) runLang = 'typescript';

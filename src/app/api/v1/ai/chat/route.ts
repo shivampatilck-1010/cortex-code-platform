@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { aiRateLimiter } from '@/lib/execution/rate-limiter';
 
+// Server-only key fallback; NEXT_PUBLIC_ is deliberately omitted to prevent bundle leakage
 const FALLBACK_KEY =
   process.env.GEMINI_API_KEY ||
   process.env.GOOGLE_API_KEY ||
-  process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
   '';
-
 
 // Fast model priority list: gemini-3.7-flash (sub-second) -> gemini-flash-latest -> gemini-3.8-flash -> gemini-3.5-flash
 const CANDIDATE_MODELS = [
@@ -18,13 +18,29 @@ const CANDIDATE_MODELS = [
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+    const rateCheck = aiRateLimiter.checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'AI request rate limit exceeded. Please wait a few seconds before trying again.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rateCheck.resetMs / 1000)) } }
+      );
+    }
+
     const body = await req.json();
-    const { userMessage, code, language, apiKey } = body as {
+    const { userMessage = '', code = '', language = 'javascript', apiKey } = body as {
       userMessage: string;
       code: string;
       language: string;
       apiKey?: string;
     };
+
+    if (userMessage.length > 16384) {
+      return NextResponse.json({ error: 'User message exceeds maximum length of 16KB.' }, { status: 413 });
+    }
+    if (code.length > 65536) {
+      return NextResponse.json({ error: 'Code context exceeds maximum length of 64KB.' }, { status: 413 });
+    }
 
     const key = apiKey || FALLBACK_KEY;
     if (!key) {

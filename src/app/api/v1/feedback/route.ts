@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveFeedback, getAllFeedback, FeedbackDiagnostics } from '@/lib/feedback/feedback-service';
+import { ClassroomAuth } from '@/lib/classroom/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -55,8 +56,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = ClassroomAuth.verifyAccess(req, undefined, 'admin');
+    if (!auth.authorized) {
+      const status = auth.error?.includes('Authentication required') ? 401 : 403;
+      return NextResponse.json({ error: auth.error || 'Administrator privileges required.' }, { status });
+    }
+
     const all = getAllFeedback();
     return NextResponse.json({
       success: true,

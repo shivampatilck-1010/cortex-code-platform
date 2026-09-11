@@ -3,6 +3,7 @@ import { diffLines } from 'diff';
 import { analyzeAndFixErrorOffline, AIFixResult } from '@/lib/ai/assistant';
 import { getLanguageConfig } from '@/config/languages';
 import { DiagnosticError } from '@/lib/execution/types';
+import { aiRateLimiter } from '@/lib/execution/rate-limiter';
 
 interface AutoFixRequestBody {
   code: string;
@@ -53,8 +54,17 @@ function parseGeminiJson(rawText: string): any {
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+    const rateCheck = aiRateLimiter.checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'AI request rate limit exceeded. Please wait a few seconds before trying again.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rateCheck.resetMs / 1000)) } }
+      );
+    }
+
     const body = (await req.json()) as AutoFixRequestBody;
-    const { code, stderr = '', languageId = 'python', diagnostics = [], apiKey } = body;
+    const { code = '', stderr = '', languageId = 'python', diagnostics = [], apiKey } = body;
 
     if (!code) {
       return NextResponse.json(
@@ -63,11 +73,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (code.length > 65536) {
+      return NextResponse.json({ error: 'Source code exceeds maximum length of 64KB.' }, { status: 413 });
+    }
+    if (stderr.length > 16384) {
+      return NextResponse.json({ error: 'Stderr exceeds maximum length of 16KB.' }, { status: 413 });
+    }
+
     const resolvedApiKey =
       apiKey ||
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
       '';
 
     const langConfig = getLanguageConfig(languageId);

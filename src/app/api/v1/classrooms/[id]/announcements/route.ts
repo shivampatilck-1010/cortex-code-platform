@@ -10,6 +10,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const auth = ClassroomAuth.verifyAccess(req, id);
+    if (!auth.authorized) {
+      const status = auth.error?.includes('Authentication required') ? 401 : 403;
+      return NextResponse.json({ error: auth.error || 'Access denied' }, { status });
+    }
+
     const announcements = classroomDb.listAnnouncements(id);
     return NextResponse.json({ announcements });
   } catch (err: any) {
@@ -23,12 +29,12 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
     const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
-
     if (!auth.authorized) {
-      return NextResponse.json({ error: auth.error || 'Only teachers can post announcements.' }, { status: 403 });
+      const status = auth.error?.includes('Authentication required') ? 401 : 403;
+      return NextResponse.json({ error: auth.error || 'Only teachers can post announcements.' }, { status });
     }
+    const user = auth.context!.user;
 
     const body = await req.json();
     const { title, content, isPinned, pinned } = body;

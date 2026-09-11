@@ -9,6 +9,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const auth = ClassroomAuth.verifyAccess(req, id);
+    if (!auth.authorized) {
+      const status = auth.error?.includes('Authentication required') ? 401 : 403;
+      return NextResponse.json({ error: auth.error || 'Access denied' }, { status });
+    }
+
     const resources = classroomDb.listResources(id);
     return NextResponse.json({ resources });
   } catch (err: any) {
@@ -26,7 +32,8 @@ export async function POST(
     const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
 
     if (!auth.authorized) {
-      return NextResponse.json({ error: auth.error || 'Teacher privileges required to upload resources.' }, { status: 403 });
+      const status = auth.error?.includes('Authentication required') ? 401 : 403;
+      return NextResponse.json({ error: auth.error || 'Teacher privileges required to upload resources.' }, { status });
     }
 
     const body = await req.json();
@@ -34,6 +41,20 @@ export async function POST(
 
     if (!name || !url) {
       return NextResponse.json({ error: 'Name and URL are required for resources.' }, { status: 400 });
+    }
+
+    const trimmedUrl = String(url).trim();
+    const lowerUrl = trimmedUrl.toLowerCase();
+    if (
+      lowerUrl.startsWith('javascript:') ||
+      lowerUrl.startsWith('data:') ||
+      lowerUrl.startsWith('vbscript:')
+    ) {
+      return NextResponse.json({ error: 'Disallowed URL scheme for resources.' }, { status: 400 });
+    }
+
+    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://') && !trimmedUrl.startsWith('/')) {
+      return NextResponse.json({ error: 'Resource URL must begin with http://, https://, or /' }, { status: 400 });
     }
 
     const resource: ClassroomResource = {

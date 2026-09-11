@@ -24,11 +24,15 @@ export async function GET(
     if (!isTeacher) {
       assignments = assignments.map(a => {
         const sanitizedTestCases = (a.testCases || []).map((tc: any) => {
-          if (tc.visibility === 'hidden') {
+          const isHidden = tc.visibility === 'hidden' || tc.isHidden === true || tc.hidden === true;
+          if (isHidden) {
             return {
               ...tc,
-              input: 'Hidden',
-              expectedOutput: 'Hidden'
+              visibility: 'hidden',
+              isHidden: true,
+              hidden: true,
+              input: '[HIDDEN TEST CASE]',
+              expectedOutput: '[HIDDEN TEST CASE]'
             };
           }
           return tc;

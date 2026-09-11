@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLanguageConfig } from '@/config/languages';
+import { aiRateLimiter } from '@/lib/execution/rate-limiter';
 
 interface SuggestRequestBody {
   prefix: string;
@@ -20,6 +21,15 @@ const CANDIDATE_MODELS = [
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+    const rateCheck = aiRateLimiter.checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'AI request rate limit exceeded. Please wait a few seconds before trying again.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rateCheck.resetMs / 1000)) } }
+      );
+    }
+
     const body = (await req.json()) as SuggestRequestBody;
     const { prefix = '', suffix = '', languageId = 'python', apiKey } = body;
 
@@ -27,11 +37,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ suggestion: '' });
     }
 
+    if (prefix.length > 16384 || suffix.length > 16384) {
+      return NextResponse.json({ error: 'Code context exceeds maximum length of 16KB.' }, { status: 413 });
+    }
+
     const resolvedApiKey =
       apiKey ||
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
       '';
 
 

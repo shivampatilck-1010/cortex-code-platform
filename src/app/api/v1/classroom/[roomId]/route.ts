@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomRoomManager } from '@/lib/classroom/room-manager';
+import { ClassroomAuth } from '@/lib/classroom/auth';
 
 export async function GET(
   req: NextRequest,
@@ -149,6 +150,15 @@ export async function POST(
       case 'update_code': {
         const { code, language, fileName, status } = body;
         const targetId = body.targetUserId || body.participantId || participantId;
+        const authUser = ClassroomAuth.authenticateRequest(req);
+        if (authUser) {
+          const isRoomAdmin = authUser.role === 'admin' || room.admin.id === authUser.id;
+          if (!isRoomAdmin && targetId !== authUser.id) {
+            return NextResponse.json({ error: 'Cannot update another participant\'s code' }, { status: 403 });
+          }
+        } else if (participantId && targetId !== participantId) {
+          return NextResponse.json({ error: 'Cannot update another participant\'s code' }, { status: 403 });
+        }
         ClassroomRoomManager.updateParticipantCode(roomId, targetId, { code, language, fileName, status });
         return NextResponse.json({ success: true });
       }
@@ -244,6 +254,11 @@ export async function POST(
       }
 
       case 'admin_action': {
+        const authUser = ClassroomAuth.authenticateRequest(req);
+        const isAdmin = authUser?.role === 'admin' || (authUser && room.admin.id === authUser.id) || (process.env.NODE_ENV !== 'production' && room.admin.id === participantId);
+        if (!isAdmin) {
+          return NextResponse.json({ error: 'Administrator authorization required' }, { status: 403 });
+        }
         const { adminAction } = body;
         ClassroomRoomManager.adminAction(roomId, participantId, adminAction);
         return NextResponse.json({ success: true });

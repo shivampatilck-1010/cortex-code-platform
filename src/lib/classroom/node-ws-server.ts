@@ -399,10 +399,14 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
 
       const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
       const filteredMissed = missed.filter((e) => {
-        if (e.type === 'message.created' && e.payload?.message?.recipientType === 'direct') {
-          const dmSender = e.payload.message.senderId || e.actorId;
-          const dmRecipient = e.payload.message.recipientId;
+        if (e.type === 'message.created' && (e.payload?.message?.recipientType === 'direct' || e.payload?.message?.recipientType === 'teacher')) {
+          const dmSender = e.payload?.message?.senderId || e.actorId;
+          const dmRecipient = e.payload?.message?.recipientId;
           return isInstructor || dmSender === client.participantId || dmRecipient === client.participantId;
+        }
+        if (e.type === 'grade.updated' || e.type === 'submission.graded') {
+          const gradeStudentId = e.payload?.submission?.studentId || e.payload?.studentId;
+          return isInstructor || gradeStudentId === client.participantId;
         }
         return true;
       });
@@ -413,7 +417,18 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
       if (isBufferOverflow || since === 0) {
         // Authoritative full state snapshot
         const announcements = classroomDb.listAnnouncements(normRoom);
-        const assignments = classroomDb.listAssignments(normRoom);
+        const rawAssignments = classroomDb.listAssignments(normRoom);
+        const assignments = isInstructor
+          ? rawAssignments
+          : rawAssignments.map((a) => ({
+              ...a,
+              testCases: (a.testCases || []).map((tc: any) => {
+                if (tc.visibility === 'hidden' || tc.isHidden === true || tc.hidden === true) {
+                  return { ...tc, visibility: 'hidden', isHidden: true, hidden: true, input: '[HIDDEN]', expectedOutput: '[HIDDEN]' };
+                }
+                return tc;
+              }),
+            }));
         const members = classroomDb.listMembers(normRoom);
         const allMessages = classroomDb.listMessages(normRoom, 50);
         const filteredMessages = allMessages.filter((m) => {

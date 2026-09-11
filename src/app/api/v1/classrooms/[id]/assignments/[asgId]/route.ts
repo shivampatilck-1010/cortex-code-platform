@@ -25,11 +25,15 @@ export async function GET(
     // Filter hidden test cases for students
     if (!isTeacher) {
       assignment.testCases = assignment.testCases.map(tc => {
-        if (tc.visibility === 'hidden') {
+        const isHidden = tc.visibility === 'hidden' || (tc as any).isHidden === true || (tc as any).hidden === true;
+        if (isHidden) {
           return {
             ...tc,
-            input: 'Hidden',
-            expectedOutput: 'Hidden'
+            visibility: 'hidden',
+            isHidden: true,
+            hidden: true,
+            input: '[HIDDEN TEST CASE]',
+            expectedOutput: '[HIDDEN TEST CASE]'
           };
         }
         return tc;
@@ -50,7 +54,8 @@ export async function PATCH(
     const { id, asgId } = await params;
     const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
     if (!auth.authorized) {
-      return NextResponse.json({ error: 'Teacher access required' }, { status: 403 });
+      const status = auth.error?.includes('Authentication required') ? 401 : 403;
+      return NextResponse.json({ error: auth.error || 'Teacher access required' }, { status });
     }
 
     const assignment = classroomDb.getAssignment(asgId);
@@ -59,9 +64,27 @@ export async function PATCH(
     }
 
     const updates = await req.json();
+
+    // Mass assignment prevention: explicit writable field allowlist
+    const allowedFields = [
+      'title', 'description', 'instructions', 'starterCode', 'dueAt',
+      'maxMarks', 'maxScore', 'attemptsAllowed', 'allowLateSubmission',
+      'latePenaltyPercent', 'status', 'testCases', 'rubric', 'type', 'difficulty', 'language'
+    ];
+    const sanitizedUpdates: any = {};
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        sanitizedUpdates[key] = updates[key];
+      }
+    }
+
     const updatedAssignment = {
       ...assignment,
-      ...updates,
+      ...sanitizedUpdates,
+      id: assignment.id, // IMMUTABLE
+      classroomId: assignment.classroomId, // IMMUTABLE
+      createdBy: assignment.createdBy, // IMMUTABLE
+      createdAt: assignment.createdAt, // IMMUTABLE
       updatedAt: Date.now()
     };
 

@@ -31,9 +31,13 @@ export async function GET(
     // Filter hidden test cases for students
     if (!isTeacher && submission.testResults) {
       submission.testResults = submission.testResults.map(tr => {
-        if (tr.visibility === 'hidden') {
+        const isHidden = tr.visibility === 'hidden' || (tr as any).isHidden === true || (tr as any).hidden === true;
+        if (isHidden) {
           return {
             ...tr,
+            visibility: 'hidden',
+            isHidden: true,
+            hidden: true,
             input: 'Hidden',
             expectedOutput: 'Hidden',
             actualOutput: 'Hidden',

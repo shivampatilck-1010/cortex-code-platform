@@ -87,3 +87,4 @@ class ExecutionRateLimiter {
 }
 
 export const executionRateLimiter = new ExecutionRateLimiter(60_000, 20, 3);
+export const aiRateLimiter = new ExecutionRateLimiter(60_000, 20, 2);

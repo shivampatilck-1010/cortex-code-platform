@@ -108,9 +108,12 @@ class RealtimeCoordinator {
       timestamp: event.timestamp,
     });
 
-    const isDirectMessage = type === 'message.created' && payload?.message?.recipientType === 'direct';
+    const isDirectMessage = type === 'message.created' && (payload?.message?.recipientType === 'direct' || payload?.message?.recipientType === 'teacher');
     const recipientId = payload?.message?.recipientId;
     const senderId = payload?.message?.senderId;
+
+    const isGradeEvent = type === 'grade.updated' || type === 'submission.graded';
+    const gradeStudentId = payload?.submission?.studentId || payload?.studentId;
 
     const activeWs = this.wsClients.get(norm);
     if (activeWs && activeWs.size > 0) {
@@ -121,6 +124,15 @@ class RealtimeCoordinator {
           const isSender = ws.userId === senderId;
           const isInstructor = ws.role === 'teacher' || ws.role === 'admin';
           if (!isRecipient && !isSender && !isInstructor) {
+            return;
+          }
+        }
+
+        // Privacy filter for grade events: only target student and instructors receive it
+        if (isGradeEvent) {
+          const isTargetStudent = ws.userId === gradeStudentId;
+          const isInstructor = ws.role === 'teacher' || ws.role === 'admin';
+          if (!isTargetStudent && !isInstructor) {
             return;
           }
         }
@@ -142,6 +154,10 @@ class RealtimeCoordinator {
           const isRecipient = sub.userId === recipientId;
           const isSender = sub.userId === senderId;
           if (!isRecipient && !isSender) return;
+        }
+        if (isGradeEvent) {
+          const isTargetStudent = sub.userId === gradeStudentId;
+          if (!isTargetStudent) return;
         }
         try {
           sub.send(sseSerialized);

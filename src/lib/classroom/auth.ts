@@ -145,7 +145,9 @@ export class ClassroomAuth {
       userId = this.verifyClientToken(token);
     }
 
-    // 2. Check cookies (cortex_token, cortex_session, or cortex_user_id)
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    // 2. Check cookies (signed cortex_token or cortex_session)
     if (!userId) {
       let cookieHeader = '';
       if (typeof req.headers?.get === 'function') {
@@ -154,9 +156,11 @@ export class ClassroomAuth {
         cookieHeader = req.headers.cookie;
       } else if (req.cookies) {
         const tokCookie = typeof req.cookies.get === 'function' ? req.cookies.get('cortex_token')?.value : req.cookies.cortex_token;
-        const uidCookie = typeof req.cookies.get === 'function' ? req.cookies.get('cortex_user_id')?.value : req.cookies.cortex_user_id;
         if (tokCookie) userId = this.verifyClientToken(tokCookie);
-        if (!userId && uidCookie) userId = uidCookie;
+        if (!isProduction && !userId) {
+          const uidCookie = typeof req.cookies.get === 'function' ? req.cookies.get('cortex_user_id')?.value : req.cookies.cortex_user_id;
+          if (uidCookie) userId = uidCookie;
+        }
       }
 
       if (!userId && cookieHeader) {
@@ -170,15 +174,16 @@ export class ClassroomAuth {
           userId = this.verifyClientToken(cookies.cortex_token);
         }
         if (!userId && cookies.cortex_session) {
-          userId = this.verifyClientToken(cookies.cortex_session) || cookies.cortex_session;
+          userId = this.verifyClientToken(cookies.cortex_session);
         }
-        if (!userId && cookies.cortex_user_id) {
+        // In development only, allow unsigned cookie fallback
+        if (!isProduction && !userId && cookies.cortex_user_id) {
           userId = cookies.cortex_user_id;
         }
       }
     }
 
-    // 3. Check query parameters (?token=... or ?userId=... in dev/test)
+    // 3. Check query parameters (?token=... or in dev ?userId=...)
     if (!userId) {
       let urlStr = '';
       if (typeof req.url === 'string') {
@@ -191,20 +196,38 @@ export class ClassroomAuth {
           if (tokenParam) {
             userId = this.verifyClientToken(tokenParam);
           }
-          const userParam = parsedUrl.searchParams.get('userId');
-          if (!userId && userParam && userParam !== 'usr_anonymous') {
-            userId = userParam;
+          // In development only, allow unsigned query parameter
+          if (!isProduction && !userId) {
+            const userParam = parsedUrl.searchParams.get('userId');
+            if (userParam && userParam !== 'usr_anonymous') {
+              userId = userParam;
+            }
           }
         } catch {}
       }
     }
 
-    // 4. Check explicit x-user-id header (for API / internal / dev calls)
+    // 4. Check explicit x-user-id header
+    // In production, x-user-id is ONLY trusted if validated by internal HMAC token
     if (!userId) {
+      let internalAuthHeader = '';
+      let headerUserId = '';
       if (typeof req.headers?.get === 'function') {
-        userId = req.headers.get('x-user-id');
-      } else if (req.headers?.['x-user-id']) {
-        userId = req.headers['x-user-id'];
+        internalAuthHeader = req.headers.get('x-cortex-internal-auth') || '';
+        headerUserId = req.headers.get('x-user-id') || '';
+      } else if (req.headers) {
+        internalAuthHeader = req.headers['x-cortex-internal-auth'] || '';
+        headerUserId = req.headers['x-user-id'] || '';
+      }
+
+      if (internalAuthHeader) {
+        const internalAuth = this.verifyInternalAuthToken(internalAuthHeader);
+        if (internalAuth) {
+          userId = internalAuth.userId;
+        }
+      } else if (!isProduction && headerUserId) {
+        // Allow in development/test only
+        userId = headerUserId;
       }
     }
 
