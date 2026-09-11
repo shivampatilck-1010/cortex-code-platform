@@ -241,7 +241,9 @@ function runProcess(
     let isClosed = false;
 
     // Build isolated environment: ONLY allowlisted variables
-    const safeEnv: NodeJS.ProcessEnv = {};
+    const safeEnv: NodeJS.ProcessEnv = {
+      NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
+    };
     for (const key of ALLOWED_ENV_VARS) {
       if (process.env[key] !== undefined) {
         safeEnv[key] = process.env[key];

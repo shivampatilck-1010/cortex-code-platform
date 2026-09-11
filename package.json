@@ -2,6 +2,7 @@
   "name": "cortex-code-platform",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "bun@1.4.2",
   "scripts": {
     "dev": "node ./scripts/run-dev.mjs",
     "build": "node ./node_modules/next/dist/bin/next build",
