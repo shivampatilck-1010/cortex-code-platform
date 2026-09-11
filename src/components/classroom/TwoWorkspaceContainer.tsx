@@ -425,12 +425,8 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   const isLocked = Boolean(user?.isLocked);
   const canEdit = Boolean(hasAccess && (isSelf || isSharedCollab || isCollaboratingWithUser) && !isLocked);
 
-  // Authoritative document identifier: shared for mutual collaboration session, individual for personal workspace
-  const docId = isSharedCollab && activeSession
-    ? `shared_${activeSession.id}_${user?.activeFileName || 'main.py'}`
-    : user
-    ? `user_${user.id}_${user?.activeFileName || 'main.py'}`
-    : '';
+  // Authoritative document identifier: unique per user workspace file so Workspace A and Workspace B never collide
+  const docId = user ? `user_${user.id}_${user?.activeFileName || 'main.py'}` : '';
 
   const currentKey = user ? `${user.id}:${user.activeFileName || 'main.py'}:${docId}` : '';
 
@@ -464,8 +460,11 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
 
         bindingRef.current = binding;
 
-        // Observe CRDT changes and propagate to local state/parent
-        const handleDocChange = () => {
+        // Observe CRDT changes and propagate to local state/parent (only for local user edits)
+        const handleDocChange = (event: any) => {
+          if (event?.transaction?.origin === 'remote' || event?.transaction?.origin === 'init') {
+            return;
+          }
           const latest = ytext.toString();
           localEmittedCodeRef.current = latest;
           onCodeChange?.(latest);

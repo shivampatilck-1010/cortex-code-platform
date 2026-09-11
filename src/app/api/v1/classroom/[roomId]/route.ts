@@ -190,6 +190,10 @@ export async function POST(
         return NextResponse.json({ success: true, room: syncedRoom || room });
       }
 
+      case 'doc_update':
+      case 'doc_sync_step1':
+      case 'doc_sync_step2':
+      case 'awareness_update':
       case 'cursor_update':
       case 'crdt_sync': {
         ClassroomRoomManager.broadcast(roomId, {

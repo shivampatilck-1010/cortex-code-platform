@@ -3,7 +3,7 @@ import { getLanguageConfig } from '@/config/languages';
 import { parseDiagnostics } from './diagnostics-parser';
 
 export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
-  python: 92,      // Python 3.11.2
+  python: 100,      // Python 3.12.5
   javascript: 102,  // Node.js 22.08.0
   typescript: 101,  // TypeScript 5.6.2
   cpp: 105,         // C++ (GCC 14.1.0)
@@ -16,7 +16,7 @@ export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
   ruby: 72,         // Ruby (2.7.0)
   kotlin: 111,      // Kotlin (2.1.10)
   swift: 83,        // Swift (5.2.3)
-  r: 80,            // R (4.0.0)
+  r: 99,            // R (4.4.1)
   dart: 90,         // Dart (2.19.2)
   sql: 82,          // SQL (SQLite 3.27.2)
 };

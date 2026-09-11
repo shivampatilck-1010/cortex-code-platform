@@ -649,14 +649,12 @@ export default function ClassroomLivePage() {
     );
 
     if (isAuthorizedA) {
-      // 1. Ultra low-latency broadcast via WebSocket
-      collabClientRef.current?.sendCodeUpdate(code, undefined, slotAUserId);
-
-      // 2. Debounce HTTP persistence write by 300ms to eliminate network congestion
+      // Debounce broadcast & HTTP persistence by 300ms to eliminate network congestion while CRDT handles real-time typing
       if (codeSaveTimersRef.current['slotA']) {
         clearTimeout(codeSaveTimersRef.current['slotA']);
       }
       codeSaveTimersRef.current['slotA'] = setTimeout(async () => {
+        collabClientRef.current?.sendCodeUpdate(code, undefined, slotAUserId);
         try {
           await fetch(`/api/v1/classroom/${roomId}`, {
             method: 'POST',
@@ -698,14 +696,12 @@ export default function ClassroomLivePage() {
     );
 
     if (isAuthorizedB) {
-      // 1. Ultra low-latency broadcast via WebSocket
-      collabClientRef.current?.sendCodeUpdate(code, undefined, slotBUserId);
-
-      // 2. Debounce HTTP persistence write by 300ms to eliminate network congestion
+      // Debounce broadcast & HTTP persistence by 300ms to eliminate network congestion while CRDT handles real-time typing
       if (codeSaveTimersRef.current['slotB']) {
         clearTimeout(codeSaveTimersRef.current['slotB']);
       }
       codeSaveTimersRef.current['slotB'] = setTimeout(async () => {
+        collabClientRef.current?.sendCodeUpdate(code, undefined, slotBUserId);
         try {
           await fetch(`/api/v1/classroom/${roomId}`, {
             method: 'POST',

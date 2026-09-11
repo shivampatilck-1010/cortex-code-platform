@@ -25,21 +25,21 @@ export const SUPPORTED_LANGUAGES: LanguageConfig[] = [
   {
     id: 'python',
     name: 'Python',
-    version: '3.12',
+    version: '3.12+',
     aliases: ['py', 'python3'],
     monacoLang: 'python',
     fileExtension: '.py',
     defaultFileName: 'main.py',
-    compiler: 'CPython 3.12',
+    compiler: 'CPython 3.12 (GCC 14)',
     runCommand: 'python3 main.py',
     debuggerSupported: true,
     packageManager: 'pip',
-    pistonRuntime: { language: 'python', version: '3.10.0' },
-    starterCode: `# Universal Online Platform - Python 3.12
+    pistonRuntime: { language: 'python', version: '3.12.5' },
+    starterCode: `# Universal Online Platform - Python 3.12+
 import sys
 
 def main():
-    print("[Cortex] Welcome to Cloud IDE")
+    print("[Cortex] Python 3.12+ Cloud IDE")
     numbers = [1, 2, 3, 4, 5]
     squared = [x**2 for x in numbers]
     print(f"Squares: {squared}")
@@ -54,18 +54,18 @@ if __name__ == '__main__':
   {
     id: 'javascript',
     name: 'JavaScript (Node.js)',
-    version: '20.x',
+    version: '22.x LTS',
     aliases: ['js', 'node'],
     monacoLang: 'javascript',
     fileExtension: '.js',
     defaultFileName: 'index.js',
-    compiler: 'V8 / Node.js 20',
+    compiler: 'V8 / Node.js 22 LTS',
     runCommand: 'node index.js',
     debuggerSupported: true,
     packageManager: 'npm',
-    pistonRuntime: { language: 'javascript', version: '18.15.0' },
-    starterCode: `// Universal Online Platform - JavaScript (Node.js)
-console.log("[Cortex] JavaScript Runtime");
+    pistonRuntime: { language: 'javascript', version: '22.08.0' },
+    starterCode: `// Universal Online Platform - JavaScript (Node.js 22 LTS)
+console.log("[Cortex] Node.js 22 LTS Runtime");
 
 const items = ['Compile', 'Run', 'Debug', 'Test', 'Deploy'];
 items.forEach((step, idx) => {
@@ -79,18 +79,18 @@ items.forEach((step, idx) => {
   {
     id: 'typescript',
     name: 'TypeScript',
-    version: '5.x',
+    version: '5.6+',
     aliases: ['ts'],
     monacoLang: 'typescript',
     fileExtension: '.ts',
     defaultFileName: 'index.ts',
-    compiler: 'TypeScript Compiler (tsc / tsx)',
+    compiler: 'TypeScript 5.6 Compiler (tsc)',
     buildCommand: 'tsc index.ts',
     runCommand: 'node index.js',
     debuggerSupported: true,
     packageManager: 'npm',
-    pistonRuntime: { language: 'typescript', version: '5.0.3' },
-    starterCode: `// Universal Online Platform - TypeScript
+    pistonRuntime: { language: 'typescript', version: '5.6.2' },
+    starterCode: `// Universal Online Platform - TypeScript 5.6+
 interface ProjectSpec {
   name: string;
   languagesCount: number;
@@ -112,24 +112,24 @@ console.log(\`[Cortex] Initialized: \${spec.name} (Languages: \${spec.languagesC
   {
     id: 'cpp',
     name: 'C++',
-    version: 'G++ 13 (C++20)',
+    version: 'GCC 14 (C++23)',
     aliases: ['cpp', 'c++'],
     monacoLang: 'cpp',
     fileExtension: '.cpp',
     defaultFileName: 'main.cpp',
-    compiler: 'G++ 13',
-    buildCommand: 'g++ -O2 -std=c++20 main.cpp -o main',
+    compiler: 'G++ 14.1 (C++23)',
+    buildCommand: 'g++ -O2 -std=c++23 main.cpp -o main',
     runCommand: './main',
     debuggerSupported: true,
     packageManager: 'vcpkg / conan',
-    pistonRuntime: { language: 'c++', version: '10.2.0' },
-    starterCode: `// Universal Online Platform - C++20
+    pistonRuntime: { language: 'c++', version: '14.1.0' },
+    starterCode: `// Universal Online Platform - C++23 (GCC 14)
 #include <iostream>
 #include <vector>
 #include <numeric>
 
 int main() {
-    std::cout << "[Cortex] C++20 High Performance Runtime\\n";
+    std::cout << "[Cortex] C++23 High Performance Runtime\\n";
     std::vector<int> data = {10, 20, 30, 40, 50};
     int total = std::accumulate(data.begin(), data.end(), 0);
     std::cout << "Accumulated sum: " << total << "\\n";
@@ -143,21 +143,21 @@ int main() {
   {
     id: 'c',
     name: 'C',
-    version: 'GCC 13 (C17)',
+    version: 'GCC 14 (C23)',
     aliases: ['c'],
     monacoLang: 'c',
     fileExtension: '.c',
     defaultFileName: 'main.c',
-    compiler: 'GCC 13',
-    buildCommand: 'gcc -O2 main.c -o main',
+    compiler: 'GCC 14.1 (C23)',
+    buildCommand: 'gcc -O2 -std=c2x main.c -o main',
     runCommand: './main',
     debuggerSupported: true,
-    pistonRuntime: { language: 'c', version: '10.2.0' },
-    starterCode: `// Universal Online Platform - C17
+    pistonRuntime: { language: 'c', version: '14.1.0' },
+    starterCode: `// Universal Online Platform - C23 (GCC 14)
 #include <stdio.h>
 
 int main(void) {
-    printf("[Cortex] Low-level power with C17 Sandbox\\n");
+    printf("[Cortex] Low-level power with C23 Sandbox\\n");
     for (int i = 1; i <= 5; i++) {
         printf("Thread pipeline stage: %d\\n", i);
     }
@@ -171,23 +171,23 @@ int main(void) {
   {
     id: 'java',
     name: 'Java',
-    version: 'OpenJDK 21',
+    version: 'Java 17/21 LTS',
     aliases: ['java'],
     monacoLang: 'java',
     fileExtension: '.java',
     defaultFileName: 'Main.java',
-    compiler: 'Javac 21',
+    compiler: 'OpenJDK Javac 17/21',
     buildCommand: 'javac Main.java',
     runCommand: 'java Main',
     debuggerSupported: true,
     packageManager: 'maven / gradle',
-    pistonRuntime: { language: 'java', version: '15.0.2' },
-    starterCode: `// Universal Online Platform - OpenJDK 21
+    pistonRuntime: { language: 'java', version: '17.0.6' },
+    starterCode: `// Universal Online Platform - OpenJDK 17/21 LTS
 import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
-        System.out.println("[Cortex] Java 21 Enterprise Sandbox");
+        System.out.println("[Cortex] Java Enterprise Sandbox");
         List<String> modules = List.of("Security", "Sandboxing", "AI-Autofix", "Live Preview");
         modules.forEach(m -> System.out.println("Loaded module: " + m));
     }
@@ -200,24 +200,24 @@ public class Main {
   {
     id: 'csharp',
     name: 'C#',
-    version: '.NET 8',
+    version: 'C# 12 / .NET',
     aliases: ['cs', 'csharp', 'dotnet'],
     monacoLang: 'csharp',
     fileExtension: '.cs',
     defaultFileName: 'Program.cs',
-    compiler: 'Roslyn / .NET 8 SDK',
+    compiler: 'Roslyn / Mono C# Compiler',
     buildCommand: 'dotnet build',
     runCommand: 'dotnet run',
     debuggerSupported: true,
     packageManager: 'NuGet',
-    pistonRuntime: { language: 'csharp.net', version: '7.0.400' },
+    pistonRuntime: { language: 'csharp.net', version: '8.0.0' },
     starterCode: `// Universal Online Platform - C# .NET
 using System;
 
 class Program {
     static void Main() {
         Console.WriteLine("[Cortex] C# .NET Runtime");
-        string[] features = ["High Throughput", "Type Safety", "LINQ", "Cross-Platform"];
+        string[] features = new string[] { "High Throughput", "Type Safety", "LINQ", "Cross-Platform" };
         Console.WriteLine($"System Features: {string.Join(", ", features)}");
     }
 }
@@ -229,18 +229,18 @@ class Program {
   {
     id: 'go',
     name: 'Go',
-    version: '1.22',
+    version: '1.23+',
     aliases: ['golang', 'go'],
     monacoLang: 'go',
     fileExtension: '.go',
     defaultFileName: 'main.go',
-    compiler: 'Go Compiler 1.22',
+    compiler: 'Go Compiler 1.23',
     buildCommand: 'go build -o main main.go',
     runCommand: 'go run main.go',
     debuggerSupported: true,
     packageManager: 'go modules',
-    pistonRuntime: { language: 'go', version: '1.16.2' },
-    starterCode: `// Universal Online Platform - Go 1.22
+    pistonRuntime: { language: 'go', version: '1.23.5' },
+    starterCode: `// Universal Online Platform - Go 1.23+
 package main
 
 import (
@@ -265,18 +265,18 @@ func main() {
   {
     id: 'rust',
     name: 'Rust',
-    version: '1.75',
+    version: '1.85+',
     aliases: ['rs', 'rust'],
     monacoLang: 'rust',
     fileExtension: '.rs',
     defaultFileName: 'main.rs',
-    compiler: 'rustc 1.75',
+    compiler: 'rustc 1.85.0',
     buildCommand: 'rustc -O main.rs -o main',
     runCommand: './main',
     debuggerSupported: true,
     packageManager: 'cargo',
-    pistonRuntime: { language: 'rust', version: '1.68.2' },
-    starterCode: `// Universal Online Platform - Rust
+    pistonRuntime: { language: 'rust', version: '1.85.0' },
+    starterCode: `// Universal Online Platform - Rust 1.85+
 fn main() {
     println!("[Cortex] Rust Memory-Safe Sandbox");
     let items = vec!["Zero Cost Abstractions", "Move Semantics", "Guaranteed Concurrency"];
@@ -292,18 +292,18 @@ fn main() {
   {
     id: 'php',
     name: 'PHP',
-    version: '8.3',
+    version: '8.3+',
     aliases: ['php'],
     monacoLang: 'php',
     fileExtension: '.php',
     defaultFileName: 'index.php',
-    compiler: 'Zend Engine / PHP 8.3',
+    compiler: 'PHP 8.3 (Zend Engine)',
     runCommand: 'php index.php',
     debuggerSupported: false,
     packageManager: 'composer',
-    pistonRuntime: { language: 'php', version: '8.2.3' },
+    pistonRuntime: { language: 'php', version: '8.3.11' },
     starterCode: `<?php
-// Universal Online Platform - PHP 8.3
+// Universal Online Platform - PHP 8.3+
 echo "[Cortex] PHP 8.3 Modern Runtime\n";
 $frameworks = ['Laravel', 'Symfony', 'WordPress'];
 echo "Ecosystem: " . implode(', ', $frameworks) . "\n";
@@ -315,17 +315,17 @@ echo "Ecosystem: " . implode(', ', $frameworks) . "\n";
   {
     id: 'ruby',
     name: 'Ruby',
-    version: '3.3',
+    version: '3.x',
     aliases: ['rb', 'ruby'],
     monacoLang: 'ruby',
     fileExtension: '.rb',
     defaultFileName: 'main.rb',
-    compiler: 'YARV / Ruby 3.3',
+    compiler: 'YARV / Ruby 3.x',
     runCommand: 'ruby main.rb',
     debuggerSupported: false,
     packageManager: 'gem / bundler',
-    pistonRuntime: { language: 'ruby', version: '3.0.1' },
-    starterCode: `# Universal Online Platform - Ruby 3.3
+    pistonRuntime: { language: 'ruby', version: '3.2.0' },
+    starterCode: `# Universal Online Platform - Ruby 3.x
 puts "[Cortex] Ruby Developer Happiness"
 [1, 2, 3].map { |n| n * 10 }.each do |val|
   puts "Generated scale: #{val}"
@@ -338,18 +338,18 @@ end
   {
     id: 'kotlin',
     name: 'Kotlin',
-    version: '1.9',
+    version: '2.1+',
     aliases: ['kt', 'kotlin'],
     monacoLang: 'kotlin',
     fileExtension: '.kt',
     defaultFileName: 'Main.kt',
-    compiler: 'Kotlinc 1.9',
+    compiler: 'Kotlinc 2.1.10',
     buildCommand: 'kotlinc Main.kt -include-runtime -d Main.jar',
     runCommand: 'java -jar Main.jar',
     debuggerSupported: true,
     packageManager: 'gradle',
-    pistonRuntime: { language: 'kotlin', version: '1.8.20' },
-    starterCode: `// Universal Online Platform - Kotlin
+    pistonRuntime: { language: 'kotlin', version: '2.1.10' },
+    starterCode: `// Universal Online Platform - Kotlin 2.1+
 fun main() {
     println("[Cortex] Kotlin Modern Multiplatform")
     val greeting = "Hello, World!"
@@ -363,18 +363,18 @@ fun main() {
   {
     id: 'swift',
     name: 'Swift',
-    version: '5.9',
+    version: '5.x',
     aliases: ['swift'],
     monacoLang: 'swift',
     fileExtension: '.swift',
     defaultFileName: 'main.swift',
-    compiler: 'Swift 5.9',
+    compiler: 'Swift 5 Compiler',
     buildCommand: 'swiftc main.swift -o main',
     runCommand: './main',
     debuggerSupported: true,
     packageManager: 'Swift Package Manager',
-    pistonRuntime: { language: 'swift', version: '5.3.3' },
-    starterCode: `// Universal Online Platform - Swift 5.9
+    pistonRuntime: { language: 'swift', version: '5.9.0' },
+    starterCode: `// Universal Online Platform - Swift 5.x
 import Foundation
 
 print("[Cortex] Swift High-Performance Runtime")
@@ -389,16 +389,16 @@ print("Ascending sequence: \\(sorted)")
   {
     id: 'r',
     name: 'R',
-    version: '4.3',
+    version: '4.4+',
     aliases: ['r'],
     monacoLang: 'r',
     fileExtension: '.r',
     defaultFileName: 'main.r',
-    compiler: 'Rscript 4.3',
+    compiler: 'Rscript 4.4.1',
     runCommand: 'Rscript main.r',
     debuggerSupported: false,
     packageManager: 'CRAN',
-    pistonRuntime: { language: 'r', version: '4.1.1' },
+    pistonRuntime: { language: 'r', version: '4.4.1' },
     starterCode: `# Universal Online Platform - R Data Science
 cat("[Cortex] R Statistical Analysis\n")
 data <- c(12, 15, 23, 45, 67, 89, 90)
@@ -421,8 +421,8 @@ cat(paste("Standard Deviation:", sd(data), "\n"))
     runCommand: 'dart run main.dart',
     debuggerSupported: true,
     packageManager: 'pub',
-    pistonRuntime: { language: 'dart', version: '2.19.6' },
-    starterCode: `// Universal Online Platform - Dart
+    pistonRuntime: { language: 'dart', version: '3.0.0' },
+    starterCode: `// Universal Online Platform - Dart 3.x
 void main() {
   print('[Cortex] Dart Client-Optimized Language');
   var list = ['Flutter', 'Web', 'Server', 'CLI'];
@@ -436,7 +436,7 @@ void main() {
   {
     id: 'sql',
     name: 'SQL (SQLite)',
-    version: '3.x',
+    version: 'SQLite 3',
     aliases: ['sql', 'sqlite'],
     monacoLang: 'sql',
     fileExtension: '.sql',
@@ -444,7 +444,7 @@ void main() {
     compiler: 'SQLite 3 Engine',
     runCommand: 'sqlite3 :memory: < query.sql',
     debuggerSupported: false,
-    pistonRuntime: { language: 'sqlite3', version: '3.36.0' },
+    pistonRuntime: { language: 'sqlite3', version: '3.42.0' },
     starterCode: `-- Universal Online Platform - SQL Database Engine
 CREATE TABLE developers (
     id INTEGER PRIMARY KEY,
