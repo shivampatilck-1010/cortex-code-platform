@@ -25,7 +25,7 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_classes": ["ClassroomRoomDO"]
+      "new_sqlite_classes": ["ClassroomRoomDO"]
     }
   ],
   "version_metadata": {
