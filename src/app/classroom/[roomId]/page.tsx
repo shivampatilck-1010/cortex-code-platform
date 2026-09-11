@@ -43,6 +43,7 @@ export default function ClassroomLivePage() {
   const [participantName, setParticipantName] = useState<string>('');
   const [participantRole, setParticipantRole] = useState<ClassroomRole>('user');
   const [isJoinNeeded, setIsJoinNeeded] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   // Room state
   const [room, setRoom] = useState<ClassroomRoom | null>(null);
@@ -114,6 +115,10 @@ export default function ClassroomLivePage() {
     if (typeof window === 'undefined') return;
     sessionStorage.removeItem(`cortex_${key}_${roomId}`);
   };
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // 1. Restore participant from sessionStorage or prompt to join
   useEffect(() => {
@@ -521,6 +526,13 @@ export default function ClassroomLivePage() {
       setCollabClient(null);
     };
   }, [roomId, participantId, participantName, participantRole]);
+
+  // 4. Update last read chat count when chat drawer is opened
+  useEffect(() => {
+    if (isChatOpen && room?.chatMessages) {
+      setLastReadChatCount(room.chatMessages.length);
+    }
+  }, [isChatOpen, room?.chatMessages?.length]);
 
   // 4. Handle incoming real-time events
   const handleIncomingRealtimeEvent = (event: any) => {
@@ -1197,6 +1209,36 @@ export default function ClassroomLivePage() {
     router.push('/classroom');
   };
 
+  const userA = room && slotAUserId ? room.participants[slotAUserId] : null;
+  const userB = room && slotBUserId ? room.participants[slotBUserId] : null;
+
+  const validParticipants = room
+    ? Object.values(room.participants).filter((p) => p && p.id && p.name && p.name !== 'Classroom Host')
+    : [];
+  const currentParticipant = room?.participants[participantId];
+  const onlineParticipantsCount = validParticipants.filter((p) => p.online).length;
+  const totalParticipantsCount = validParticipants.length;
+
+  // The authoritative waiting room state: students wait only when the room is NOT active and admin has not entered the arena
+  const isWaitingForAdmin =
+    participantRole !== 'admin' &&
+    room !== null &&
+    room.state !== 'active' &&
+    !room.admin?.enteredArena;
+
+  const totalChatMessages = room?.chatMessages?.length || 0;
+  const unreadChatCount = !isChatOpen && totalChatMessages > lastReadChatCount
+    ? totalChatMessages - lastReadChatCount
+    : 0;
+
+  if (!isMounted) {
+    return (
+      <div className="h-screen w-screen bg-[#0b0c0e] flex items-center justify-center text-gray-400 font-mono text-xs">
+        Loading classroom...
+      </div>
+    );
+  }
+
   if (isJoinNeeded) {
     return (
       <div className="h-screen w-screen bg-[#0b0c0e]">
@@ -1259,34 +1301,6 @@ export default function ClassroomLivePage() {
       </div>
     );
   }
-
-  const userA = room && slotAUserId ? room.participants[slotAUserId] : null;
-  const userB = room && slotBUserId ? room.participants[slotBUserId] : null;
-
-  const validParticipants = room
-    ? Object.values(room.participants).filter((p) => p && p.id && p.name && p.name !== 'Classroom Host')
-    : [];
-  const currentParticipant = room?.participants[participantId];
-  const onlineParticipantsCount = validParticipants.filter((p) => p.online).length;
-  const totalParticipantsCount = validParticipants.length;
-
-  // The authoritative waiting room state: students wait only when the room is NOT active and admin has not entered the arena
-  const isWaitingForAdmin =
-    participantRole !== 'admin' &&
-    room !== null &&
-    room.state !== 'active' &&
-    !room.admin?.enteredArena;
-
-  const totalChatMessages = room?.chatMessages?.length || 0;
-  const unreadChatCount = !isChatOpen && totalChatMessages > lastReadChatCount
-    ? totalChatMessages - lastReadChatCount
-    : 0;
-
-  useEffect(() => {
-    if (isChatOpen && room?.chatMessages) {
-      setLastReadChatCount(room.chatMessages.length);
-    }
-  }, [isChatOpen, room?.chatMessages?.length]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">
