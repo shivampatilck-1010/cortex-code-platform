@@ -6,9 +6,9 @@ import { CollaborationRequest } from '@/lib/classroom/types';
 
 interface CollaborationPromptModalProps {
   request: CollaborationRequest | null;
-  onAccept: (requestId: string) => Promise<void> | void;
-  onDecline: (requestId: string) => Promise<void> | void;
-  onDismiss?: (requestId: string) => void;
+  onAccept: (requestId: string, fromId?: string) => Promise<void> | void;
+  onDecline: (requestId: string, fromId?: string) => Promise<void> | void;
+  onDismiss?: (requestId: string, fromId?: string) => void;
 }
 
 export const CollaborationPromptModal: React.FC<CollaborationPromptModalProps> = ({
@@ -25,7 +25,9 @@ export const CollaborationPromptModal: React.FC<CollaborationPromptModalProps> =
     if (isResponding) return;
     setIsResponding('decline');
     try {
-      await onDecline(request.id);
+      await onDecline(request.id, request.fromId);
+    } catch (e) {
+      console.error('Error declining request:', e);
     } finally {
       setIsResponding(null);
     }
@@ -35,7 +37,9 @@ export const CollaborationPromptModal: React.FC<CollaborationPromptModalProps> =
     if (isResponding) return;
     setIsResponding('accept');
     try {
-      await onAccept(request.id);
+      await onAccept(request.id, request.fromId);
+    } catch (e) {
+      console.error('Error accepting request:', e);
     } finally {
       setIsResponding(null);
     }
@@ -44,7 +48,7 @@ export const CollaborationPromptModal: React.FC<CollaborationPromptModalProps> =
   const handleDismiss = () => {
     if (isResponding) return;
     if (onDismiss) {
-      onDismiss(request.id);
+      onDismiss(request.id, request.fromId);
     } else {
       handleDecline();
     }

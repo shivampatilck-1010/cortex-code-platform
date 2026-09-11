@@ -546,7 +546,9 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
             className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
               user.online
                 ? user.status === 'coding'
-                : 'bg-emerald-400'
+                  ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]'
+                  : 'bg-emerald-500/70'
+                : 'bg-gray-600'
             }`}
           />
 

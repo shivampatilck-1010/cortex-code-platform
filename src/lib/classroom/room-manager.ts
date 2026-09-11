@@ -247,21 +247,18 @@ export class ClassroomRoomManager {
       room.participants[room.admin.id]
     );
 
-    // Reconnection of existing participant by ID or by matching name
-    const existingById = existingId ? room.participants[existingId] : null;
-    const existingByName = Object.values(room.participants).find(
-      (p) => p && p.name && p.name.trim().toLowerCase() === name.trim().toLowerCase() && p.name !== 'Classroom Host'
-    );
-    const existing = existingById || existingByName;
+    // Reconnection of existing participant strictly by unique ID
+    const existing = existingId ? room.participants[existingId] : null;
 
     if (existing) {
       existing.online = true;
       existing.lastActive = Date.now();
-      existing.name = name || existing.name;
-      // Admin role preservation & immediate arena activation when host enters
-      if (room.admin.id === existing.id || role === 'admin') {
+      if (name && name.trim()) {
+        existing.name = name.trim();
+      }
+      // Admin role preservation & immediate arena activation only if this participant is the actual room admin
+      if (room.admin.id === existing.id) {
         existing.role = 'admin';
-        room.admin.id = existing.id;
         room.admin.name = existing.name;
         room.admin.enteredArena = true;
         room.state = 'active';
@@ -498,28 +495,6 @@ export class ClassroomRoomManager {
       }
     }
 
-    // 3. Deduplicate participants sharing the exact same name (keep most recently active)
-    const seenNames = new Map<string, string>();
-    for (const [id, p] of Object.entries(room.participants)) {
-      if (!p || !p.name || p.name === 'Classroom Host') continue;
-      const normName = p.name.trim().toLowerCase();
-      if (seenNames.has(normName)) {
-        const prevId = seenNames.get(normName)!;
-        const prevP = room.participants[prevId];
-        if ((p.lastActive || 0) >= (prevP?.lastActive || 0)) {
-          delete room.participants[prevId];
-          if (room.activeWorkspaces.slotAUserId === prevId) room.activeWorkspaces.slotAUserId = id;
-          if (room.activeWorkspaces.slotBUserId === prevId) room.activeWorkspaces.slotBUserId = id;
-          seenNames.set(normName, id);
-        } else {
-          delete room.participants[id];
-          if (room.activeWorkspaces.slotAUserId === id) room.activeWorkspaces.slotAUserId = prevId;
-          if (room.activeWorkspaces.slotBUserId === id) room.activeWorkspaces.slotBUserId = prevId;
-        }
-      } else {
-        seenNames.set(normName, id);
-      }
-    }
 
     // 4. Merge chat messages gossiped across isolates
     if (Array.isArray(clientChatMessages) && clientChatMessages.length > 0) {

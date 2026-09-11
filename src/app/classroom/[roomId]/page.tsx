@@ -63,7 +63,25 @@ export default function ClassroomLivePage() {
 
   // Pending incoming requests
   const [incomingCollabReq, setIncomingCollabReq] = useState<CollaborationRequest | null>(null);
-  const handledCollabRequestIdsRef = useRef<Set<string>>(new Set());
+  const getHandledCollabRequests = (): Set<string> => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const raw = sessionStorage.getItem(`cortex_handled_collab_${roomId}`);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  };
+  const handledCollabRequestIdsRef = useRef<Set<string>>(getHandledCollabRequests());
+  const markCollabRequestHandled = (reqId: string) => {
+    handledCollabRequestIdsRef.current.add(reqId);
+    if (typeof window !== 'undefined') {
+      try {
+        const arr = Array.from(handledCollabRequestIdsRef.current);
+        sessionStorage.setItem(`cortex_handled_collab_${roomId}`, JSON.stringify(arr.slice(-50)));
+      } catch {}
+    }
+  };
   const dismissedPartnerCooldownRef = useRef<Map<string, number>>(new Map());
   const [incomingDownloadReq, setIncomingDownloadReq] = useState<FileDownloadRequest | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'syncing' | 'offline'>('syncing');
@@ -81,31 +99,32 @@ export default function ClassroomLivePage() {
   const codeSaveTimersRef = useRef<{ [key: string]: any }>({});
   const roomRef = useRef<ClassroomRoom | null>(null);
 
-  // Session storage helpers to ensure browser tabs/windows don't clobber each other's identity
+  // Session storage helpers strictly scoped to each browser tab so separate tabs/windows never clobber each other's identity or role
   const getTabSession = (key: string): string | null => {
     if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem(`cortex_${key}_${roomId}`) || localStorage.getItem(`cortex_${key}_${roomId}`);
+    return sessionStorage.getItem(`cortex_${key}_${roomId}`);
   };
 
   const setTabSession = (key: string, val: string) => {
     if (typeof window === 'undefined') return;
     sessionStorage.setItem(`cortex_${key}_${roomId}`, val);
-    try {
-      localStorage.setItem(`cortex_${key}_${roomId}`, val);
-    } catch {}
   };
 
   const removeTabSession = (key: string) => {
     if (typeof window === 'undefined') return;
     sessionStorage.removeItem(`cortex_${key}_${roomId}`);
-    try {
-      localStorage.removeItem(`cortex_${key}_${roomId}`);
-    } catch {}
   };
 
-  // 1. Restore participant from sessionStorage/localStorage or prompt to join
+  // 1. Restore participant from sessionStorage or prompt to join
   useEffect(() => {
     if (typeof window === 'undefined' || !roomId) return;
+
+    // Purge legacy shared localStorage keys so different tabs in same browser never clobber each other
+    try {
+      localStorage.removeItem(`cortex_participant_${roomId}`);
+      localStorage.removeItem(`cortex_name_${roomId}`);
+      localStorage.removeItem(`cortex_role_${roomId}`);
+    } catch {}
 
     const savedId = getTabSession('participant');
     const savedName = getTabSession('name');
@@ -130,11 +149,41 @@ export default function ClassroomLivePage() {
     if (prev.admin?.enteredArena !== next.admin?.enteredArena) return true;
     if (prev.activeWorkspaces?.slotAUserId !== next.activeWorkspaces?.slotAUserId) return true;
     if (prev.activeWorkspaces?.slotBUserId !== next.activeWorkspaces?.slotBUserId) return true;
-    if ((prev.chatMessages?.length || 0) !== (next.chatMessages?.length || 0)) return true;
-    if (Object.keys(prev.collaborationRequests || {}).length !== Object.keys(next.collaborationRequests || {}).length) return true;
-    if (Object.keys(prev.collaborationSessions || {}).length !== Object.keys(next.collaborationSessions || {}).length) return true;
-    if (Object.keys(prev.downloadRequests || {}).length !== Object.keys(next.downloadRequests || {}).length) return true;
 
+    // Chat messages: compare length and last message identity
+    const prevChats = prev.chatMessages || [];
+    const nextChats = next.chatMessages || [];
+    if (prevChats.length !== nextChats.length) return true;
+    if (prevChats.length > 0) {
+      if (prevChats[prevChats.length - 1]?.id !== nextChats[nextChats.length - 1]?.id) return true;
+      if (prevChats[prevChats.length - 1]?.timestamp !== nextChats[nextChats.length - 1]?.timestamp) return true;
+    }
+
+    // Collaboration requests: compare count & status of each request
+    const prevReqs = prev.collaborationRequests || {};
+    const nextReqs = next.collaborationRequests || {};
+    if (Object.keys(prevReqs).length !== Object.keys(nextReqs).length) return true;
+    for (const [k, req] of Object.entries(nextReqs)) {
+      if (!prevReqs[k] || prevReqs[k].status !== req.status) return true;
+    }
+
+    // Collaboration sessions: compare count & lastSynced
+    const prevSess = prev.collaborationSessions || {};
+    const nextSess = next.collaborationSessions || {};
+    if (Object.keys(prevSess).length !== Object.keys(nextSess).length) return true;
+    for (const [k, sess] of Object.entries(nextSess)) {
+      if (!prevSess[k] || prevSess[k].lastSynced !== sess.lastSynced) return true;
+    }
+
+    // Download requests: compare count & status
+    const prevDl = prev.downloadRequests || {};
+    const nextDl = next.downloadRequests || {};
+    if (Object.keys(prevDl).length !== Object.keys(nextDl).length) return true;
+    for (const [k, dl] of Object.entries(nextDl)) {
+      if (!prevDl[k] || prevDl[k].status !== dl.status) return true;
+    }
+
+    // Participants: compare count and all active properties
     const prevP = Object.values(prev.participants || {});
     const nextP = Object.values(next.participants || {});
     if (prevP.length !== nextP.length) return true;
@@ -145,9 +194,12 @@ export default function ClassroomLivePage() {
       if (pp.online !== np.online) return true;
       if (pp.status !== np.status) return true;
       if (pp.name !== np.name) return true;
+      if (pp.role !== np.role) return true;
       if (pp.currentLanguage !== np.currentLanguage) return true;
+      if (pp.activeFileName !== np.activeFileName) return true;
       if (pp.activeCode !== np.activeCode) return true;
       if (pp.isLocked !== np.isLocked) return true;
+      if (pp.canRun !== np.canRun) return true;
     }
     return false;
   };
@@ -283,6 +335,7 @@ export default function ClassroomLivePage() {
       const myCollabReq = allowsCollaboration
         ? Object.values(newRoom.collaborationRequests).find((r: any) => {
             if (!r || r.toId !== myId || r.status !== 'pending') return false;
+            if (now - (r.createdAt || 0) > 60000) return false;
             if (activePartnerIds.has(r.fromId)) return false;
             if (handledCollabRequestIdsRef.current.has(r.id)) return false;
             const cooldownUntil = dismissedPartnerCooldownRef.current.get(r.fromId) || 0;
@@ -319,9 +372,40 @@ export default function ClassroomLivePage() {
       if (activeName) queryParams.set('requesterName', activeName);
       if (activeRole) queryParams.set('requesterRole', activeRole);
 
+      // Gossip comprehensive participant list across edge isolates
       const known = collabClientRef.current?.getKnownParticipants?.() || [];
-      if (known.length > 0) {
-        queryParams.set('clientParticipants', JSON.stringify(known));
+      const participantMap = new Map<string, any>();
+      for (const p of known) {
+        if (p && p.id) participantMap.set(p.id, p);
+      }
+      if (roomRef.current?.participants) {
+        for (const [pId, p] of Object.entries(roomRef.current.participants)) {
+          if (p && p.id && !participantMap.has(p.id)) {
+            participantMap.set(p.id, p);
+          }
+        }
+      }
+      if (activeId && activeName) {
+        const existingLocal = participantMap.get(activeId);
+        participantMap.set(activeId, {
+          id: activeId,
+          name: activeName,
+          role: activeRole || 'user',
+          joinedAt: existingLocal?.joinedAt || Date.now(),
+          lastActive: Date.now(),
+          status: existingLocal?.status || 'idle',
+          online: true,
+          activeCode: existingLocal?.activeCode || '',
+          currentLanguage: existingLocal?.currentLanguage || 'python',
+          activeFileName: existingLocal?.activeFileName || 'main.py',
+          canRun: existingLocal?.canRun ?? true,
+          isLocked: existingLocal?.isLocked ?? false,
+          privacy: existingLocal?.privacy || { codeHidden: false, lockActive: false, isIncognito: false },
+        });
+      }
+      const participantList = Array.from(participantMap.values());
+      if (participantList.length > 0) {
+        queryParams.set('clientParticipants', JSON.stringify(participantList.slice(0, 25)));
       }
 
       const latestChat = roomRef.current?.chatMessages || room?.chatMessages || [];
@@ -340,6 +424,11 @@ export default function ClassroomLivePage() {
       const latestRequests = Object.values(roomRef.current?.collaborationRequests || room?.collaborationRequests || {});
       if (latestRequests.length > 0) {
         queryParams.set('clientCollabRequests', JSON.stringify(latestRequests.slice(-10)));
+      }
+
+      const latestSessions = Object.values(roomRef.current?.collaborationSessions || room?.collaborationSessions || {});
+      if (latestSessions.length > 0) {
+        queryParams.set('clientCollabSessions', JSON.stringify(latestSessions.slice(-5)));
       }
 
       const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
@@ -861,18 +950,28 @@ export default function ClassroomLivePage() {
       }
       const targetUser = room?.participants[targetUserId];
       showToast(`Access request sent to ${targetUser?.name || 'participant'}! Waiting for response...`);
+      if (data.request) {
+        collabClientRef.current?.sendRaw({
+          type: 'collaboration_request',
+          roomId,
+          clientId: participantId,
+          senderName: participantName,
+          payload: data.request,
+          timestamp: Date.now(),
+        });
+      }
       collabClientRef.current?.triggerImmediateSync();
     } catch (err: any) {
       showToast(`⚠️ ${err?.message || 'Failed to send request'}`);
     }
   };
 
-  const handleRespondCollaboration = async (requestId: string, decision: CollaborationDecision) => {
+  const handleRespondCollaboration = async (requestId: string, decision: CollaborationDecision, explicitFromId?: string) => {
     const targetReq = incomingCollabReq || (roomRef.current?.collaborationRequests?.[requestId] as any);
-    const partnerId = targetReq?.fromId;
+    const partnerId = explicitFromId || targetReq?.fromId;
 
     // Immediately mark request as handled to permanently prevent recurring popups
-    handledCollabRequestIdsRef.current.add(requestId);
+    markCollabRequestHandled(requestId);
     if (decision === 'declined' && partnerId) {
       dismissedPartnerCooldownRef.current.set(partnerId, Date.now() + 5 * 60 * 1000);
     }
@@ -891,7 +990,7 @@ export default function ClassroomLivePage() {
             id === requestId
           ) {
             r.status = decision;
-            handledCollabRequestIdsRef.current.add(id);
+            markCollabRequestHandled(id);
           }
         });
         return {
@@ -947,15 +1046,15 @@ export default function ClassroomLivePage() {
     }
   };
 
-  const handleDismissCollaboration = (requestId: string) => {
+  const handleDismissCollaboration = (requestId: string, explicitFromId?: string) => {
     const targetReq = incomingCollabReq || (roomRef.current?.collaborationRequests?.[requestId] as any);
-    const partnerId = targetReq?.fromId;
-    handledCollabRequestIdsRef.current.add(requestId);
+    const partnerId = explicitFromId || targetReq?.fromId;
+    markCollabRequestHandled(requestId);
     if (partnerId) {
       dismissedPartnerCooldownRef.current.set(partnerId, Date.now() + 5 * 60 * 1000);
     }
     setIncomingCollabReq(null);
-    handleRespondCollaboration(requestId, 'declined');
+    handleRespondCollaboration(requestId, 'declined', partnerId);
   };
 
   const handleEndCollaboration = async (sessionId: string) => {
@@ -1579,9 +1678,9 @@ export default function ClassroomLivePage() {
       {/* Incoming Collaboration Request Modal (Mutual Consent) */}
       <CollaborationPromptModal
         request={incomingCollabReq}
-        onAccept={(id) => handleRespondCollaboration(id, 'accepted')}
-        onDecline={(id) => handleRespondCollaboration(id, 'declined')}
-        onDismiss={(id) => handleDismissCollaboration(id)}
+        onAccept={(id, fromId) => handleRespondCollaboration(id, 'accepted', fromId)}
+        onDecline={(id, fromId) => handleRespondCollaboration(id, 'declined', fromId)}
+        onDismiss={(id, fromId) => handleDismissCollaboration(id, fromId)}
       />
 
       {/* Incoming File Download Request Modal */}
