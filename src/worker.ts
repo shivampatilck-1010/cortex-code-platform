@@ -1,5 +1,7 @@
 import { ClassroomRoomDO } from './lib/classroom/durable-object';
 import { ClassroomAuth, AuthenticatedClassroomUser } from './lib/classroom/auth';
+// @ts-ignore
+import vinextHandler from 'vinext/server/fetch-handler';
 
 export { ClassroomRoomDO };
 
@@ -101,16 +103,17 @@ export default {
       return stub.fetch(internalReq);
     }
 
-    // Delegate standard HTTP requests to Vinext/Next.js fetch handler if available
+    // Delegate standard HTTP requests to Vinext/Next.js fetch handler
     try {
-      // @ts-ignore
-      const fetchModule = await import('vinext/server/fetch-handler');
-      const handler = fetchModule.default || fetchModule;
+      const handler = (vinextHandler as any)?.t || vinextHandler?.default || vinextHandler;
       if (typeof handler?.fetch === 'function') {
         return handler.fetch(request, env, ctx);
       }
-    } catch {
-      // Fallback for direct testing
+      if (typeof handler === 'function') {
+        return handler(request, env, ctx);
+      }
+    } catch (err) {
+      console.error('[Worker HTTP Handler Error]', err);
     }
 
     return new Response('Cortex Classroom Cloudflare Worker Ready', { status: 200 });

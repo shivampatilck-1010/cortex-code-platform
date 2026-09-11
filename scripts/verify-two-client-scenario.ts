@@ -81,7 +81,15 @@ class MockWebSocketPair {
 // @ts-ignore
 globalThis.WebSocketPair = MockWebSocketPair;
 
-import worker from '../src/worker';
+// Mock virtual vinext modules when running outside Vite bundler
+try {
+  // @ts-ignore
+  const { mock } = await import('bun:test');
+  mock.module('virtual:vinext-worker-entry', () => ({ default: () => new Response('ok') }));
+  mock.module('vinext/server/fetch-handler', () => ({ default: () => new Response('ok') }));
+} catch {}
+
+const { default: worker } = await import('../src/worker');
 import { ClassroomRoomDO } from '../src/lib/classroom/durable-object';
 import { ClassroomAuth } from '../src/lib/classroom/auth';
 import { parseRealtimeMessage, serializeRealtimeMessage } from '../src/lib/classroom/protocol';
