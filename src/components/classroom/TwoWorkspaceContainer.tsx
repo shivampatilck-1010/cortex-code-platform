@@ -517,6 +517,53 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
     };
   }, [docId, collabClient, user?.id, user?.activeFileName]);
 
+  const lang = user?.currentLanguage || 'python';
+  const monacoLang = getLanguageConfig(lang).monacoLang;
+
+  // 1. Keep editor content live in sync with remote user code updates
+  useEffect(() => {
+    if (!editorRef.current || !user) return;
+    if (!canEdit || !isSelf) {
+      const incomingCode = user.activeCode ?? '';
+      const currentEditorCode = editorRef.current.getValue();
+      if (incomingCode !== currentEditorCode && incomingCode !== localEmittedCodeRef.current) {
+        localEmittedCodeRef.current = incomingCode;
+
+        // If Yjs binding exists, update ytext with remote transaction
+        if (collabClient && docId) {
+          try {
+            const { ytext } = collabClient.getOrCreateDoc(docId, incomingCode);
+            if (ytext.toString() !== incomingCode) {
+              ytext.doc?.transact(() => {
+                ytext.delete(0, ytext.length);
+                ytext.insert(0, incomingCode);
+              }, 'remote');
+            }
+          } catch {}
+        }
+
+        // Ensure Monaco model value matches
+        const model = editorRef.current.getModel();
+        if (model && model.getValue() !== incomingCode) {
+          editorRef.current.setValue(incomingCode);
+        }
+      }
+    }
+  }, [user?.activeCode, canEdit, isSelf, docId, collabClient]);
+
+  // 2. Synchronize Monaco syntax language when remote participant switches language
+  useEffect(() => {
+    if (editorRef.current && monacoLang) {
+      const model = editorRef.current.getModel();
+      if (model && typeof window !== 'undefined') {
+        const monaco = (window as any).monaco;
+        if (monaco?.editor?.setModelLanguage) {
+          monaco.editor.setModelLanguage(model, monacoLang);
+        }
+      }
+    }
+  }, [monacoLang]);
+
   if (!user) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-500 bg-[#0c0d10] space-y-3">
@@ -532,9 +579,6 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
       </div>
     );
   }
-
-  const lang = user.currentLanguage || 'python';
-  const monacoLang = getLanguageConfig(lang).monacoLang;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#0c0d10] overflow-hidden">

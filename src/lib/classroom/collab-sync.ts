@@ -99,26 +99,22 @@ export class CollaborationClient {
     const isLocalhost = typeof window !== 'undefined' &&
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-    // On Cloudflare Workers / production hosting, port 3002 is not exposed.
-    // Connect directly to SSE for instant zero-latency edge streaming.
-    if (!isLocalhost) {
-      this.fallbackToSSE();
-      return;
-    }
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    // 1. Discover active WebSocket endpoint for local Node development
     let wsUrl: string | null = null;
-    try {
-      const res = await fetch(`/api/v1/classroom/${this.roomId}/events?info=true`, { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        if (data.wsPort) {
-          wsUrl = `${protocol}//${window.location.hostname}:${data.wsPort}`;
+    if (isLocalhost) {
+      try {
+        const res = await fetch(`/api/v1/classroom/${this.roomId}/events?info=true`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.wsPort) {
+            wsUrl = `${protocol}//${window.location.hostname}:${data.wsPort}`;
+          }
         }
-      }
-    } catch {
-      // Ignore discovery error, fallback to standard path
+      } catch {}
+    } else {
+      // Cloudflare Workers / production edge native WebSocket endpoint
+      wsUrl = `${protocol}//${window.location.host}/api/v1/classroom/${this.roomId}/events`;
     }
 
     if (!wsUrl) {

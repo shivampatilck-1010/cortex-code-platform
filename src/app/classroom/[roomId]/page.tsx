@@ -517,8 +517,22 @@ export default function ClassroomLivePage() {
       fetchRoomState(participantId, participantName, participantRole);
     }, 1200);
 
+    // Instant catch-up whenever user returns to tab, focuses window, or reconnects online
+    const handleImmediateWakeSync = () => {
+      if (document.visibilityState === 'visible') {
+        fetchRoomState(participantId, participantName, participantRole);
+        client.triggerImmediateSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleImmediateWakeSync);
+    window.addEventListener('focus', handleImmediateWakeSync);
+    window.addEventListener('online', handleImmediateWakeSync);
+
     return () => {
       clearInterval(syncTimer);
+      document.removeEventListener('visibilitychange', handleImmediateWakeSync);
+      window.removeEventListener('focus', handleImmediateWakeSync);
+      window.removeEventListener('online', handleImmediateWakeSync);
       unsubscribeEvents();
       unsubscribeStatus();
       client.cleanup();
@@ -534,7 +548,7 @@ export default function ClassroomLivePage() {
     }
   }, [isChatOpen, room?.chatMessages?.length]);
 
-  // 4. Handle incoming real-time events
+  // 4. Handle incoming real-time events with instant zero-latency state updates
   const handleIncomingRealtimeEvent = (event: any) => {
     switch (event.type) {
       case 'room_state':
@@ -543,26 +557,94 @@ export default function ClassroomLivePage() {
         }
         break;
 
-      case 'join':
+      case 'start_classroom':
+      case 'classroom_started':
+      case 'arena_started':
+      case 'session_started': {
+        if (event.payload?.room) {
+          applyRoomState(event.payload.room);
+        } else {
+          setRoom((prev) => {
+            if (!prev) return prev;
+            const updated: ClassroomRoom = {
+              ...prev,
+              state: 'active',
+              admin: prev.admin
+                ? { ...prev.admin, enteredArena: true }
+                : { id: '', name: 'Classroom Host', enteredArena: true },
+            };
+            roomRef.current = updated;
+            return updated;
+          });
+        }
+        showToast('🚀 Code Arena is now open! Entering arena...');
         fetchRoomState(participantId);
         break;
+      }
+
+      case 'join': {
+        const newP = event.payload?.participant;
+        if (newP && newP.id) {
+          setRoom((prev) => {
+            if (!prev) return prev;
+            const updated = {
+              ...prev,
+              participants: {
+                ...prev.participants,
+                [newP.id]: newP,
+              },
+            };
+            roomRef.current = updated;
+            return updated;
+          });
+          setSlotBUserId((prevB) => (!prevB && newP.id !== participantId ? newP.id : prevB));
+        }
+        fetchRoomState(participantId);
+        break;
+      }
+
+      case 'leave': {
+        const leavingId = event.payload?.participantId || event.senderId;
+        if (leavingId) {
+          setRoom((prev) => {
+            if (!prev || !prev.participants[leavingId]) return prev;
+            const updated = {
+              ...prev,
+              participants: {
+                ...prev.participants,
+                [leavingId]: {
+                  ...prev.participants[leavingId],
+                  online: false,
+                },
+              },
+            };
+            roomRef.current = updated;
+            return updated;
+          });
+        }
+        break;
+      }
 
       case 'code_update': {
         const { participantId: updatedId, code, language } = event.payload || {};
         if (updatedId && updatedId !== participantId) {
           setRoom((prev) => {
-            if (!prev || !prev.participants[updatedId]) return prev;
-            return {
+            if (!prev) return prev;
+            const currentP = prev.participants[updatedId];
+            if (!currentP) return prev;
+            const updated = {
               ...prev,
               participants: {
                 ...prev.participants,
                 [updatedId]: {
-                  ...prev.participants[updatedId],
+                  ...currentP,
                   ...(code !== undefined ? { activeCode: code } : {}),
                   ...(language !== undefined ? { currentLanguage: language } : {}),
                 },
               },
             };
+            roomRef.current = updated;
+            return updated;
           });
         }
         break;
@@ -573,7 +655,7 @@ export default function ClassroomLivePage() {
         if (updatedId && updatedId !== participantId) {
           setRoom((prev) => {
             if (!prev || !prev.participants[updatedId]) return prev;
-            return {
+            const updated = {
               ...prev,
               participants: {
                 ...prev.participants,
@@ -586,6 +668,8 @@ export default function ClassroomLivePage() {
                 },
               },
             };
+            roomRef.current = updated;
+            return updated;
           });
         }
         break;
@@ -597,12 +681,70 @@ export default function ClassroomLivePage() {
         }
         break;
 
-      case 'select_workspaces':
-        if (event.payload?.broadcast && participantRole !== 'admin') {
-          if (event.payload.slotAUserId) setSlotAUserId(event.payload.slotAUserId);
-          if (event.payload.slotBUserId) setSlotBUserId(event.payload.slotBUserId);
+      case 'select_workspaces': {
+        const { slotAUserId: newA, slotBUserId: newB } = event.payload || {};
+        if (participantRole !== 'admin') {
+          if (newA) setSlotAUserId(newA);
+          if (newB) setSlotBUserId(newB);
         }
+        setRoom((prev) => {
+          if (!prev) return prev;
+          const updated = {
+            ...prev,
+            activeWorkspaces: {
+              slotAUserId: newA || prev.activeWorkspaces?.slotAUserId,
+              slotBUserId: newB || prev.activeWorkspaces?.slotBUserId,
+            },
+          };
+          roomRef.current = updated;
+          return updated;
+        });
         break;
+      }
+
+      case 'admin_action': {
+        const actionPayload = event.payload?.adminAction || event.payload;
+        if (actionPayload) {
+          const { targetUserId, isLocked, canRun, settings, challenge } = actionPayload;
+          setRoom((prev) => {
+            if (!prev) return prev;
+            const nextParticipants = { ...prev.participants };
+            if (targetUserId && nextParticipants[targetUserId]) {
+              nextParticipants[targetUserId] = {
+                ...nextParticipants[targetUserId],
+                ...(isLocked !== undefined ? { isLocked } : {}),
+                ...(canRun !== undefined ? { canRun } : {}),
+              };
+            }
+            const updated: ClassroomRoom = {
+              ...prev,
+              participants: nextParticipants,
+              ...(settings ? { settings: { ...prev.settings, ...settings } } : {}),
+              ...(challenge !== undefined ? { activeChallenge: challenge } : {}),
+            };
+            roomRef.current = updated;
+            return updated;
+          });
+          if (targetUserId === participantId) {
+            if (isLocked) showToast('🔒 Your workspace was locked by the teacher.');
+            else if (isLocked === false) showToast('🔓 Your workspace was unlocked by the teacher.');
+          }
+        }
+        fetchRoomState(participantId);
+        break;
+      }
+
+      case 'classroom_ended': {
+        showToast('Classroom session has been ended by the Admin.');
+        setError('The Admin has ended this classroom session.');
+        setRoom((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, state: 'ended' as const };
+          roomRef.current = updated;
+          return updated;
+        });
+        break;
+      }
 
       case 'collaboration_request': {
         const req = event.payload;
@@ -627,23 +769,21 @@ export default function ClassroomLivePage() {
 
       case 'collaboration_response': {
         const { request, session, activeWorkspaces } = event.payload || {};
-        if (activeWorkspaces) {
-          setSlotAUserId(activeWorkspaces.slotAUserId);
-          setSlotBUserId(activeWorkspaces.slotBUserId);
-        } else if (session?.participantIds) {
-          setSlotAUserId(session.participantIds[0]);
-          setSlotBUserId(session.participantIds[1]);
-        }
         if (request && (request.fromId === participantId || request.toId === participantId)) {
           // Dismiss any open incoming prompt from this partner immediately
           setIncomingCollabReq(null);
+          const partnerId = request.fromId === participantId ? request.toId : request.fromId;
+          const partner = request.fromId === participantId ? request.toName : request.fromName;
           if (request.status === 'accepted') {
-            const partner = request.fromId === participantId ? request.toName : request.fromName;
+            setSlotAUserId(participantId);
+            setSlotBUserId(partnerId);
             showToast(`🎉 Access approved! Real-time collaboration active with ${partner}.`);
           } else if (request.status === 'declined') {
-            const partner = request.fromId === participantId ? request.toName : request.fromName;
             showToast(`Access request was declined by ${partner}.`);
           }
+        } else if (activeWorkspaces && participantRole !== 'admin') {
+          if (activeWorkspaces.slotAUserId) setSlotAUserId(activeWorkspaces.slotAUserId);
+          if (activeWorkspaces.slotBUserId) setSlotBUserId(activeWorkspaces.slotBUserId);
         }
         fetchRoomState(participantId);
         break;
@@ -703,26 +843,6 @@ export default function ClassroomLivePage() {
         });
         break;
       }
-
-      case 'admin_action':
-        fetchRoomState(participantId);
-        break;
-
-      case 'classroom_started':
-      case 'arena_started':
-      case 'session_started':
-        if (event.payload?.room) {
-          applyRoomState(event.payload.room);
-        } else {
-          setRoom((prev) => prev ? { ...prev, state: 'active', admin: { ...prev.admin, enteredArena: true } } : prev);
-          fetchRoomState(participantId);
-        }
-        showToast('🚀 Code Arena is now open! Entering arena...');
-        break;
-
-      case 'classroom_ended':
-        setError('The Admin has ended this classroom session.');
-        break;
     }
   };
 
