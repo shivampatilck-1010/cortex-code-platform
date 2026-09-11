@@ -40,6 +40,7 @@ export class ClassroomRealtimeClient {
   private reconnectTimer: any = null;
   private maxReconnectAttempts: number = 10;
   private baseReconnectDelay: number = 600; // ms
+  private connectionGeneration: number = 0;
 
   // Heartbeat & Latency
   private heartbeatInterval: any = null;
@@ -109,27 +110,47 @@ export class ClassroomRealtimeClient {
     if (typeof window === 'undefined') return;
     if (this.simulatedOffline) return;
 
+    // A second connect while a socket is opening/open used to replace the
+    // socket without closing the first one. That produced duplicate events,
+    // competing reconnect timers, and a visibly unstable connection badge.
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      return;
+    }
+
     this.isExplicitlyClosed = false;
     this.clearTimers();
+    const generation = ++this.connectionGeneration;
 
     const isReconnecting = this.reconnectAttempt > 0;
     this.setState(isReconnecting ? 'RECONNECTING' : 'CONNECTING');
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/v1/classrooms/${this.classroomId}/ws?userId=${encodeURIComponent(this.userId)}&userName=${encodeURIComponent(this.userName)}&role=${encodeURIComponent(this.role)}&classroomId=${encodeURIComponent(this.classroomId)}`;
+    // Production identity is derived server-side from the signed session cookie.
+    // The development-only identity hint keeps the local, no-login prototype
+    // usable without weakening the production trust boundary.
+    const developmentHint = process.env.NODE_ENV !== 'production'
+      ? `?userId=${encodeURIComponent(this.userId)}`
+      : '';
+    const wsUrl = `${protocol}//${host}/api/v1/classrooms/${this.classroomId}/ws${developmentHint}`;
 
     try {
       this.ws = new WebSocket(wsUrl);
+      const socket = this.ws;
 
       const connTimeout = setTimeout(() => {
-        if (this.state === 'CONNECTING' && this.ws?.readyState !== WebSocket.OPEN) {
-          try { this.ws?.close(); } catch {}
+        if (generation === this.connectionGeneration && this.state === 'CONNECTING' && socket.readyState !== WebSocket.OPEN) {
+          this.ws = null;
+          try { socket.close(); } catch {}
           this.handleDisconnect();
         }
       }, 4000);
 
       this.ws.onopen = () => {
+        if (generation !== this.connectionGeneration || socket !== this.ws) {
+          socket.close();
+          return;
+        }
         clearTimeout(connTimeout);
         this.reconnectAttempt = 0;
         this.setState('CONNECTED');
@@ -157,6 +178,7 @@ export class ClassroomRealtimeClient {
       };
 
       this.ws.onmessage = (msgEvent) => {
+        if (generation !== this.connectionGeneration || socket !== this.ws) return;
         this.handleMessage(msgEvent.data);
       };
 
@@ -167,6 +189,8 @@ export class ClassroomRealtimeClient {
 
       this.ws.onclose = () => {
         clearTimeout(connTimeout);
+        if (generation !== this.connectionGeneration || socket !== this.ws) return;
+        this.ws = null;
         this.handleDisconnect();
       };
     } catch {
@@ -189,6 +213,10 @@ export class ClassroomRealtimeClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
     this.reconnectAttempt += 1;
+    if (this.reconnectAttempt > this.maxReconnectAttempts) {
+      this.setState('DISCONNECTED');
+      return;
+    }
     // Exponential backoff with random jitter (cap at 8s)
     const delay = Math.min(8000, this.baseReconnectDelay * Math.pow(1.5, Math.min(this.reconnectAttempt, 5)) + Math.random() * 300);
 
@@ -448,6 +476,7 @@ export class ClassroomRealtimeClient {
 
   public disconnect() {
     this.isExplicitlyClosed = true;
+    this.connectionGeneration += 1;
     this.clearTimers();
     if (this.ws) {
       try { this.ws.close(); } catch {}

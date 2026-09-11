@@ -82,6 +82,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             Benchmark
           </Link>
+          <Link
+            href="/challenges"
+            className={`hidden md:inline-flex px-2 sm:px-2.5 py-1 rounded text-[11px] sm:text-xs font-heading font-semibold transition ${
+              pathname.startsWith('/challenges')
+                ? 'bg-[#1e1f26] text-[#ff9100]'
+                : 'text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c]'
+            }`}
+          >
+            Practice
+          </Link>
+          <Link
+            href="/learn"
+            className={`hidden lg:inline-flex px-2 sm:px-2.5 py-1 rounded text-[11px] sm:text-xs font-heading font-semibold transition ${
+              pathname.startsWith('/learn')
+                ? 'bg-[#1e1f26] text-[#ff9100]'
+                : 'text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c]'
+            }`}
+          >
+            Learn
+          </Link>
         </nav>
       </div>
 

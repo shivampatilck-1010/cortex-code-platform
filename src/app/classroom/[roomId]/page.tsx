@@ -519,10 +519,13 @@ export default function ClassroomLivePage() {
       setConnectionStatus(status);
     });
 
-    // Resilient background edge synchronization: pings every 1.2 seconds to reconcile isolates
+    // Realtime transport delivers ordinary changes. This is only a low-cost
+    // reconciliation safety net for a missed edge event.
     const syncTimer = setInterval(() => {
-      fetchRoomState(participantId, participantName, participantRole);
-    }, 1200);
+      if (document.visibilityState === 'visible') {
+        fetchRoomState(participantId, participantName, participantRole);
+      }
+    }, 5000);
 
     // Instant catch-up whenever user returns to tab, focuses window, or reconnects online
     const handleImmediateWakeSync = () => {

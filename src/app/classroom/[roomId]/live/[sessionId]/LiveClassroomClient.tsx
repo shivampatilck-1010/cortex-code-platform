@@ -42,6 +42,11 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
   // Throttle refs for teacher code broadcasting
   const codeBroadcastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastBroadcastedCodeRef = useRef<string>('');
+  const followingTeacherRef = useRef(isFollowingTeacher);
+
+  useEffect(() => {
+    followingTeacherRef.current = isFollowingTeacher;
+  }, [isFollowingTeacher]);
 
   useEffect(() => {
     // Quick and dirty local auth fetch
@@ -70,19 +75,20 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
       userId: currentUserId,
       userName: currentUserName,
       role: currentUserRole,
+      autoConnect: false,
       onStateChange: (state) => setConnectionState(state),
     });
     realtimeClientRef.current = client;
     client.connect();
 
     client.on('teacher.code.changed', (evt) => {
-      if (!isTeacher && isFollowingTeacher) {
+      if (!isTeacher && followingTeacherRef.current) {
         setTeacherCode(evt.payload?.code || '');
       }
     });
 
     client.on('teacher.output.created', (evt) => {
-      if (!isTeacher && isFollowingTeacher) {
+      if (!isTeacher && followingTeacherRef.current) {
         setTeacherOutput(evt.payload?.output);
       }
     });
@@ -128,7 +134,7 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
     return () => {
       client.disconnect();
     };
-  }, [roomId, currentUserId, currentUserName, currentUserRole, isFollowingTeacher, isTeacher, router]);
+  }, [roomId, currentUserId, currentUserName, currentUserRole, isTeacher, router]);
 
   
 
@@ -174,6 +180,28 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
     }
   };
 
+  const executeStudentCode = async () => {
+    if (isTeacher || isFollowingTeacher) return;
+    setIsExecuting(true);
+    setStudentOutput(null);
+    try {
+      const res = await fetch('/api/v1/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: [{ name: 'main.cpp', content: studentCode }],
+          language: 'cpp',
+          version: '10.2.0',
+        }),
+      });
+      setStudentOutput(await res.json());
+    } catch (error) {
+      console.error('Unable to run student code', error);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
   
   const toggleShareCode = () => {
     if (isTeacher) return;
@@ -209,7 +237,7 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
              <ArrowLeft className="w-4 h-4" /> Exit
           </button>
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${connectionState === 'CONNECTED' ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></span>
+            <span className={`w-2 h-2 rounded-full ${connectionState === 'CONNECTED' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
             <span className="text-xs text-gray-500 uppercase font-semibold">{connectionState}</span>
           </div>
         </div>
@@ -295,9 +323,9 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
         {/* Top Header */}
         <div className="h-14 border-b border-[#1e1e24] bg-[#0a0a0f] flex items-center justify-between px-4">
             <div className="flex items-center gap-3">
-                <div className="bg-red-500/20 text-red-500 px-2 py-1 rounded text-xs font-bold uppercase flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                    LIVE
+                <div className="bg-emerald-500/10 text-emerald-300 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
+                    Live session
                 </div>
                 <h1 className="text-sm font-semibold text-white">
                     {isTeacher ? 'Broadcasting to Classroom' : (isFollowingTeacher ? "Teacher's Demonstration" : "Private Workspace")}
@@ -308,17 +336,19 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
                     <button 
                         onClick={executeTeacherCode}
                         disabled={isExecuting}
-                        className="bg-[#ff9100] text-black hover:bg-[#ffaa33] transition px-4 py-1.5 rounded font-bold text-sm flex items-center gap-2 shadow-[0_0_15px_rgba(255,145,0,0.3)] disabled:opacity-50"
+                        className="bg-[#ff9100] text-black hover:bg-[#ffaa33] transition px-4 py-1.5 rounded font-bold text-sm flex items-center gap-2 disabled:opacity-50"
                     >
                         {isExecuting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                         Run Code
                     </button>
                 )}
                 {!isTeacher && !isFollowingTeacher && (
-                     <button 
+                     <button
+                        onClick={executeStudentCode}
+                        disabled={isExecuting}
                         className="bg-[#ff9100] text-black hover:bg-[#ffaa33] transition px-4 py-1.5 rounded font-bold text-sm flex items-center gap-2"
                     >
-                        <Play className="w-4 h-4" /> Run Mine
+                        {isExecuting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />} Run Mine
                     </button>
                 )}
             </div>

@@ -25,10 +25,15 @@ export interface AuthContext {
   isAdmin: boolean;
 }
 
-const INTERNAL_SECRET = process.env.CORTEX_INTERNAL_AUTH_SECRET || 'cortex_internal_hmac_secret_4892174982174';
-const CLIENT_SECRET = process.env.CORTEX_CLIENT_AUTH_SECRET || 'cortex_client_hmac_secret_1892374981273';
+// Development defaults keep the local prototype usable, but production must
+// never silently mint credentials with a source-controlled secret.
+const INTERNAL_SECRET = process.env.CORTEX_INTERNAL_AUTH_SECRET ||
+  (process.env.NODE_ENV === 'production' ? '' : 'cortex_internal_hmac_secret_4892174982174');
+const CLIENT_SECRET = process.env.CORTEX_CLIENT_AUTH_SECRET ||
+  (process.env.NODE_ENV === 'production' ? '' : 'cortex_client_hmac_secret_1892374981273');
 
 function signHmac(data: string, secret: string): string {
+  if (!secret) return '';
   return crypto.createHmac('sha256', secret).update(data).digest('base64url');
 }
 
@@ -48,6 +53,9 @@ export class ClassroomAuth {
    * Generates a signed client auth token (e.g. for session cookies or bearer auth)
    */
   static createClientToken(userId: string, expiresInMs = 7 * 86400000): string {
+    if (!CLIENT_SECRET) {
+      throw new Error('CORTEX_CLIENT_AUTH_SECRET must be configured in production');
+    }
     const payload = {
       sub: userId,
       iat: Date.now(),
@@ -62,7 +70,7 @@ export class ClassroomAuth {
    * Verifies a client token and returns the userId if valid
    */
   static verifyClientToken(token: string): string | null {
-    if (!token || typeof token !== 'string') return null;
+    if (!CLIENT_SECRET || !token || typeof token !== 'string') return null;
     const parts = token.split('.');
     if (parts.length !== 2) return null;
     const [encodedPayload, sig] = parts;
@@ -84,6 +92,9 @@ export class ClassroomAuth {
    * Creates an internal, tamper-proof connection context token for Worker -> DO boundary
    */
   static createInternalAuthToken(auth: AuthenticatedClassroomUser, expiresInMs = 120_000): string {
+    if (!INTERNAL_SECRET) {
+      throw new Error('CORTEX_INTERNAL_AUTH_SECRET must be configured in production');
+    }
     const payload = {
       ...auth,
       exp: Date.now() + expiresInMs,
@@ -97,7 +108,7 @@ export class ClassroomAuth {
    * Verifies the internal connection context token inside the Durable Object
    */
   static verifyInternalAuthToken(token: string): AuthenticatedClassroomUser | null {
-    if (!token || typeof token !== 'string') return null;
+    if (!INTERNAL_SECRET || !token || typeof token !== 'string') return null;
     const parts = token.split('.');
     if (parts.length !== 2) return null;
     const [encodedPayload, sig] = parts;
