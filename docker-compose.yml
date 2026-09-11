@@ -13,12 +13,12 @@ services:
       - NODE_ENV=production
       - NEXT_PUBLIC_APP_URL=http://localhost:3000
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
       - FEEDBACK_RECIPIENT_EMAIL=${FEEDBACK_RECIPIENT_EMAIL:-support@cortexcode.io}
-      - FEEDBACK_WEBHOOK_URL=${FEEDBACK_WEBHOOK_URL}
+      - FEEDBACK_WEBHOOK_URL=${FEEDBACK_WEBHOOK_URL:-}
     volumes:
       # Persistent volume for feedback database
       - cortex-data:/app/data

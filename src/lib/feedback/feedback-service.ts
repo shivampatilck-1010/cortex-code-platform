@@ -222,7 +222,7 @@ export async function sendEmailNotification(
 
   return {
     sent: false,
-    error: 'SMTP not configured in environment; feedback securely preserved in local database',
+    error: 'Email dispatch is optional and not configured in environment; feedback securely preserved in local database',
     recipient,
   };
 }

@@ -1,0 +1,6 @@
+{
+  "name": "Cortex — Online Compiler & Cloud IDE",
+  "description": "Multi-language cloud development environment and collaborative realtime classroom platform with compiler execution, interactive code arena, and WebSocket collaboration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

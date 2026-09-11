@@ -1,6 +1,71 @@
 import { ClassroomEventMessage } from './types';
 
+export type ClassroomEventType =
+  | 'classroom.updated'
+  | 'student.joined'
+  | 'student.left'
+  | 'student.presence.updated'
+  | 'announcement.created'
+  | 'announcement.updated'
+  | 'announcement.deleted'
+  | 'message.created'
+  | 'message.deleted'
+  | 'assignment.created'
+  | 'assignment.updated'
+  | 'assignment.published'
+  | 'submission.created'
+  | 'submission.started'
+  | 'submission.running'
+  | 'submission.completed'
+  | 'submission.failed'
+  | 'grade.created'
+  | 'grade.updated'
+  | 'feedback.created'
+  | 'notification.created'
+  | 'session.started'
+  | 'session.ended'
+  | 'code.shared'
+  | 'code.updated'
+  | 'session.created'
+  | 'session.updated'
+  | 'teacher.code.snapshot'
+  | 'classroom.snapshot'
+  | 'teacher.code.changed'
+  | 'teacher.file.created'
+  | 'teacher.file.updated'
+  | 'teacher.file.deleted'
+  | 'teacher.cursor.updated'
+  | 'teacher.output.created'
+  | 'student.follow_teacher'
+  | 'student.unfollow_teacher'
+  | 'student.code.shared'
+  | 'student.code_share.revoked'
+  | 'question.created'
+  | 'question.answered'
+  | 'question.pinned';
+
+
+export interface ClassroomRealtimeEvent {
+  id: string;
+  classroomId: string;
+  sequence: number;
+  type: ClassroomEventType | string;
+  actorId: string;
+  actorName: string;
+  timestamp: number;
+  payload: any;
+}
+
 export type RealtimeMessageType =
+  | 'auth'
+  | 'auth_ok'
+  | 'auth_failed'
+  | 'event'
+  | 'ack'
+  | 'resync_request'
+  | 'resync_response'
+  | 'ping'
+  | 'pong'
   | 'join'
   | 'leave'
   | 'presence'
@@ -23,17 +88,18 @@ export type RealtimeMessageType =
   | 'start_classroom'
   | 'arena_started'
   | 'classroom_ended'
-  | 'ping'
-  | 'pong'
-  | 'ack'
   | 'error';
 
 export interface RealtimeMessage {
   type: RealtimeMessageType;
-  roomId: string;
+  roomId?: string;
+  classroomId?: string;
+  sequence?: number;
+  eventId?: string;
   workspaceId?: string;
   documentId?: string;
-  clientId: string;
+  clientId?: string;
+  senderId?: string;
   senderName?: string;
   operationId?: string;
   payload?: any;
@@ -47,14 +113,20 @@ export function parseRealtimeMessage(raw: any): RealtimeMessage | null {
   try {
     const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (!obj || typeof obj !== 'object') return null;
-    if (typeof obj.type !== 'string' || !obj.roomId) return null;
+    if (typeof obj.type !== 'string') return null;
+
+    const roomId = obj.classroomId || obj.roomId ? String(obj.classroomId || obj.roomId).toUpperCase().trim() : undefined;
 
     return {
       type: obj.type as RealtimeMessageType,
-      roomId: String(obj.roomId).toUpperCase().trim(),
+      roomId: roomId,
+      classroomId: roomId,
+      sequence: typeof obj.sequence === 'number' ? obj.sequence : undefined,
+      eventId: obj.eventId || obj.id,
       workspaceId: obj.workspaceId ? String(obj.workspaceId) : undefined,
       documentId: obj.documentId ? String(obj.documentId) : undefined,
-      clientId: String(obj.clientId || obj.senderId || 'unknown'),
+      clientId: String(obj.clientId || obj.senderId || obj.userId || 'unknown'),
+      senderId: String(obj.senderId || obj.clientId || obj.userId || 'unknown'),
       senderName: obj.senderName ? String(obj.senderName) : undefined,
       operationId: obj.operationId ? String(obj.operationId) : undefined,
       payload: obj.payload ?? {},
@@ -78,14 +150,16 @@ export function serializeRealtimeMessage(msg: RealtimeMessage): string {
 export function toClassroomEventMessage(msg: RealtimeMessage): ClassroomEventMessage {
   return {
     type: msg.type as any,
-    roomId: msg.roomId,
-    senderId: msg.clientId,
+    roomId: msg.roomId || msg.classroomId || '',
+    senderId: msg.clientId || msg.senderId || 'unknown',
     senderName: msg.senderName,
     payload: {
       ...msg.payload,
       documentId: msg.documentId,
       workspaceId: msg.workspaceId,
       operationId: msg.operationId,
+      sequence: msg.sequence,
+      eventId: msg.eventId,
     },
     timestamp: msg.timestamp,
   };

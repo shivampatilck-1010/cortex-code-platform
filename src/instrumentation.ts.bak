@@ -1,0 +1,11 @@
+export async function register() {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    try {
+      const { ensureNodeWsServer } = await import('@/lib/classroom/node-ws-server');
+      await ensureNodeWsServer(3002);
+      console.log('[Classroom] Internal WebSocket server initialized on port 3002');
+    } catch (err) {
+      console.error('[Classroom] Failed to start WebSocket server in instrumentation:', err);
+    }
+  }
+}

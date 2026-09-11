@@ -5,7 +5,7 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "main": "vinext/server/fetch-handler",
+  "main": "src/worker.ts",
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
@@ -14,6 +14,20 @@
   "cache": {
     "enabled": true
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CLASSROOM_ROOM_DO",
+        "class_name": "ClassroomRoomDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["ClassroomRoomDO"]
+    }
+  ],
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   }

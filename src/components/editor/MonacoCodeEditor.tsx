@@ -19,6 +19,7 @@ interface MonacoCodeEditorProps {
   theme?: string;
   fontSize?: number;
   wordWrap?: 'on' | 'off';
+  readOnly?: boolean;
   breakpoints: number[];
   onToggleBreakpoint: (lineNumber: number) => void;
   activeLine?: number;

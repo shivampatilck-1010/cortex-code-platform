@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomRoomManager } from '@/lib/classroom/room-manager';
+import { classroomDb } from '@/lib/classroom/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +18,54 @@ export async function POST(req: NextRequest) {
 
       const { room, adminParticipant } = ClassroomRoomManager.createRoom(name.trim(), settings);
       const inviteUrl = `${baseUrl}/classroom/${room.roomId}`;
+
+      // Persist in relational DB
+      classroomDb.createUser({
+        id: adminParticipant.id,
+        name: adminParticipant.name,
+        email: `${adminParticipant.name.toLowerCase().replace(/\s+/g, '.')}@cortex.edu`,
+        role: 'teacher',
+        status: 'active',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      classroomDb.createClassroom({
+        id: room.roomId,
+        name: body.classroomName || `${name.trim()}'s Interactive Classroom`,
+        subject: body.subject || 'Computer Science & Algorithms',
+        description: body.description || 'Interactive collaborative coding lab with automated testing and live dual-workspace monitor.',
+        courseCode: body.courseCode || room.roomId.split('-')[1] || 'CS-LAB',
+        academicYear: '2026-2027',
+        section: body.section || 'Sec 01',
+        teacherId: adminParticipant.id,
+        teacherName: adminParticipant.name,
+        joinCode: room.roomId,
+        joinEnabled: true,
+        status: 'active',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        settings: {
+          allowStudentPosting: true,
+          allowStudentMessaging: true,
+          allowCodeSharing: true,
+          leaderboardEnabled: true,
+          defaultAIPolicy: 'hints_only',
+        },
+      });
+
+      classroomDb.addMember({
+        id: `mem_${adminParticipant.id}_${room.roomId}`,
+        classroomId: room.roomId,
+        userId: adminParticipant.id,
+        userName: adminParticipant.name,
+        userEmail: `${adminParticipant.name.toLowerCase().replace(/\s+/g, '.')}@cortex.edu`,
+        role: 'teacher',
+        status: 'active',
+        joinedAt: Date.now(),
+        lastActiveAt: Date.now(),
+        isOnline: true,
+      });
 
       return NextResponse.json({
         success: true,
@@ -51,6 +100,30 @@ export async function POST(req: NextRequest) {
 
       const { room, participant } = ClassroomRoomManager.joinRoom(normRoomId, name.trim(), effectiveRole, existingId);
       const inviteUrl = `${baseUrl}/classroom/${room.roomId}`;
+
+      // Persist in relational DB
+      classroomDb.createUser({
+        id: participant.id,
+        name: participant.name,
+        email: `${participant.name.toLowerCase().replace(/\s+/g, '.')}@student.cortex.edu`,
+        role: participant.role === 'admin' ? 'teacher' : 'student',
+        status: 'active',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      classroomDb.addMember({
+        id: `mem_${participant.id}_${room.roomId}`,
+        classroomId: room.roomId,
+        userId: participant.id,
+        userName: participant.name,
+        userEmail: `${participant.name.toLowerCase().replace(/\s+/g, '.')}@student.cortex.edu`,
+        role: participant.role === 'admin' ? 'teacher' : 'student',
+        status: 'active',
+        joinedAt: Date.now(),
+        lastActiveAt: Date.now(),
+        isOnline: true,
+      });
 
       return NextResponse.json({
         success: true,

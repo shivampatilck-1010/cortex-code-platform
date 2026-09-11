@@ -125,7 +125,7 @@ export async function GET(
               ClassroomRoomManager.broadcast(normRoomId, {
                 type: 'crdt_sync',
                 roomId: normRoomId,
-                senderId: msg.clientId,
+                senderId: msg.clientId || 'unknown',
                 payload: { update: msg.payload.update, documentId: docId },
                 timestamp: Date.now(),
               });
@@ -146,7 +146,7 @@ export async function GET(
           ClassroomRoomManager.broadcast(normRoomId, {
             type: msg.type as any,
             roomId: normRoomId,
-            senderId: msg.clientId,
+            senderId: msg.clientId || 'unknown',
             senderName: msg.senderName,
             payload: msg.payload,
             timestamp: Date.now(),

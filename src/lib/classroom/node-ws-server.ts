@@ -1,7 +1,10 @@
 import * as Y from 'yjs';
 import { ClassroomRoomManager } from './room-manager';
+import { classroomDb } from './db';
+import { realtimeCoordinator, WsClientSession } from './realtime';
 import {
   RealtimeMessage,
+  ClassroomRealtimeEvent,
   parseRealtimeMessage,
   serializeRealtimeMessage,
   base64ToUint8Array,
@@ -20,7 +23,7 @@ if (!globalThis.__cortex_room_ydocs) {
 const roomYDocs = globalThis.__cortex_room_ydocs;
 
 /**
- * Get or initialize authoritative Y.Doc on the server
+ * Authoritative server Y.Doc for dual-workspace collaborative coding
  */
 export function getServerYDoc(roomId: string, documentId: string, initialContent?: string): Y.Doc {
   const normRoom = roomId.toUpperCase().trim();
@@ -42,10 +45,12 @@ export function getServerYDoc(roomId: string, documentId: string, initialContent
 interface ClientMeta {
   ws: any;
   roomId: string;
+  classroomId: string;
   participantId: string;
   participantName: string;
   participantRole: string;
   isAlive: boolean;
+  unregisterRealtime?: () => void;
 }
 
 const connectedClients = new Set<ClientMeta>();
@@ -58,7 +63,10 @@ export function broadcastToRoom(roomId: string, message: RealtimeMessage, exclud
   const raw = serializeRealtimeMessage(message);
 
   connectedClients.forEach((client) => {
-    if (client.roomId === normRoom && client.ws.readyState === 1 /* OPEN */) {
+    if (
+      (client.roomId === normRoom || client.classroomId === normRoom) &&
+      client.ws.readyState === 1 /* OPEN */
+    ) {
       if (!excludeClientId || client.participantId !== excludeClientId) {
         try {
           client.ws.send(raw);
@@ -69,18 +77,6 @@ export function broadcastToRoom(roomId: string, message: RealtimeMessage, exclud
     }
   });
 }
-
-// Subscribe ClassroomRoomManager broadcasts directly to connected Node WebSockets
-ClassroomRoomManager.setExternalBroadcaster((roomId: string, event: any) => {
-  broadcastToRoom(roomId, {
-    type: event.type as any,
-    roomId,
-    clientId: event.senderId,
-    senderName: event.senderName,
-    payload: event.payload,
-    timestamp: event.timestamp || Date.now(),
-  });
-});
 
 /**
  * Ensures the Node.js WebSocket server is started and running
@@ -96,8 +92,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
 
   try {
     const { WebSocketServer } = await import('ws');
-    
-    // Attempt desired port, fallback to port 0 (OS assigned) if occupied
+
     let wss: any = null;
     let actualPort = desiredPort;
 
@@ -117,9 +112,9 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
         globalThis.__cortex_node_ws_server = wss;
         resolve();
       });
+
       wss.on('error', (err: any) => {
         if (err.code === 'EADDRINUSE') {
-          // Fallback to random free port
           try {
             const fallbackWss = new WebSocketServer({ port: 0 });
             fallbackWss.on('listening', () => {
@@ -140,16 +135,162 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
 
     // Connection handler
     globalThis.__cortex_node_ws_server.on('connection', (ws: any, req: any) => {
-      let clientMeta: ClientMeta = {
+      const url = new URL(req.url || '/', 'http://localhost');
+      
+      // Parse classroom ID from path (e.g., /api/v1/classrooms/CLS-123/ws) or query param
+      let pathClassroomId = '';
+      const parts = url.pathname.split('/');
+      const wsIdx = parts.indexOf('ws');
+      if (wsIdx > 0) {
+        pathClassroomId = parts[wsIdx - 1];
+      }
+      const classroomId = (pathClassroomId || url.searchParams.get('classroomId') || url.searchParams.get('roomId') || '').toUpperCase().trim();
+      const requestedUserId = url.searchParams.get('userId') || url.searchParams.get('participantId');
+
+      // 1. Validate Classroom existence
+      if (!classroomId) {
+        ws.send(serializeRealtimeMessage({
+          type: 'error',
+          payload: { code: 'BAD_REQUEST', message: 'Missing classroomId' },
+          timestamp: Date.now(),
+        }));
+        ws.close(4400, 'Bad Request: Missing classroomId');
+        return;
+      }
+
+      const classroom = classroomDb.getClassroom(classroomId);
+      if (!classroom) {
+        ws.send(serializeRealtimeMessage({
+          type: 'error',
+          classroomId,
+          payload: { code: 'NOT_FOUND', message: `Classroom ${classroomId} not found.` },
+          timestamp: Date.now(),
+        }));
+        ws.close(4404, 'Classroom not found');
+        return;
+      }
+
+      // 2. Authenticate User
+      if (!requestedUserId || requestedUserId === 'usr_anonymous') {
+        ws.send(serializeRealtimeMessage({
+          type: 'error',
+          classroomId,
+          payload: { code: 'UNAUTHORIZED', message: 'Authentication required. Missing user ID.' },
+          timestamp: Date.now(),
+        }));
+        ws.close(4401, 'Unauthorized: Missing user ID');
+        return;
+      }
+
+      const user = classroomDb.getUser(requestedUserId);
+      if (!user) {
+        ws.send(serializeRealtimeMessage({
+          type: 'error',
+          classroomId,
+          payload: { code: 'UNAUTHORIZED', message: `Authentication failed: User ${requestedUserId} does not exist.` },
+          timestamp: Date.now(),
+        }));
+        ws.close(4401, 'Unauthorized: User not found');
+        return;
+      }
+
+      // 3. Authoritatively determine user role and validate classroom membership
+      let authoritativeRole: 'teacher' | 'student' | 'admin' = 'student';
+      let isAuthorized = false;
+
+      if (user.role === 'admin') {
+        authoritativeRole = 'admin';
+        isAuthorized = true;
+      } else if (classroom.teacherId === user.id) {
+        authoritativeRole = 'teacher';
+        isAuthorized = true;
+      } else {
+        const membership = classroomDb.getMember(classroomId, user.id);
+        if (membership && membership.status === 'active') {
+          authoritativeRole = membership.role === 'teacher' ? 'teacher' : 'student';
+          isAuthorized = true;
+        }
+      }
+
+      if (!isAuthorized) {
+        console.warn(`[Security Alert] Access Denied: User ${user.id} (${user.name}) is not enrolled in classroom ${classroomId}`);
+        ws.send(serializeRealtimeMessage({
+          type: 'error',
+          classroomId,
+          payload: { code: 'FORBIDDEN', message: `Access denied. You are not enrolled in classroom ${classroomId}.` },
+          timestamp: Date.now(),
+        }));
+        ws.close(4403, 'Forbidden: Not enrolled in classroom');
+        return;
+      }
+
+      const clientMeta: ClientMeta = {
         ws,
-        roomId: '',
-        participantId: '',
-        participantName: '',
-        participantRole: 'user',
+        roomId: classroomId,
+        classroomId,
+        participantId: user.id,
+        participantName: user.name,
+        participantRole: authoritativeRole,
         isAlive: true,
       };
 
       connectedClients.add(clientMeta);
+
+      // Register with RealtimeCoordinator
+      const session: WsClientSession = {
+        id: `ws_${user.id}_${Date.now()}`,
+        userId: user.id,
+        userName: user.name,
+        role: authoritativeRole,
+        classroomId,
+        send: (raw: string) => {
+          if (ws.readyState === 1) {
+            try { ws.send(raw); } catch {}
+          }
+        },
+        isAlive: true,
+        lastActive: Date.now(),
+      };
+
+      clientMeta.unregisterRealtime = realtimeCoordinator.registerWsClient(classroomId, session);
+
+      // Send initial auth_ok handshake immediately with current authoritative sequence
+      const currentSeq = classroomDb.getNextEventSequence(classroomId) - 1;
+      const members = classroomDb.listMembers(classroomId);
+
+      ws.send(
+        serializeRealtimeMessage({
+          type: 'auth_ok',
+          classroomId,
+          sequence: Math.max(0, currentSeq),
+          payload: {
+            currentSequence: Math.max(0, currentSeq),
+            userId: user.id,
+            role: authoritativeRole,
+            members: members.map((m) => ({
+              id: m.userId,
+              name: m.userName,
+              role: m.role,
+              isOnline: m.isOnline,
+            })),
+            onlineCount: realtimeCoordinator.getOnlineCount(classroomId),
+          },
+          timestamp: Date.now(),
+        })
+      );
+
+      // Broadcast student.joined
+      realtimeCoordinator.broadcast(
+        classroomId,
+        'student.joined',
+        {
+          userId: user.id,
+          userName: user.name,
+          role: authoritativeRole,
+          onlineCount: realtimeCoordinator.getOnlineCount(classroomId),
+        },
+        { id: user.id, name: user.name }
+      );
 
       ws.on('pong', () => {
         clientMeta.isAlive = true;
@@ -163,22 +304,27 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
 
           handleClientMessage(clientMeta, msg);
         } catch (err) {
-          console.error('[NodeWSServer] Message handling error', err);
+          console.error('[NodeWSServer] Message error', err);
         }
       });
 
       ws.on('close', () => {
         connectedClients.delete(clientMeta);
-        if (clientMeta.roomId && clientMeta.participantId) {
-          ClassroomRoomManager.leaveRoom(clientMeta.roomId, clientMeta.participantId);
-          broadcastToRoom(clientMeta.roomId, {
-            type: 'presence',
-            roomId: clientMeta.roomId,
-            clientId: clientMeta.participantId,
-            senderName: clientMeta.participantName,
-            payload: { participantId: clientMeta.participantId, online: false, status: 'offline' },
-            timestamp: Date.now(),
-          });
+        if (clientMeta.unregisterRealtime) {
+          clientMeta.unregisterRealtime();
+        }
+
+        if (clientMeta.classroomId) {
+          realtimeCoordinator.broadcast(
+            clientMeta.classroomId,
+            'student.left',
+            {
+              userId: clientMeta.participantId,
+              userName: clientMeta.participantName,
+              onlineCount: realtimeCoordinator.getOnlineCount(clientMeta.classroomId),
+            },
+            { id: clientMeta.participantId, name: clientMeta.participantName }
+          );
         }
       });
 
@@ -187,7 +333,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
       });
     });
 
-    // Heartbeat ping interval every 15s to prune ghost sockets
+    // 15s Heartbeat Ping
     const pingInterval = setInterval(() => {
       connectedClients.forEach((client) => {
         if (!client.isAlive) {
@@ -206,7 +352,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
 
     return globalThis.__cortex_node_ws_port || actualPort;
   } catch (err) {
-    console.warn('[NodeWSServer] Could not start native WebSocket server, using SSE fallback', err);
+    console.warn('[NodeWSServer] Could not start WebSocket server', err);
     return null;
   }
 }
@@ -216,31 +362,35 @@ export function getNodeWsPort(): number | null {
 }
 
 /**
- * Handle incoming parsed message from client
+ * Handle incoming parsed message from WebSocket client
  */
 function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
-  const normRoom = msg.roomId.toUpperCase().trim();
+  const normRoom = (msg.classroomId || msg.roomId || client.classroomId || '').toUpperCase().trim();
 
   switch (msg.type) {
-    case 'join': {
-      client.roomId = normRoom;
-      client.participantId = msg.clientId;
-      client.participantName = msg.senderName || msg.payload?.participantName || 'Anonymous';
-      client.participantRole = msg.payload?.role || 'user';
-
-      const room = ClassroomRoomManager.getRoom(normRoom, true);
-      if (room) {
-        // Reply with full authoritative room state
-        client.ws.send(
-          serializeRealtimeMessage({
-            type: 'room_state',
-            roomId: normRoom,
-            clientId: 'server',
-            payload: { room },
-            timestamp: Date.now(),
-          })
-        );
-      }
+    case 'auth': {
+      // Re-verify auth but NEVER allow client to escalate role or spoof identity
+      const currentSeq = classroomDb.getNextEventSequence(normRoom) - 1;
+      client.ws.send(
+        serializeRealtimeMessage({
+          type: 'auth_ok',
+          classroomId: normRoom,
+          sequence: Math.max(0, currentSeq),
+          payload: {
+            currentSequence: Math.max(0, currentSeq),
+            userId: client.participantId,
+            role: client.participantRole,
+            members: classroomDb.listMembers(normRoom).map((m) => ({
+              id: m.userId,
+              name: m.userName,
+              role: m.role,
+              isOnline: m.isOnline,
+            })),
+            onlineCount: realtimeCoordinator.getOnlineCount(normRoom),
+          },
+          timestamp: Date.now(),
+        })
+      );
       break;
     }
 
@@ -248,17 +398,132 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
       client.ws.send(
         serializeRealtimeMessage({
           type: 'pong',
+          classroomId: normRoom,
           roomId: normRoom,
           clientId: 'server',
-          payload: { clientTimestamp: msg.timestamp },
+          payload: { clientTimestamp: msg.timestamp, serverTimestamp: Date.now() },
           timestamp: Date.now(),
         })
       );
       break;
     }
 
+    case 'resync_request': {
+      const currentSeq = classroomDb.getNextEventSequence(normRoom) - 1;
+      const since = typeof msg.payload?.sinceSequence === 'number' ? msg.payload.sinceSequence : (msg.sequence || 0);
+      const missed = realtimeCoordinator.getMissedEvents(normRoom, since);
+
+      // Check if client sequence is older than available ring-buffer / event retention
+      const isBufferOverflow = since > 0 && currentSeq - since > 500;
+
+      if (isBufferOverflow || since === 0) {
+        // Authoritative full state snapshot
+        const announcements = classroomDb.listAnnouncements(normRoom);
+        const assignments = classroomDb.listAssignments(normRoom);
+        const members = classroomDb.listMembers(normRoom);
+        const recentMessages = classroomDb.listMessages(normRoom, 50);
+
+        client.ws.send(
+          serializeRealtimeMessage({
+            type: 'resync_response',
+            classroomId: normRoom,
+            sequence: Math.max(0, currentSeq),
+            payload: {
+              isFullSnapshot: true,
+              currentSequence: Math.max(0, currentSeq),
+              sinceSequence: since,
+              events: missed,
+              snapshot: {
+                announcements,
+                assignments,
+                members: members.map((m) => ({
+                  id: m.userId,
+                  name: m.userName,
+                  role: m.role,
+                  isOnline: m.isOnline,
+                })),
+                recentMessages,
+              },
+            },
+            timestamp: Date.now(),
+          })
+        );
+      } else {
+        client.ws.send(
+          serializeRealtimeMessage({
+            type: 'resync_response',
+            classroomId: normRoom,
+            sequence: Math.max(0, currentSeq),
+            payload: {
+              isFullSnapshot: false,
+              events: missed,
+              sinceSequence: since,
+            },
+            timestamp: Date.now(),
+          })
+        );
+      }
+      break;
+    }
+
+    case 'event': {
+      const eventData = msg.payload?.event || msg.payload;
+      if (!eventData || !eventData.type) return;
+
+      const teacherOnlyEvents = new Set([
+        'announcement.created',
+        'announcement.deleted',
+        'assignment.published',
+        'assignment.updated',
+        'assignment.deleted',
+        'grade.updated',
+        'submission.graded',
+        'student.removed',
+        'rollcall.started',
+        'rollcall.closed',
+        'session.started',
+        'session.ended',
+        'session.recording.started',
+        'session.recording.stopped',
+      ]);
+
+      const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
+      if (teacherOnlyEvents.has(eventData.type) && !isInstructor) {
+        console.warn(`[Security Alert] Non-teacher user ${client.participantId} attempted forbidden event: ${eventData.type}`);
+        client.ws.send(
+          serializeRealtimeMessage({
+            type: 'error',
+            classroomId: normRoom,
+            payload: {
+              code: 'FORBIDDEN_EVENT',
+              message: `Unauthorized: Only instructors are permitted to emit '${eventData.type}'.`,
+            },
+            timestamp: Date.now(),
+          })
+        );
+        return;
+      }
+
+      const recorded = realtimeCoordinator.handleIncomingClientEvent(
+        normRoom,
+        eventData,
+        { id: client.participantId, name: client.participantName, role: client.participantRole }
+      );
+
+      if (recorded) {
+        client.ws.send(
+          serializeRealtimeMessage({
+            type: 'ack',
+            eventId: recorded.id,
+            sequence: recorded.sequence,
+            timestamp: Date.now(),
+          })
+        );
+      }
+      break;
+    }
+
     case 'doc_sync_step1': {
-      // Yjs sync step 1: client sent state vector, server replies with missing updates
       const docId = msg.documentId || 'default';
       const initialContent = msg.payload?.initialContent;
       const ydoc = getServerYDoc(normRoom, docId, initialContent);
@@ -268,7 +533,6 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         clientVector = base64ToUint8Array(msg.payload.vector);
       }
 
-      // Compute updates that client is missing
       const serverUpdate = Y.encodeStateAsUpdate(ydoc, clientVector);
       const serverVector = Y.encodeStateVector(ydoc);
 
@@ -290,7 +554,6 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
 
     case 'doc_sync_step2':
     case 'doc_update': {
-      // Client sent CRDT update
       const docId = msg.documentId || 'default';
       const ydoc = getServerYDoc(normRoom, docId);
 
@@ -298,15 +561,6 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         const binaryUpdate = base64ToUint8Array(msg.payload.update);
         Y.applyUpdate(ydoc, binaryUpdate, client.participantId);
 
-        // Synchronize in-memory participant activeCode in room manager
-        const textContent = ydoc.getText('monaco').toString();
-        const room = ClassroomRoomManager.getRoom(normRoom);
-        if (room && msg.clientId && room.participants[msg.clientId]) {
-          room.participants[msg.clientId].activeCode = textContent;
-          room.participants[msg.clientId].lastActive = Date.now();
-        }
-
-        // Broadcast CRDT delta to all other peers in the room
         broadcastToRoom(
           normRoom,
           {
@@ -322,76 +576,6 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
           client.participantId
         );
       }
-      break;
-    }
-
-    case 'awareness_update': {
-      // Broadcast user presence / selection / cursor changes without modifying document
-      broadcastToRoom(
-        normRoom,
-        {
-          type: 'awareness_update',
-          roomId: normRoom,
-          documentId: msg.documentId,
-          clientId: msg.clientId,
-          senderName: msg.senderName,
-          payload: msg.payload,
-          timestamp: Date.now(),
-        },
-        client.participantId
-      );
-      break;
-    }
-
-    case 'cursor_update': {
-      broadcastToRoom(normRoom, msg, client.participantId);
-      break;
-    }
-
-    case 'code_update': {
-      // Legacy code update fallback
-      const targetId = msg.payload?.participantId || msg.payload?.targetUserId || msg.clientId;
-      if (targetId && msg.payload?.code !== undefined) {
-        ClassroomRoomManager.updateParticipantCode(normRoom, targetId, {
-          code: msg.payload.code,
-          language: msg.payload.language,
-        });
-      }
-      broadcastToRoom(normRoom, msg, client.participantId);
-      break;
-    }
-
-    case 'select_workspaces':
-    case 'collaboration_request':
-    case 'collaboration_response':
-    case 'end_collaboration':
-    case 'file_download_request':
-    case 'file_download_response':
-    case 'admin_action':
-    case 'chat_message': {
-      // Forward to room-manager pub/sub and broadcast to room
-      ClassroomRoomManager.broadcast(normRoom, {
-        type: msg.type as any,
-        roomId: normRoom,
-        senderId: msg.clientId,
-        senderName: msg.senderName,
-        payload: msg.payload,
-        timestamp: Date.now(),
-      });
-      broadcastToRoom(normRoom, msg, client.participantId);
-      break;
-    }
-
-    case 'start_classroom':
-    case 'arena_started': {
-      const room = ClassroomRoomManager.startClassroom(normRoom, client.participantId);
-      broadcastToRoom(normRoom, {
-        type: 'room_state',
-        roomId: normRoom,
-        clientId: 'server',
-        payload: { room },
-        timestamp: Date.now(),
-      });
       break;
     }
 

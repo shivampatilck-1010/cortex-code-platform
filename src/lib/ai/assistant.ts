@@ -187,7 +187,7 @@ export function analyzeAndFixErrorOffline(
       inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' is not defined. Ensure it is assigned or passed as a parameter before this line.`;
 
       // Check if there is an existing similar variable name in the code
-      const allWords = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
+      const allWords: string[] = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
       const similar = allWords.find(w => w !== varName && w.length > 2 && (w.startsWith(varName.slice(0, 3)) || varName.startsWith(w.slice(0, 3))));
       if (similar && targetLine && targetLine <= fixedLines.length) {
         fixedLines[targetLine - 1] = fixedLines[targetLine - 1].replace(new RegExp(`\\b${varName}\\b`, 'g'), similar);
@@ -304,7 +304,7 @@ export function analyzeAndFixErrorOffline(
       explanation = `'${varName}' was referenced before being declared or defined in the current scope.`;
       inlineComment = `${commentPrefix}[Cortex AI]: Error on line ${targetLine || 1} - '${varName}' was not declared in this scope.`;
 
-      const allWords = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
+      const allWords: string[] = code.match(/\b[a-zA-Z_]\w*\b/g) || [];
       const similar = allWords.find(
         (w) =>
           w !== varName &&
