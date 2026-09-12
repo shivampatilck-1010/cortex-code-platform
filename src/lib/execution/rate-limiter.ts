@@ -14,13 +14,12 @@ class ExecutionRateLimiter {
   private readonly maxRequests: number;
   private readonly maxConcurrent: number;
 
+  private lastCleanup: number = Date.now();
+
   constructor(windowMs = 60_000, maxRequests = 20, maxConcurrent = 3) {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
     this.maxConcurrent = maxConcurrent;
-
-    // Periodic cleanup of stale records every 2 minutes
-    setInterval(() => this.cleanup(), 120_000).unref?.();
   }
 
   private getRecord(key: string): RateLimitRecord {
@@ -37,6 +36,10 @@ class ExecutionRateLimiter {
    */
   public checkRateLimit(key: string): { allowed: boolean; remaining: number; resetMs: number } {
     const now = Date.now();
+    if (now - this.lastCleanup > 120_000) {
+      this.cleanup();
+      this.lastCleanup = now;
+    }
     const rec = this.getRecord(key);
 
     // Remove timestamps outside the sliding window

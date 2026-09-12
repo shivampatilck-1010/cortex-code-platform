@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Classroom name is required' }, { status: 400 });
     }
 
-    const classroomId = `cls_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const classroomId = `CLS_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     const joinCode = (code || Math.random().toString(36).substring(2, 8)).toUpperCase();
 
     const newClassroom: Classroom = {

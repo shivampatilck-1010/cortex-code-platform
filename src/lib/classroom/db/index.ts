@@ -41,6 +41,15 @@ class ClassroomDatabase {
   private memoryUsers = new Map<string, User>();
   private memoryClassrooms = new Map<string, Classroom>();
   private memoryMembers = new Map<string, ClassroomMember>();
+  private memoryAnnouncements = new Map<string, Announcement>();
+  private memoryMessages = new Map<string, ClassroomMessage>();
+  private memoryAssignments = new Map<string, Assignment>();
+  private memorySubmissions = new Map<string, Submission>();
+  private memoryGrades = new Map<string, Grade>();
+  private memoryFeedback = new Map<string, Feedback>();
+  private memoryResources = new Map<string, ClassroomResource>();
+  private memoryLiveSessions = new Map<string, LiveClassSession>();
+  private memoryNotifications = new Map<string, Notification>();
 
   constructor() {}
 
@@ -79,7 +88,9 @@ class ClassroomDatabase {
       this.seedDefaultClassroom();
     } catch (err) {
       console.warn('[ClassroomDatabase] Falling back to in-memory fallback:', err);
-      this.initFallback();
+      this.db = null;
+      this.initialized = true;
+      this.seedDefaultClassroom();
     }
   }
 
@@ -437,10 +448,12 @@ class ClassroomDatabase {
 
   // --- SEEDING ---
   private seedDefaultClassroom() {
-    if (!this.getDb()) return;
-
-    const count = this.getDb().prepare('SELECT COUNT(*) as c FROM classrooms').get() as { c: number };
-    if (count && count.c > 0) return;
+    if (this.db) {
+      const count = this.db.prepare('SELECT COUNT(*) as c FROM classrooms').get() as { c: number };
+      if (count && count.c > 0) return;
+    } else {
+      if (this.memoryClassrooms.size > 0) return;
+    }
 
     const now = Date.now();
     const teacherId = 'usr_prof_elena';
@@ -890,6 +903,7 @@ int main() {
   // --- CLASSROOMS ---
   createClassroom(classroom: Classroom): Classroom {
     this.memoryClassrooms.set(classroom.id, classroom);
+    this.memoryClassrooms.set(classroom.id.toUpperCase(), classroom);
     if (!this.getDb()) return classroom;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO classrooms (
@@ -922,17 +936,23 @@ int main() {
 
   getClassroom(id: string): Classroom | null {
     if (!this.getDb()) {
-      return this.memoryClassrooms.get(id) || null;
+      return this.memoryClassrooms.get(id) || this.memoryClassrooms.get(id.toUpperCase()) || null;
     }
-    const row = this.getDb().prepare('SELECT * FROM classrooms WHERE id = ?').get(id) as any;
+    let row = this.getDb().prepare('SELECT * FROM classrooms WHERE id = ?').get(id) as any;
     if (!row) {
-      return this.memoryClassrooms.get(id) || null;
+      row = this.getDb().prepare('SELECT * FROM classrooms WHERE UPPER(id) = ?').get(id.toUpperCase()) as any;
+    }
+    if (!row) {
+      return this.memoryClassrooms.get(id) || this.memoryClassrooms.get(id.toUpperCase()) || null;
     }
     return this.mapClassroom(row);
   }
 
   getClassroomByJoinCode(joinCode: string): Classroom | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) {
+      const norm = joinCode.trim().toUpperCase();
+      return Array.from(this.memoryClassrooms.values()).find((c) => c.joinCode?.trim().toUpperCase() === norm) || null;
+    }
     const norm = joinCode.trim().toUpperCase();
     const row = this.getDb().prepare('SELECT * FROM classrooms WHERE UPPER(join_code) = ?').get(norm) as any;
     if (!row) return null;
@@ -940,7 +960,9 @@ int main() {
   }
 
   listClassroomsForUser(userId: string): Classroom[] {
-    if (!this.getDb()) return [];
+    if (!this.getDb()) {
+      return Array.from(this.memoryClassrooms.values());
+    }
     const rows = this.getDb().prepare(`
       SELECT c.* FROM classrooms c
       LEFT JOIN classroom_members m ON c.id = m.classroom_id
@@ -1057,7 +1079,8 @@ int main() {
 
   listMembers(classroomId: string): ClassroomMember[] {
     if (!this.getDb()) {
-      return Array.from(this.memoryMembers.values()).filter((m) => m.classroomId === classroomId);
+      const norm = classroomId.toUpperCase().trim();
+      return Array.from(this.memoryMembers.values()).filter((m) => m.classroomId.toUpperCase().trim() === norm || m.classroomId === classroomId);
     }
     const rows = this.getDb().prepare('SELECT * FROM classroom_members WHERE classroom_id = ? ORDER BY role DESC, user_name ASC').all(classroomId) as any[];
     return rows.map((r) => this.mapMember(r));
@@ -1094,6 +1117,7 @@ int main() {
 
   // --- ANNOUNCEMENTS ---
   createAnnouncement(ann: Announcement): Announcement {
+    this.memoryAnnouncements.set(ann.id, ann);
     if (!this.getDb()) return ann;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO announcements (
@@ -1118,7 +1142,12 @@ int main() {
   }
 
   listAnnouncements(classroomId: string): Announcement[] {
-    if (!this.getDb()) return [];
+    if (!this.getDb()) {
+      const norm = classroomId.toUpperCase().trim();
+      return Array.from(this.memoryAnnouncements.values())
+        .filter((a) => a.classroomId.toUpperCase().trim() === norm || a.classroomId === classroomId)
+        .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt - a.createdAt);
+    }
     const rows = this.getDb().prepare(`
       SELECT * FROM announcements
       WHERE classroom_id = ? AND deleted_at IS NULL
@@ -1140,7 +1169,7 @@ int main() {
   }
 
   getAnnouncement(id: string): Announcement | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) return this.memoryAnnouncements.get(id) || null;
     const r = this.getDb().prepare('SELECT * FROM announcements WHERE id = ? AND deleted_at IS NULL').get(id) as any;
     if (!r) return null;
     return {
@@ -1159,7 +1188,13 @@ int main() {
   }
 
   updateAnnouncement(id: string, updates: Partial<Announcement>): Announcement | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) {
+      const existing = this.memoryAnnouncements.get(id);
+      if (!existing) return null;
+      const updated = { ...existing, ...updates, updatedAt: Date.now() };
+      this.memoryAnnouncements.set(id, updated);
+      return updated;
+    }
     const existing = this.getAnnouncement(id);
     if (!existing) return null;
     const merged = { ...existing, ...updates, updatedAt: Date.now() };
@@ -1174,6 +1209,7 @@ int main() {
 
   // --- MESSAGES ---
   createMessage(msg: ClassroomMessage): ClassroomMessage {
+    this.memoryMessages.set(msg.id, msg);
     if (!this.getDb()) return msg;
     const stmt = this.getDb().prepare(`
       INSERT INTO messages (
@@ -1241,6 +1277,7 @@ int main() {
 
   // --- ASSIGNMENTS ---
   createAssignment(asg: Assignment): Assignment {
+    this.memoryAssignments.set(asg.id, asg);
     if (!this.getDb()) return asg;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO assignments (
@@ -1283,14 +1320,19 @@ int main() {
   }
 
   getAssignment(id: string): Assignment | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) return this.memoryAssignments.get(id) || null;
     const row = this.getDb().prepare('SELECT * FROM assignments WHERE id = ?').get(id) as any;
     if (!row) return null;
     return this.mapAssignment(row);
   }
 
   listAssignments(classroomId: string): Assignment[] {
-    if (!this.getDb()) return [];
+    if (!this.getDb()) {
+      const norm = classroomId.toUpperCase().trim();
+      return Array.from(this.memoryAssignments.values())
+        .filter((a) => a.classroomId.toUpperCase().trim() === norm || a.classroomId === classroomId)
+        .sort((a, b) => b.createdAt - a.createdAt);
+    }
     const rows = this.getDb().prepare('SELECT * FROM assignments WHERE classroom_id = ? ORDER BY due_at ASC, created_at DESC').all(classroomId) as any[];
     return rows.map((r) => this.mapAssignment(r));
   }
@@ -1370,26 +1412,38 @@ int main() {
   }
 
   getSubmission(id: string): Submission | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) return this.memorySubmissions.get(id) || null;
     const row = this.getDb().prepare('SELECT * FROM submissions WHERE id = ?').get(id) as any;
     if (!row) return null;
     return this.mapSubmission(row);
   }
 
   listSubmissions(assignmentId: string): Submission[] {
-    if (!this.getDb()) return [];
+    if (!this.getDb()) {
+      return Array.from(this.memorySubmissions.values())
+        .filter((s) => s.assignmentId === assignmentId)
+        .sort((a, b) => b.submittedAt - a.submittedAt);
+    }
     const rows = this.getDb().prepare('SELECT * FROM submissions WHERE assignment_id = ? ORDER BY submitted_at DESC').all(assignmentId) as any[];
     return rows.map((r) => this.mapSubmission(r));
   }
 
   listSubmissionsForClassroom(classroomId: string): Submission[] {
-    if (!this.getDb()) return [];
+    if (!this.getDb()) {
+      const norm = classroomId.toUpperCase().trim();
+      return Array.from(this.memorySubmissions.values())
+        .filter((s) => s.classroomId.toUpperCase().trim() === norm || s.classroomId === classroomId)
+        .sort((a, b) => b.submittedAt - a.submittedAt);
+    }
     const rows = this.getDb().prepare('SELECT * FROM submissions WHERE classroom_id = ? ORDER BY submitted_at DESC').all(classroomId) as any[];
     return rows.map((r) => this.mapSubmission(r));
   }
 
   getStudentSubmission(assignmentId: string, studentId: string): Submission | null {
-    if (!this.getDb()) return null;
+    if (!this.getDb()) {
+      return Array.from(this.memorySubmissions.values())
+        .find((s) => s.assignmentId === assignmentId && s.studentId === studentId) || null;
+    }
     const row = this.getDb().prepare('SELECT * FROM submissions WHERE assignment_id = ? AND student_id = ? ORDER BY version DESC LIMIT 1').get(assignmentId, studentId) as any;
     if (!row) return null;
     return this.mapSubmission(row);
@@ -1454,6 +1508,7 @@ int main() {
   }
 
   saveGrade(grade: Grade): Grade {
+    this.memoryGrades.set(grade.submissionId, grade);
     if (!this.getDb()) return grade;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO grades (
@@ -1483,6 +1538,7 @@ int main() {
   }
 
   saveFeedback(fbk: Feedback): Feedback {
+    this.memoryFeedback.set(fbk.submissionId, fbk);
     if (!this.getDb()) return fbk;
     const stmt = this.getDb().prepare(`
       INSERT OR REPLACE INTO feedback (
@@ -1497,6 +1553,8 @@ int main() {
 
   // --- LIVE CODING SESSIONS ---
   createLiveSession(session: LiveClassSession): LiveClassSession {
+    this.memoryLiveSessions.set(session.classroomId, session);
+    this.memoryLiveSessions.set(session.classroomId.toUpperCase().trim(), session);
     if (!this.getDb()) return session;
     this.getDb().prepare(`
       INSERT OR REPLACE INTO live_sessions (
@@ -1556,6 +1614,7 @@ int main() {
 
   // --- RESOURCES ---
   createResource(res: ClassroomResource): ClassroomResource {
+    this.memoryResources.set(res.id, res);
     if (!this.getDb()) return res;
     this.getDb().prepare(`
       INSERT OR REPLACE INTO resources (id, classroom_id, uploaded_by, uploaded_by_name, name, type, url, description, unit, created_at, pinned, visibility)
@@ -1565,7 +1624,11 @@ int main() {
   }
 
   listResources(classroomId: string): ClassroomResource[] {
-    if (!this.getDb()) return [];
+    if (!this.getDb()) {
+      const norm = classroomId.toUpperCase().trim();
+      return Array.from(this.memoryResources.values())
+        .filter((r) => r.classroomId.toUpperCase().trim() === norm || r.classroomId === classroomId);
+    }
     const rows = this.getDb().prepare('SELECT * FROM resources WHERE classroom_id = ? ORDER BY created_at DESC').all(classroomId) as any[];
     return rows.map((r) => ({
       id: r.id,
@@ -1590,6 +1653,7 @@ int main() {
 
   // --- NOTIFICATIONS ---
   createNotification(notif: Notification): Notification {
+    this.memoryNotifications.set(notif.id, notif);
     if (!this.getDb()) return notif;
     this.getDb().prepare(`
       INSERT INTO notifications (id, user_id, classroom_id, type, title, message, data_json, created_at)
