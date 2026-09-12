@@ -30,6 +30,7 @@ export async function GET(
       
       // Remove draft grades and private notes
       submissions = submissions.map(s => {
+        s = JSON.parse(JSON.stringify(s)) as Submission;
         if (s.grade && !s.grade.releasedAt) {
           s.grade = undefined;
           s.feedback = undefined;

@@ -25,8 +25,9 @@ export interface AuthContext {
   isAdmin: boolean;
 }
 
-const INTERNAL_SECRET = process.env.CORTEX_INTERNAL_AUTH_SECRET || 'cortex_internal_hmac_secret_4892174982174';
-const CLIENT_SECRET = process.env.CORTEX_CLIENT_AUTH_SECRET || 'cortex_client_hmac_secret_1892374981273';
+const isProduction = process.env.NODE_ENV === 'production';
+const INTERNAL_SECRET = process.env.CORTEX_INTERNAL_AUTH_SECRET || (isProduction ? '' : 'cortex_internal_auth_secret_dev_only');
+const CLIENT_SECRET = process.env.CORTEX_CLIENT_AUTH_SECRET || (isProduction ? '' : 'cortex_client_auth_secret_dev_only');
 
 function signHmac(data: string, secret: string): string {
   if (!secret) return '';
@@ -152,8 +153,6 @@ export class ClassroomAuth {
       userId = this.verifyClientToken(token);
     }
 
-    const isProduction = process.env.NODE_ENV === 'production';
-
     // 2. Check cookies (signed cortex_token or cortex_session)
     if (!userId) {
       let cookieHeader = '';
@@ -214,6 +213,13 @@ export class ClassroomAuth {
       }
     }
 
+    // Production requests must use a signed bearer/cookie token or an
+    // authenticated Worker-to-Durable-Object context. Plain browser headers
+    // are only a local-development compatibility path.
+    if (!userId && isProduction) {
+      return null;
+    }
+
     // 4. Check explicit x-user-id header
     if (!userId) {
       let internalAuthHeader = '';
@@ -242,31 +248,10 @@ export class ClassroomAuth {
 
     // Lookup user authoritatively from database
     let user = classroomDb.getUser(userId);
+    // An identifier supplied by a browser is not an identity proof. Users must
+    // already exist in the authoritative user store or present a valid token.
     if (!user) {
-      // Auto-register persona if user presented valid identification headers
-      let userName = 'Cortex User';
-      let userRole: any = 'student';
-      let userEmail = `${userId}@cortex.edu`;
-
-      if (typeof req.headers?.get === 'function') {
-        userName = req.headers.get('x-user-name') || userName;
-        userRole = req.headers.get('x-user-role') || userRole;
-        userEmail = req.headers.get('x-user-email') || userEmail;
-      } else if (req.headers) {
-        userName = req.headers['x-user-name'] || userName;
-        userRole = req.headers['x-user-role'] || userRole;
-        userEmail = req.headers['x-user-email'] || userEmail;
-      }
-
-      user = classroomDb.createUser({
-        id: userId,
-        name: userName,
-        email: userEmail,
-        role: userRole === 'teacher' || userRole === 'admin' ? userRole : 'student',
-        status: 'active',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
+      return null;
     }
 
     // Enforce active status
@@ -315,7 +300,7 @@ export class ClassroomAuth {
     }
 
     // 2. Classroom instructor / teacher
-    if (classroom.teacherId === user.id || user.role === 'teacher') {
+    if (classroom.teacherId === user.id) {
       return { authorized: true, role: 'teacher' };
     }
 

@@ -309,6 +309,17 @@ export default function ClassroomHubPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('cortex_user', JSON.stringify({
+        id: currentUserId,
+        name: currentUserName,
+        email: currentUserEmail,
+        role: currentUserRole,
+      }));
+    }
+  }, [currentUserId, currentUserName, currentUserEmail, currentUserRole]);
+
+  useEffect(() => {
     fetchClassrooms();
     fetchNotifications();
   }, [currentUserRole, currentUserId]);
@@ -413,7 +424,7 @@ export default function ClassroomHubPage() {
                 payload.assignment,
                 ...prev.filter((a) => a.id !== payload.assignment.id),
               ]);
-              if (payload.type === 'assignment.created') {
+              if (event.type === 'assignment.created') {
                 showToast(`New Assignment: ${payload.assignment.title}`);
               } else {
                 showToast(`Assignment Updated: ${payload.assignment.title}`);
@@ -530,6 +541,26 @@ export default function ClassroomHubPage() {
             if (payload.classroomId === selectedClassroom.id) {
               setSelectedClassroom((prev) => prev ? { ...prev, status: 'archived', joinEnabled: false } : null);
               showToast('This classroom has been archived by the instructor.');
+            }
+            break;
+          }
+
+          case 'classroom.restored': {
+            if (payload.classroomId === selectedClassroom.id && payload.classroom) {
+              setSelectedClassroom(payload.classroom);
+              setClassrooms((prev) => prev.map((c) => c.id === payload.classroom.id ? payload.classroom : c));
+              showToast('This classroom has been restored.');
+            }
+            break;
+          }
+
+          case 'classroom.deleted': {
+            if (payload.classroomId === selectedClassroom.id) {
+              realtimeClientRef.current?.disconnect();
+              setSelectedClassroom(null);
+              setClassrooms((prev) => prev.filter((c) => c.id !== payload.classroomId));
+              showToast('This classroom was permanently deleted.');
+              router.push('/classroom');
             }
             break;
           }
@@ -947,7 +978,7 @@ export default function ClassroomHubPage() {
       try {
         const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/session`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ action: 'start', title: 'Live Coding' })
         });
         const data = await res.json();
@@ -1436,7 +1467,7 @@ export default function ClassroomHubPage() {
                   <div>
                     <h3 className="text-base font-bold text-white">Course Members & Roster</h3>
                     <p className="text-xs text-gray-400">
-                      Manage enrolled students, verify attendance presence, and maintain class permissions.
+                      Manage enrolled students, realtime availability, and class permissions.
                     </p>
                   </div>
                   <div className="flex items-center space-x-3">

@@ -8,7 +8,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = ClassroomAuth.getCurrentUser(req);
+  const access = ClassroomAuth.verifyAccess(req, id);
+  if (!access.authorized) {
+    return new Response(JSON.stringify({ error: access.error || 'Unauthorized' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const user = access.context!.user;
   const classroom = classroomDb.getClassroom(id);
 
   if (!classroom) {

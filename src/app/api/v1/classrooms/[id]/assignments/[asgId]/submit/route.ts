@@ -19,6 +19,17 @@ export async function POST(
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
+    if (auth.context?.membership?.role !== 'student' && user.role !== 'student') {
+      return NextResponse.json({ error: 'Only students can submit assignment work.' }, { status: 403 });
+    }
+
+    const classroom = classroomDb.getClassroom(id);
+    if (!classroom) {
+      return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+    }
+    if (classroom.status === 'archived') {
+      return NextResponse.json({ error: 'Archived classrooms are read-only and do not accept submissions.' }, { status: 409 });
+    }
 
     const assignment = classroomDb.getAssignment(asgId);
     if (!assignment || assignment.classroomId !== id) {

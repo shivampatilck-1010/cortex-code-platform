@@ -9,6 +9,7 @@ import { ProjectFile, ExecutionResult } from '@/lib/execution/types';
 import { Assignment, SubmissionTestCaseResult } from '@/lib/classroom/models';
 import Markdown from 'react-markdown';
 import { CortexLogo } from '@/components/brand/CortexLogo';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function SolveAssignmentPage({
   params
@@ -43,7 +44,7 @@ export default function SolveAssignmentPage({
 
     const fetchAsg = async () => {
       try {
-        const res = await fetch(`/api/v1/classrooms/${roomId}/assignments/${asgId}`);
+        const res = await fetch(`/api/v1/classrooms/${roomId}/assignments/${asgId}`, { headers: getClassroomAuthHeaders() });
         const data = await res.json();
         if (data.assignment) {
           setAssignment(data.assignment);
@@ -73,7 +74,7 @@ export default function SolveAssignmentPage({
     try {
       const res = await fetch('/api/v1/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getClassroomAuthHeaders(),
         body: JSON.stringify({
           language: assignment.language,
           code: files[0].content,
@@ -107,7 +108,7 @@ export default function SolveAssignmentPage({
       for (const tc of publicTests) {
         const res = await fetch('/api/v1/execute', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getClassroomAuthHeaders(),
           body: JSON.stringify({
             language: assignment.language,
             code: files[0].content,
@@ -151,7 +152,7 @@ export default function SolveAssignmentPage({
     try {
       const res = await fetch(`/api/v1/classrooms/${roomId}/assignments/${asgId}/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getClassroomAuthHeaders(),
         body: JSON.stringify({
           code: files[0].content,
           language: assignment.language,

@@ -14,13 +14,14 @@ export async function GET(
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const assignment = classroomDb.getAssignment(asgId);
-    if (!assignment || assignment.classroomId !== id) {
+    const storedAssignment = classroomDb.getAssignment(asgId);
+    if (!storedAssignment || storedAssignment.classroomId !== id) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
     }
 
     const user = ClassroomAuth.getCurrentUser(req);
     const isTeacher = auth.context?.membership?.role === 'teacher' || classroomDb.getClassroom(id)?.teacherId === user.id;
+    const assignment = isTeacher ? storedAssignment : JSON.parse(JSON.stringify(storedAssignment));
 
     // Filter hidden test cases for students
     if (!isTeacher) {

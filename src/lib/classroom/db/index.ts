@@ -257,28 +257,6 @@ class ClassroomDatabase {
         FOREIGN KEY(submission_id) REFERENCES submissions(id) ON DELETE CASCADE
       );
 
-      CREATE TABLE IF NOT EXISTS attendance_sessions (
-        id TEXT PRIMARY KEY,
-        classroom_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        started_at INTEGER NOT NULL,
-        closed_at INTEGER,
-        status TEXT NOT NULL DEFAULT 'active',
-        FOREIGN KEY(classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS attendance_records (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        student_id TEXT NOT NULL,
-        student_name TEXT NOT NULL,
-        status TEXT NOT NULL,
-        marked_at INTEGER NOT NULL,
-        marked_by TEXT NOT NULL,
-        UNIQUE(session_id, student_id),
-        FOREIGN KEY(session_id) REFERENCES attendance_sessions(id) ON DELETE CASCADE
-      );
-
       CREATE TABLE IF NOT EXISTS live_sessions (
         id TEXT PRIMARY KEY,
         classroom_id TEXT NOT NULL,
@@ -352,6 +330,13 @@ class ClassroomDatabase {
       CREATE INDEX IF NOT EXISTS idx_members_room ON classroom_members(classroom_id);
       CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
       CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(classroom_id);
+    `);
+
+    // Remove the legacy attendance feature from databases created by older
+    // builds. Realtime presence is intentionally not persisted as attendance.
+    this.getDb().exec(`
+      DROP TABLE IF EXISTS attendance_records;
+      DROP TABLE IF EXISTS attendance_sessions;
     `);
   }
 
@@ -984,9 +969,11 @@ int main() {
   }
 
   deleteClassroom(id: string): boolean {
-    if (!this.getDb()) return false;
-    this.getDb().prepare('DELETE FROM classrooms WHERE id = ?').run(id);
-    return true;
+    if (!this.getDb()) {
+      return this.memoryClassrooms.delete(id);
+    }
+    const result = this.getDb().prepare('DELETE FROM classrooms WHERE id = ?').run(id);
+    return result.changes > 0;
   }
 
   archiveClassroom(id: string): Classroom | null {
@@ -996,6 +983,21 @@ int main() {
     const now = Date.now();
     this.getDb().prepare('UPDATE classrooms SET status = ?, archived_at = ?, join_enabled = 0, updated_at = ? WHERE id = ?')
       .run('archived', now, now, id);
+    return this.getClassroom(id);
+  }
+
+  restoreClassroom(id: string): Classroom | null {
+    if (!this.getDb()) {
+      const existing = this.memoryClassrooms.get(id);
+      if (!existing) return null;
+      const restored = { ...existing, status: 'active' as const, joinEnabled: true, archivedAt: undefined, updatedAt: Date.now() };
+      this.memoryClassrooms.set(id, restored);
+      return restored;
+    }
+    const existing = this.getClassroom(id);
+    if (!existing) return null;
+    this.getDb().prepare('UPDATE classrooms SET status = ?, archived_at = NULL, join_enabled = 1, updated_at = ? WHERE id = ?')
+      .run('active', Date.now(), id);
     return this.getClassroom(id);
   }
 

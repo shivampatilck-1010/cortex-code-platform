@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, CheckCircle2, MessageSquare } from 'lucide-react';
 import { Submission } from '@/lib/classroom/models';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function StudentSubmissionsPage() {
   const params = useParams();
@@ -18,7 +19,7 @@ export default function StudentSubmissionsPage() {
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const res = await fetch(`/api/v1/classrooms/${roomId}/submissions?assignmentId=${asgId}`);
+        const res = await fetch(`/api/v1/classrooms/${roomId}/submissions?assignmentId=${asgId}`, { headers: getClassroomAuthHeaders() });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to fetch submissions');
         setSubmissions(data.submissions || []);

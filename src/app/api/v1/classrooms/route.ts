@@ -3,6 +3,7 @@ import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { realtimeCoordinator } from '@/lib/classroom/realtime';
 import { Classroom } from '@/lib/classroom/models';
+import crypto from 'crypto';
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,20 +18,23 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = ClassroomAuth.getCurrentUser(req);
+    if (user.role !== 'teacher' && user.role !== 'admin') {
+      return NextResponse.json({ error: 'Teacher privileges required for this action.' }, { status: 403 });
+    }
     const body = await req.json();
-    const { name, code, subject, description, settings } = body;
+    const { name, subject, description, settings } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Classroom name is required' }, { status: 400 });
     }
 
-    const classroomId = `CLS_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    const joinCode = (code || Math.random().toString(36).substring(2, 8)).toUpperCase();
+    const classroomId = `CLS_${crypto.randomUUID().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+    const joinCode = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
 
     const newClassroom: Classroom = {
       id: classroomId,
       name: name.trim(),
-      courseCode: body.courseCode || code || 'CS-NEW',
+      courseCode: body.courseCode || 'CS-NEW',
       academicYear: body.academicYear || '2024-2025',
       section: body.section || 'Sec 01',
       subject: subject || 'Computer Science',
@@ -46,7 +50,6 @@ export async function POST(req: NextRequest) {
         allowCodeSharing: true,
         leaderboardEnabled: true,
         defaultAIPolicy: 'hints_only',
-        attendanceMode: 'self_checkin',
         ...(settings || {}),
       },
       createdAt: Date.now(),

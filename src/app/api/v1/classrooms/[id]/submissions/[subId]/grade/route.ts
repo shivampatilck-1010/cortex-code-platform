@@ -25,7 +25,10 @@ export async function POST(
     const body = await req.json();
     const { finalScore, manualAdjustment, feedbackText, privateNotes, rubricScores, isDraft } = body;
 
-    const computedFinal = finalScore !== undefined ? Number(finalScore) : submission.score;
+    const adjustment = manualAdjustment !== undefined ? Number(manualAdjustment) : 0;
+    const computedFinal = finalScore !== undefined
+      ? Number(finalScore)
+      : submission.score + adjustment;
 
     const grade: Grade = {
       id: `grd_${subId}`,
@@ -33,7 +36,7 @@ export async function POST(
       studentId: submission.studentId,
       assignmentId: submission.assignmentId,
       automaticScore: submission.grade?.automaticScore ?? submission.score,
-      manualAdjustment: manualAdjustment ? Number(manualAdjustment) : 0,
+      manualAdjustment: adjustment,
       finalScore: Math.min(submission.maxScore, Math.max(0, computedFinal)),
       gradedBy: user.id,
       gradedByName: user.name,

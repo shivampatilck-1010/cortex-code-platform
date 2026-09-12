@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { realtimeCoordinator } from '@/lib/classroom/realtime';
+import { ensureNodeWsServer } from '@/lib/classroom/node-ws-server';
 import { LiveClassSession } from '@/lib/classroom/models';
 
 export async function GET(
@@ -10,6 +11,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const auth = ClassroomAuth.verifyAccess(req, id);
+    if (!auth.authorized) {
+      return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
+    }
+    if (typeof window === 'undefined' && process.env.CLASSROOM_ROOM_DO === undefined) {
+      await ensureNodeWsServer(3002);
+    }
     const session = classroomDb.getActiveLiveSession(id);
     return NextResponse.json({ session });
   } catch (err: any) {
@@ -31,6 +39,12 @@ export async function POST(
     }
 
     const classroom = classroomDb.getClassroom(id);
+    if (!classroom) {
+      return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+    }
+    if (classroom.status === 'archived') {
+      return NextResponse.json({ error: 'Archived classrooms cannot start or update live sessions.' }, { status: 409 });
+    }
     const isTeacher = classroom?.teacherId === user.id || auth.context?.membership?.role === 'teacher';
     const body = await req.json();
     const { action, title, topic, language, starterCode, sharedCode, isBroadcastingCode } = body;

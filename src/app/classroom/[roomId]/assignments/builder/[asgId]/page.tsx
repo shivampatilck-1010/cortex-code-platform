@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, ArrowLeft, Plus, Trash2, Settings, Terminal, Shield, Clock } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function AssignmentBuilderPage({
   params
@@ -37,7 +38,7 @@ export default function AssignmentBuilderPage({
       setAsgId(p.asgId);
       
       if (p.asgId !== 'new') {
-        fetch(`/api/v1/classrooms/${p.roomId}/assignments/${p.asgId}`)
+        fetch(`/api/v1/classrooms/${p.roomId}/assignments/${p.asgId}`, { headers: getClassroomAuthHeaders() })
           .then(res => res.json())
           .then(data => {
             if (data.assignment) {
@@ -96,7 +97,7 @@ export default function AssignmentBuilderPage({
       
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getClassroomAuthHeaders(),
         body: JSON.stringify(payload)
       });
       

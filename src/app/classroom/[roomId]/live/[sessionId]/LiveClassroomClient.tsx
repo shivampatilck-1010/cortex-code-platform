@@ -9,6 +9,7 @@ import { TerminalPanel } from '@/components/panels/TerminalPanel';
 import { OutputPanel } from '@/components/panels/OutputPanel';
 import { Play, Terminal, Users, Code, MessageSquare, Video, ArrowLeft, StopCircle, RefreshCw } from 'lucide-react';
 import { ExecutionResult } from '@/lib/execution/types';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function LiveClassroomClient({ roomId, sessionId }: { roomId: string, sessionId: string }) {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
   const [isFollowingTeacher, setIsFollowingTeacher] = useState<boolean>(true);
   const [studentOutput, setStudentOutput] = useState<ExecutionResult | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [sessionLanguage, setSessionLanguage] = useState('cpp');
 
   // Presence state
   const [studentsOnline, setStudentsOnline] = useState<string[]>([]);
@@ -59,7 +61,33 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
     }
   }, []);
 
+  useEffect(() => {
+    if (!currentUserId) return;
+    fetch(`/api/v1/classrooms/${roomId}/session`, { headers: getClassroomAuthHeaders() })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Unable to load live session');
+        return res.json();
+      })
+      .then((data) => {
+        if (data.session?.language) setSessionLanguage(data.session.language);
+      })
+      .catch((error) => console.error('Unable to load live session metadata', error));
+  }, [roomId, currentUserId]);
+
   const isTeacher = currentUserRole === 'teacher' || currentUserRole === 'admin';
+  const sourceExtension = sessionLanguage === 'python'
+    ? 'py'
+    : sessionLanguage === 'javascript'
+      ? 'js'
+      : sessionLanguage === 'typescript'
+        ? 'ts'
+        : sessionLanguage === 'java'
+          ? 'java'
+          : sessionLanguage === 'rust'
+            ? 'rs'
+            : sessionLanguage === 'go'
+              ? 'go'
+              : 'cpp';
 
 
 
@@ -163,9 +191,8 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          files: [{ name: 'main.cpp', content: teacherCode }],
-          language: 'cpp',
-          version: '10.2.0'
+          files: [{ name: `main.${sourceExtension}`, content: teacherCode }],
+          language: sessionLanguage,
         })
       });
       const data = await res.json();
@@ -189,9 +216,8 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          files: [{ name: 'main.cpp', content: studentCode }],
-          language: 'cpp',
-          version: '10.2.0',
+          files: [{ name: `main.${sourceExtension}`, content: studentCode }],
+          language: sessionLanguage,
         }),
       });
       setStudentOutput(await res.json());
@@ -219,7 +245,7 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
     try {
         await fetch(`/api/v1/classrooms/${roomId}/session`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getClassroomAuthHeaders(),
             body: JSON.stringify({ action: 'end' })
         });
         router.push(`/classroom/${roomId}`);

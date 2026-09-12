@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Save, Send, AlertTriangle } from 'lucide-react';
 import { Submission } from '@/lib/classroom/models';
 import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function SubmissionReviewPage() {
   const params = useParams();
@@ -24,7 +25,7 @@ export default function SubmissionReviewPage() {
   useEffect(() => {
     const fetchSubmission = async () => {
       try {
-        const res = await fetch(`/api/v1/classrooms/${roomId}/submissions/${submissionId}`);
+        const res = await fetch(`/api/v1/classrooms/${roomId}/submissions/${submissionId}`, { headers: getClassroomAuthHeaders() });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to fetch submission');
         const sub = data.submission;
@@ -48,7 +49,7 @@ export default function SubmissionReviewPage() {
       const manualAdjustment = finalScore - submission.score;
       const res = await fetch(`/api/v1/classrooms/${roomId}/submissions/${submissionId}/grade`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getClassroomAuthHeaders(),
         body: JSON.stringify({
           finalScore,
           manualAdjustment,

@@ -240,7 +240,7 @@ class RealtimeCoordinator {
     const norm = classroomId.toUpperCase().trim();
     const wsCount = this.wsClients.get(norm)?.size || 0;
     const sseCount = this.subscribers.get(norm)?.size || 0;
-    return Math.max(1, Math.max(wsCount, sseCount));
+    return Math.max(wsCount, sseCount);
   }
 }
 

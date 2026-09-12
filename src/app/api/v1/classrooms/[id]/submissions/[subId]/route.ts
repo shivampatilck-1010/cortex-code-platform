@@ -16,7 +16,8 @@ export async function GET(
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const submission = classroomDb.getSubmission(subId);
+    const storedSubmission = classroomDb.getSubmission(subId);
+    const submission = storedSubmission ? JSON.parse(JSON.stringify(storedSubmission)) : null;
     if (!submission || submission.classroomId !== id) {
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }

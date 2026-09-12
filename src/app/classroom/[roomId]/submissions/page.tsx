@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Search, Filter, CheckCircle2, Clock, XCircle, Award } from 'lucide-react';
 import { Submission } from '@/lib/classroom/models';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function SubmissionsDashboard() {
   const params = useParams();
@@ -22,7 +23,7 @@ export default function SubmissionsDashboard() {
   useEffect(() => {
     const fetchSubmissions = async () => {
       try {
-        const res = await fetch(`/api/v1/classrooms/${roomId}/submissions`);
+        const res = await fetch(`/api/v1/classrooms/${roomId}/submissions`, { headers: getClassroomAuthHeaders() });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to fetch submissions');
         setSubmissions(data.submissions || []);

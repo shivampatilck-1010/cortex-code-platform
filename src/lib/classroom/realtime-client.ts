@@ -125,7 +125,9 @@ export class ClassroomRealtimeClient {
     this.setState(isReconnecting ? 'RECONNECTING' : 'CONNECTING');
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
+    const host = process.env.NODE_ENV !== 'production'
+      ? `${window.location.hostname}:3002`
+      : window.location.host;
     // Production identity is derived server-side from the signed session cookie.
     // The development-only identity hint keeps the local, no-login prototype
     // usable without weakening the production trust boundary.

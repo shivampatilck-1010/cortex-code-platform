@@ -23,7 +23,8 @@ export async function GET(
     // Strip hidden test cases for students
     if (!isTeacher) {
       assignments = assignments.map(a => {
-        const sanitizedTestCases = (a.testCases || []).map((tc: any) => {
+        const assignment = JSON.parse(JSON.stringify(a)) as Assignment;
+        const sanitizedTestCases = (assignment.testCases || []).map((tc: any) => {
           const isHidden = tc.visibility === 'hidden' || tc.isHidden === true || tc.hidden === true;
           if (isHidden) {
             return {
@@ -38,7 +39,7 @@ export async function GET(
           return tc;
         });
         return {
-          ...a,
+          ...assignment,
           testCases: sanitizedTestCases
         };
       });
@@ -61,6 +62,13 @@ export async function POST(
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Teacher authorization required to create assignments.' }, { status: 403 });
+    }
+    const classroom = classroomDb.getClassroom(id);
+    if (!classroom) {
+      return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+    }
+    if (classroom.status === 'archived') {
+      return NextResponse.json({ error: 'Archived classrooms are read-only.' }, { status: 409 });
     }
 
     const body = await req.json();
