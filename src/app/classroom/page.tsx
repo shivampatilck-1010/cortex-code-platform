@@ -75,6 +75,7 @@ export default function ClassroomHubPage() {
   const [currentUserId, setCurrentUserId] = useState<string>('usr_prof_elena');
   const [currentUserName, setCurrentUserName] = useState<string>('Prof. Elena Rostova');
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('elena.rostova@cortex.edu');
+  const canManageClassrooms = currentUserRole === 'teacher' || currentUserRole === 'admin';
 
   // Classroom data
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
@@ -184,18 +185,15 @@ export default function ClassroomHubPage() {
 
   // Switch Role
   const handleSwitchPersona = (role: 'teacher' | 'student') => {
-    setCurrentUserRole(role);
-    if (role === 'teacher') {
-      setCurrentUserId('usr_prof_elena');
-      setCurrentUserName('Prof. Elena Rostova');
-      setCurrentUserEmail('elena.rostova@cortex.edu');
-    } else {
-      setCurrentUserId('usr_alex_chen');
-      setCurrentUserName('Alex Chen');
-      setCurrentUserEmail('alex.chen@student.cortex.edu');
-      if (activeTab === 'settings') {
-        setActiveTab('stream');
-      }
+    setCurrentUserRole('teacher');
+    setCurrentUserId('usr_prof_elena');
+    setCurrentUserName('Prof. Elena Rostova');
+    setCurrentUserEmail('elena.rostova@cortex.edu');
+    if (activeTab === 'settings') {
+      setActiveTab('stream');
+    }
+    if (role !== 'teacher') {
+      showToast('Classroom creation and management is restricted to professors.');
     }
   };
 
@@ -676,6 +674,10 @@ export default function ClassroomHubPage() {
   // Handler: Create Classroom
   const handleCreateClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageClassrooms) {
+      showToast('Only professors can create classrooms.');
+      return;
+    }
     if (!createClassForm.name) return;
     try {
       const res = await fetch('/api/v1/classrooms', {
@@ -723,7 +725,10 @@ export default function ClassroomHubPage() {
 
   // Handler: Regenerate Join Code
   const handleRegenerateCode = async () => {
-    if (!selectedClassroom) return;
+    if (!selectedClassroom || !canManageClassrooms) {
+      showToast('Only professors can manage classroom codes.');
+      return;
+    }
     try {
       const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/code`, {
         method: 'POST',
@@ -745,6 +750,10 @@ export default function ClassroomHubPage() {
   // Handler: Remove Member
   const handleRemoveMember = async () => {
     if (!selectedClassroom || !memberToRemove) return;
+    if (!canManageClassrooms) {
+      showToast('Only professors can remove members from a classroom.');
+      return;
+    }
     try {
       const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/members/${memberToRemove.userId}`, {
         method: 'DELETE',
@@ -767,6 +776,10 @@ export default function ClassroomHubPage() {
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClassroom) return;
+    if (!canManageClassrooms) {
+      showToast('Only professors can edit classroom settings.');
+      return;
+    }
     try {
       setIsSavingSettings(true);
       const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}`, {
@@ -806,6 +819,10 @@ export default function ClassroomHubPage() {
   // Handler: Archive Classroom
   const handleArchiveClassroom = async () => {
     if (!selectedClassroom) return;
+    if (!canManageClassrooms) {
+      showToast('Only professors can archive classrooms.');
+      return;
+    }
     try {
       const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}`, {
         method: 'DELETE',
@@ -1071,28 +1088,25 @@ export default function ClassroomHubPage() {
             )}
           </div>
 
-          <button
-            onClick={() => setCurrentUserRole(currentUserRole === 'teacher' ? 'student' : 'teacher')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition ${
-              currentUserRole === 'teacher' ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20'
-            }`}
-          >
-            {currentUserRole} View
-          </button>
+          <div className="px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            Professor View
+          </div>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar */}
         <aside className="w-64 bg-[#13141a] border-r border-[#1f212a] flex flex-col shrink-0">
-          <div className="p-4 border-b border-[#1f212a]">
-            <button
-              onClick={() => setIsCreateClassModalOpen(true)}
-              className="w-full py-2 bg-[#ff9100]/10 hover:bg-[#ff9100]/20 text-[#ff9100] text-xs font-bold rounded-lg border border-[#ff9100]/30 transition"
-            >
-              + Create Classroom
-            </button>
-          </div>
+          {canManageClassrooms && (
+            <div className="p-4 border-b border-[#1f212a]">
+              <button
+                onClick={() => setIsCreateClassModalOpen(true)}
+                className="w-full py-2 bg-[#ff9100]/10 hover:bg-[#ff9100]/20 text-[#ff9100] text-xs font-bold rounded-lg border border-[#ff9100]/30 transition"
+              >
+                + Create Classroom
+              </button>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {classrooms.map((c) => (
               <button

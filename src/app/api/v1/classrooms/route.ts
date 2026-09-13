@@ -16,7 +16,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = ClassroomAuth.getCurrentUser(req);
+    const auth = ClassroomAuth.verifyAccess(req, undefined, 'teacher');
+    if (!auth.authorized) {
+      return NextResponse.json({ error: 'Only professors can create classrooms.' }, { status: 403 });
+    }
+
+    const user = auth.context?.user || ClassroomAuth.getCurrentUser(req);
     const body = await req.json();
     const { name, code, subject, description, settings } = body;
 
