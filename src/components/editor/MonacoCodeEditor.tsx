@@ -41,6 +41,7 @@ interface MonacoCodeEditorProps {
   onReanalyzeWithKey?: (key: string) => void;
   enableInlineSuggestions?: boolean;
   onToggleInlineSuggestions?: () => void;
+  onEditorMount?: (editor: any, monaco: any) => void;
 }
 
 export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
@@ -75,6 +76,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   onReanalyzeWithKey,
   enableInlineSuggestions = false,
   onToggleInlineSuggestions,
+  onEditorMount,
 }) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -93,6 +95,10 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    
+    if (onEditorMount) {
+        onEditorMount(editor, monaco);
+    }
 
     // Define Cortex deep dark theme with #0b0c0e background
     monaco.editor.defineTheme('cortex-dark', {

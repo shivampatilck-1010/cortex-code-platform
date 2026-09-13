@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import { ClassroomRealtimeClient, ConnectionState } from '@/lib/classroom/realtime-client';
 import { ClassroomRealtimeEvent } from '@/lib/classroom/protocol';
 import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
-import { TerminalPanel } from '@/components/panels/TerminalPanel';
-import { OutputPanel } from '@/components/panels/OutputPanel';
-import { Play, Terminal, Users, Code, MessageSquare, Video, ArrowLeft, StopCircle, RefreshCw } from 'lucide-react';
+import { Play, Terminal, Users, Code, Video, ArrowLeft, StopCircle, RefreshCw, Lock, Unlock } from 'lucide-react';
 import { ExecutionResult } from '@/lib/execution/types';
+import * as Y from 'yjs';
+import { MonacoBinding } from 'y-monaco';
 
 export default function LiveClassroomClient({ roomId, sessionId }: { roomId: string, sessionId: string }) {
   const router = useRouter();
@@ -23,33 +23,21 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
   const [currentUserRole, setCurrentUserRole] = useState<string>('student');
 
   // Teacher broadcasting state
-  const [teacherCode, setTeacherCode] = useState<string>('// Teacher is starting the session...\n');
   const [teacherOutput, setTeacherOutput] = useState<ExecutionResult | null>(null);
-  
-  // Student local state
-  const [studentCode, setStudentCode] = useState<string>('// Your private workspace\n');
-  const [isFollowingTeacher, setIsFollowingTeacher] = useState<boolean>(true);
-  const [studentOutput, setStudentOutput] = useState<ExecutionResult | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
 
   // Presence state
   const [studentsOnline, setStudentsOnline] = useState<string[]>([]);
-  const [sharedStudentCodes, setSharedStudentCodes] = useState<{ [key: string]: { code: string, name: string } }>({});
-  const [viewingStudentId, setViewingStudentId] = useState<string | null>(null);
-  const [isSharing, setIsSharing] = useState<boolean>(false);
 
-  
-  // Throttle refs for teacher code broadcasting
-  const codeBroadcastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastBroadcastedCodeRef = useRef<string>('');
-  const followingTeacherRef = useRef(isFollowingTeacher);
+  // CRDT Yjs state
+  const ydocRef = useRef<Y.Doc | null>(null);
+  const bindingRef = useRef<MonacoBinding | null>(null);
+  const editorRef = useRef<any>(null);
+  const modelRef = useRef<any>(null);
 
   useEffect(() => {
-    followingTeacherRef.current = isFollowingTeacher;
-  }, [isFollowingTeacher]);
-
-  useEffect(() => {
-    // Quick and dirty local auth fetch
+    // Local auth fetch (Server-derived fallback handled via secure API, but UI needs it)
     const storedUser = localStorage.getItem('cortex_user');
     if (storedUser) {
       const u = JSON.parse(storedUser);
@@ -61,14 +49,15 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
 
   const isTeacher = currentUserRole === 'teacher' || currentUserRole === 'admin';
 
-
-
   useEffect(() => {
     if (!currentUserId) return;
 
     if (realtimeClientRef.current) {
       realtimeClientRef.current.disconnect();
     }
+
+    const ydoc = new Y.Doc();
+    ydocRef.current = ydoc;
 
     const client = new ClassroomRealtimeClient({
       classroomId: roomId,
@@ -79,44 +68,54 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
       onStateChange: (state) => setConnectionState(state),
     });
     realtimeClientRef.current = client;
-    client.connect();
 
-    client.on('teacher.code.changed', (evt) => {
-      if (!isTeacher && followingTeacherRef.current) {
-        setTeacherCode(evt.payload?.code || '');
+    // Observe local Yjs updates and send them to server
+    ydoc.on('update', (update, origin) => {
+      // Don't send updates that originated from the server
+      if (origin !== client) {
+        if (!isTeacher && isLocked) return; 
+
+        // Convert Uint8Array to base64 for transmission
+        let binary = '';
+        const len = update.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(update[i]);
+        }
+        const b64 = btoa(binary);
+
+        client.sendEvent('doc_update', { update: b64, documentId: 'main' });
+      }
+    });
+
+    client.on('doc_update', (evt) => {
+      if (evt.payload?.update) {
+        const b64 = evt.payload.update;
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        Y.applyUpdate(ydoc, bytes, client);
       }
     });
 
     client.on('teacher.output.created', (evt) => {
-      if (!isTeacher && followingTeacherRef.current) {
-        setTeacherOutput(evt.payload?.output);
-      }
+      setTeacherOutput(evt.payload?.output);
     });
 
     client.on('session.ended', (evt) => {
       alert('Live session ended by teacher.');
       router.push(`/classroom/${roomId}`);
     });
-
     
-    client.on('student.code.shared', (evt) => {
-      if (isTeacher) {
-        setSharedStudentCodes(prev => ({
-          ...prev,
-          [evt.actorId]: { code: evt.payload.code, name: evt.actorName }
-        }));
-      }
-    });
+    client.on('session.locked', () => setIsLocked(true));
+    client.on('session.unlocked', () => setIsLocked(false));
 
-    
-    client.on('classroom.snapshot', (evt) => {
-        if (evt.payload?.code !== undefined) {
-             setTeacherCode(evt.payload.code);
-             lastBroadcastedCodeRef.current = evt.payload.code;
-        }
-        if (evt.payload?.output !== undefined) {
-             setTeacherOutput(evt.payload.output);
-        }
+    client.on('student.removed', (evt) => {
+       if (evt.payload?.userId === currentUserId || evt.actorId === currentUserId) {
+          alert('You have been removed from this live session.');
+          router.push(`/classroom/${roomId}`);
+       }
     });
 
     client.on('student.presence.updated', (evt) => {
@@ -130,42 +129,63 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
             return arr;
         });
     });
+    
+    client.on('auth_ok', () => {
+        // On connect/reconnect, sync Yjs state
+        const vector = Y.encodeStateVector(ydoc);
+        let binary = '';
+        for (let i = 0; i < vector.byteLength; i++) {
+          binary += String.fromCharCode(vector[i]);
+        }
+        client.sendEvent('doc_sync_step1', { vector: btoa(binary), documentId: 'main' });
+    });
+
+    client.on('doc_sync_step2', (evt) => {
+        if (evt.payload?.update) {
+            const b64 = evt.payload.update;
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            Y.applyUpdate(ydoc, bytes, client);
+        }
+    });
+
+    client.connect();
 
     return () => {
       client.disconnect();
+      if (bindingRef.current) bindingRef.current.destroy();
+      ydoc.destroy();
     };
-  }, [roomId, currentUserId, currentUserName, currentUserRole, isTeacher, router]);
+  }, [roomId, currentUserId, currentUserName, currentUserRole, isTeacher, isLocked, router]);
 
-  
-
-  const handleTeacherCodeChange = useCallback((code: string) => {
-    setTeacherCode(code);
-    if (!isTeacher) return;
-
-    if (codeBroadcastTimeoutRef.current) {
-      clearTimeout(codeBroadcastTimeoutRef.current);
-    }
+  const handleEditorMount = useCallback((editor: any, monaco: any) => {
+    editorRef.current = editor;
+    const model = editor.getModel();
+    modelRef.current = model;
     
-    codeBroadcastTimeoutRef.current = setTimeout(() => {
-      if (lastBroadcastedCodeRef.current !== code && realtimeClientRef.current) {
-        lastBroadcastedCodeRef.current = code;
-        realtimeClientRef.current.sendEvent('teacher.code.changed', { code });
-      }
-    }, 500); // 500ms debounce
-  }, [isTeacher]);
+    if (ydocRef.current && model && !bindingRef.current) {
+        const type = ydocRef.current.getText('monaco');
+        // @ts-ignore
+        bindingRef.current = new MonacoBinding(type, model, new Set([editor]), realtimeClientRef.current);
+    }
+  }, []);
 
   const executeTeacherCode = async () => {
-    if (!isTeacher) return;
     setIsExecuting(true);
     setTeacherOutput(null);
     try {
+      const code = modelRef.current?.getValue() || '';
       const res = await fetch('/api/v1/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          files: [{ name: 'main.cpp', content: teacherCode }],
+          files: [{ name: 'main.cpp', content: code }],
           language: 'cpp',
-          version: '10.2.0'
+          version: '10.2.0',
+          projectId: roomId
         })
       });
       const data = await res.json();
@@ -177,40 +197,6 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
       console.error(e);
     } finally {
       setIsExecuting(false);
-    }
-  };
-
-  const executeStudentCode = async () => {
-    if (isTeacher || isFollowingTeacher) return;
-    setIsExecuting(true);
-    setStudentOutput(null);
-    try {
-      const res = await fetch('/api/v1/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          files: [{ name: 'main.cpp', content: studentCode }],
-          language: 'cpp',
-          version: '10.2.0',
-        }),
-      });
-      setStudentOutput(await res.json());
-    } catch (error) {
-      console.error('Unable to run student code', error);
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
-  
-  const toggleShareCode = () => {
-    if (isTeacher) return;
-    if (isSharing) {
-        setIsSharing(false);
-        if (realtimeClientRef.current) realtimeClientRef.current.sendEvent('student.code_share.revoked', {});
-    } else {
-        setIsSharing(true);
-        if (realtimeClientRef.current) realtimeClientRef.current.sendEvent('student.code.shared', { code: studentCode });
     }
   };
 
@@ -228,6 +214,15 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
     }
   };
 
+  const toggleLock = () => {
+      if (!isTeacher) return;
+      const newLocked = !isLocked;
+      setIsLocked(newLocked);
+      if (realtimeClientRef.current) {
+          realtimeClientRef.current.sendEvent(newLocked ? 'session.locked' : 'session.unlocked', {});
+      }
+  };
+
   return (
     <div className="flex h-screen bg-[#0a0a0f] text-gray-300 font-sans">
       {/* Sidebar */}
@@ -237,7 +232,7 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
              <ArrowLeft className="w-4 h-4" /> Exit
           </button>
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${connectionState === 'CONNECTED' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+            <span className={`w-2 h-2 rounded-full ${connectionState === 'CONNECTED' ? 'bg-emerald-500' : connectionState === 'CONNECTING' || connectionState === 'RECONNECTING' ? 'bg-amber-500' : 'bg-red-500'}`}></span>
             <span className="text-xs text-gray-500 uppercase font-semibold">{connectionState}</span>
           </div>
         </div>
@@ -247,199 +242,108 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
             <Video className="w-5 h-5 text-red-500" />
             <h2 className="text-white font-semibold">Live Session</h2>
           </div>
-          <p className="text-xs text-gray-400 mb-4">You are in a live programming demonstration.</p>
-          
+          <p className="text-xs text-gray-400 mb-4">You are in a live collaborative workspace.</p>
+
           {isTeacher && (
-             <button onClick={endSession} className="w-full bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 px-3 py-2 rounded font-medium text-sm transition flex items-center justify-center gap-2">
-                <StopCircle className="w-4 h-4" /> End Session
-             </button>
-          )}
-
-
-          {isTeacher && Object.keys(sharedStudentCodes).length > 0 && (
-             <div className="mt-4 border-t border-[#1e1e24] pt-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Shared Code</h3>
-                <div className="space-y-2">
-                   <button 
-                       onClick={() => setViewingStudentId(null)}
-                       className={`w-full text-left px-3 py-1.5 rounded text-sm transition ${viewingStudentId === null ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-gray-400 hover:bg-[#2a2a35]'}`}
-                   >
-                     My Editor
-                   </button>
-                   {Object.entries(sharedStudentCodes).map(([id, data]) => (
-                     <button 
-                        key={id}
-                        onClick={() => setViewingStudentId(id)}
-                        className={`w-full text-left px-3 py-1.5 rounded text-sm transition flex items-center justify-between ${viewingStudentId === id ? 'bg-blue-500/20 text-blue-500' : 'text-gray-400 hover:bg-[#2a2a35]'}`}
-                     >
-                       <span>{data.name}</span>
-                       <Code className="w-3.5 h-3.5" />
-                     </button>
-                   ))}
-                </div>
-             </div>
-          )}
-
-          {!isTeacher && (
-            <div className="space-y-2 mt-4">
-               <button 
-                 onClick={() => setIsFollowingTeacher(true)} 
-                 className={`w-full text-left px-3 py-2 rounded text-sm transition border ${isFollowingTeacher ? 'bg-[#ff9100]/10 border-[#ff9100]/30 text-[#ff9100]' : 'bg-[#1e1e24] border-transparent text-gray-400 hover:text-white hover:bg-[#2a2a35]'}`}>
-                  Follow Teacher
-               </button>
-
-               <button 
-                 onClick={toggleShareCode} 
-                 className={`w-full text-left px-3 py-2 rounded text-sm transition border ${isSharing ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-[#1e1e24] border-transparent text-gray-400 hover:text-white hover:bg-[#2a2a35]'}`}>
-                  {isSharing ? 'Stop Sharing Code' : 'Share Code with Teacher'}
-               </button>
-               <button 
-                 onClick={() => setIsFollowingTeacher(false)} 
-                 className={`w-full text-left px-3 py-2 rounded text-sm transition border ${!isFollowingTeacher ? 'bg-[#ff9100]/10 border-[#ff9100]/30 text-[#ff9100]' : 'bg-[#1e1e24] border-transparent text-gray-400 hover:text-white hover:bg-[#2a2a35]'}`}>
-                  My Private Workspace
-               </button>
+            <div className="flex flex-col gap-2">
+                <button
+                onClick={endSession}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded text-sm font-medium transition bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                >
+                <StopCircle className="w-4 h-4" /> End Live Session
+                </button>
+                <button
+                onClick={toggleLock}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded text-sm font-medium transition bg-[#1e1e24] text-gray-300 border border-[#2b2d35] hover:bg-[#2b2d35]"
+                >
+                {isLocked ? <><Lock className="w-4 h-4" /> Unlock Editing</> : <><Unlock className="w-4 h-4" /> Lock Editing</>}
+                </button>
             </div>
+          )}
+          {!isTeacher && isLocked && (
+              <div className="mt-2 text-amber-500 text-xs flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Editing is locked by teacher
+              </div>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2"><Users className="w-4 h-4"/> Participants</h3>
-           <div className="space-y-2">
-             <div className="flex items-center gap-2 text-sm text-gray-300">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span> Teacher (Live)
-             </div>
-             {studentsOnline.map((student, i) => (
-               <div key={i} className="flex items-center gap-2 text-sm text-gray-400">
-                  <span className="w-2 h-2 rounded-full bg-gray-500"></span> {student}
-               </div>
-             ))}
-           </div>
+        <div className="p-4 flex-1 overflow-y-auto">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Users className="w-4 h-4" /> Participants ({studentsOnline.length + 1})
+          </h3>
+          <ul className="space-y-2">
+            <li className="flex items-center gap-2 text-sm text-[#ff9100]">
+               <span className="w-2 h-2 rounded-full bg-[#ff9100]"></span>
+               {isTeacher ? 'Teacher (You)' : currentUserName + ' (You)'}
+            </li>
+            {studentsOnline.map((student, i) => (
+              <li key={i} className="flex items-center gap-2 text-sm text-gray-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                {student}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 
-      {/* Main Workspace */}
+      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        
-        {/* Top Header */}
-        <div className="h-14 border-b border-[#1e1e24] bg-[#0a0a0f] flex items-center justify-between px-4">
-            <div className="flex items-center gap-3">
-                <div className="bg-emerald-500/10 text-emerald-300 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
-                    Live session
-                </div>
-                <h1 className="text-sm font-semibold text-white">
-                    {isTeacher ? 'Broadcasting to Classroom' : (isFollowingTeacher ? "Teacher's Demonstration" : "Private Workspace")}
-                </h1>
+        <div className="h-14 border-b border-[#1e1e24] bg-[#0d0d12] flex items-center justify-between px-4 shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-300">
+              <Code className="w-4 h-4 text-[#ff9100]" />
+              main.cpp
             </div>
-            <div className="flex items-center gap-2">
-                {isTeacher && (
-                    <button 
-                        onClick={executeTeacherCode}
-                        disabled={isExecuting}
-                        className="bg-[#ff9100] text-black hover:bg-[#ffaa33] transition px-4 py-1.5 rounded font-bold text-sm flex items-center gap-2 disabled:opacity-50"
-                    >
-                        {isExecuting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                        Run Code
-                    </button>
-                )}
-                {!isTeacher && !isFollowingTeacher && (
-                     <button
-                        onClick={executeStudentCode}
-                        disabled={isExecuting}
-                        className="bg-[#ff9100] text-black hover:bg-[#ffaa33] transition px-4 py-1.5 rounded font-bold text-sm flex items-center gap-2"
-                    >
-                        {isExecuting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />} Run Mine
-                    </button>
-                )}
-            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+             <button
+                onClick={executeTeacherCode}
+                disabled={isExecuting}
+                className="flex items-center gap-2 px-4 py-1.5 bg-[#ff9100] text-black font-semibold rounded text-sm hover:bg-[#ffaa33] transition disabled:opacity-50"
+              >
+                {isExecuting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Run Code
+              </button>
+          </div>
         </div>
 
-        {/* Editor Area */}
-        <div className="flex-1 flex min-h-0 bg-[#0a0a0f]">
-            <div className="flex-1 relative">
-                {isTeacher ? (
-                    viewingStudentId ? (
-                        <MonacoCodeEditor 
-                            files={[{ id: 'main', name: 'main.cpp', path: '/main.cpp', content: sharedStudentCodes[viewingStudentId]?.code || '' }]}
-                            activeFileId="main"
-                            onSelectFile={() => {}}
-                            onCloseFile={() => {}}
-                            onNewFile={() => {}}
-                            onContentChange={() => {}}
-                            language="cpp"
-                            theme="vs-dark"
-                            readOnly={true}
-                            breakpoints={[]}
-                            onToggleBreakpoint={() => {}}
-                        />
-                    ) : (
-                        <MonacoCodeEditor 
-                        files={[{ id: 'main', name: 'main.cpp', path: '/main.cpp', content: teacherCode }]}
-                        activeFileId="main"
-                        onSelectFile={() => {}}
-                        onCloseFile={() => {}}
-                        onNewFile={() => {}}
-                        onContentChange={handleTeacherCodeChange}
-                        language="cpp"
-                        theme="vs-dark"
-                        readOnly={false}
-                        breakpoints={[]}
-                        onToggleBreakpoint={() => {}}
-                    />
-                    )
-                ) : isFollowingTeacher ? (
-                    <MonacoCodeEditor 
-                        files={[{ id: 'main', name: 'main.cpp', path: '/main.cpp', content: teacherCode }]}
-                        activeFileId="main"
-                        onSelectFile={() => {}}
-                        onCloseFile={() => {}}
-                        onNewFile={() => {}}
-                        onContentChange={() => {}}
-                        language="cpp"
-                        theme="vs-dark"
-                        readOnly={true}
-                        breakpoints={[]}
-                        onToggleBreakpoint={() => {}}
-                    />
+        <div className="flex-1 flex flex-col min-h-0">
+           <div className="flex-1 relative">
+                <MonacoCodeEditor 
+                    files={[{ id: 'main', name: 'main.cpp', path: '/main.cpp', content: '' }]}
+                    activeFileId="main"
+                    onSelectFile={() => {}}
+                    onCloseFile={() => {}}
+                    onNewFile={() => {}}
+                    onContentChange={() => {}}
+                    language="cpp"
+                    theme="vs-dark"
+                    readOnly={!isTeacher && isLocked}
+                    breakpoints={[]}
+                    onToggleBreakpoint={() => {}}
+                    onEditorMount={handleEditorMount}
+                />
+           </div>
+           
+           <div className="h-1/3 border-t border-[#1e1e24] bg-[#0a0a0f] flex flex-col shrink-0 min-h-0">
+              <div className="flex items-center px-4 py-2 border-b border-[#1e1e24] bg-[#0d0d12]">
+                <Terminal className="w-4 h-4 mr-2 text-gray-500" />
+                <span className="text-xs font-semibold text-gray-400 uppercase">Live Output</span>
+              </div>
+              <div className="flex-1 overflow-auto p-4 font-mono text-sm">
+                {teacherOutput ? (
+                  teacherOutput.success ? (
+                    <div className="text-emerald-400 whitespace-pre-wrap">{teacherOutput.output}</div>
+                  ) : (
+                    <div className="text-red-400 whitespace-pre-wrap">{teacherOutput.error}</div>
+                  )
                 ) : (
-                     <MonacoCodeEditor 
-                        files={[{ id: 'main', name: 'main.cpp', path: '/main.cpp', content: studentCode }]}
-                        activeFileId="main"
-                        onSelectFile={() => {}}
-                        onCloseFile={() => {}}
-                        onNewFile={() => {}}
-                        onContentChange={setStudentCode}
-                        language="cpp"
-                        theme="vs-dark"
-                        readOnly={false}
-                        breakpoints={[]}
-                        onToggleBreakpoint={() => {}}
-                    />
+                  <div className="text-gray-600 italic">No output yet. Run the code to see results.</div>
                 )}
-            </div>
+              </div>
+           </div>
         </div>
-
-        {/* Output Panel */}
-        <div className="h-64 border-t border-[#1e1e24] bg-[#0d0d12] flex flex-col">
-            <div className="h-10 border-b border-[#1e1e24] flex items-center px-4 gap-4 bg-[#0a0a0f]">
-                <button className="text-white border-b-2 border-[#ff9100] px-1 py-2 text-sm font-medium flex items-center gap-2">
-                    <Terminal className="w-4 h-4"/> Output
-                </button>
-            </div>
-            <div className="flex-1 p-4 overflow-y-auto font-mono text-sm">
-                {(isTeacher || isFollowingTeacher) && teacherOutput ? (
-                    <OutputPanel result={teacherOutput} isRunning={isExecuting} />
-                ) : (!isTeacher && !isFollowingTeacher && studentOutput) ? (
-                    <OutputPanel result={studentOutput} isRunning={false} />
-                ) : (
-                    <div className="text-gray-500 italic flex items-center gap-2">
-                        <Terminal className="w-4 h-4" /> 
-                        {isTeacher ? "Run code to see output..." : (isFollowingTeacher ? "Waiting for teacher to run code..." : "Run your code to see output...")}
-                    </div>
-                )}
-            </div>
-        </div>
-
       </div>
     </div>
   );
