@@ -8,18 +8,18 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     const isTeacher = classroom?.teacherId === user.id || auth.context?.membership?.role === 'teacher';
 
-    const analytics = classroomDb.getClassroomAnalytics(id);
-    const studentProgress = !isTeacher ? classroomDb.getStudentProgress(id, user.id) : undefined;
+    const analytics = await classroomDb.getClassroomAnalytics(id);
+    const studentProgress = !isTeacher ? await classroomDb.getStudentProgress(id, user.id) : undefined;
 
     return NextResponse.json({
       analytics,

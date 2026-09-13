@@ -9,12 +9,12 @@ export async function PATCH(
 ) {
   try {
     const { id, annId } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
+    const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Only teachers can edit announcements.' }, { status: 403 });
     }
 
-    const existing = classroomDb.getAnnouncement(annId);
+    const existing = await classroomDb.getAnnouncement(annId);
     if (!existing || existing.classroomId !== id) {
       return NextResponse.json({ error: 'Announcement not found' }, { status: 404 });
     }
@@ -25,12 +25,12 @@ export async function PATCH(
     if (body.content !== undefined) updates.content = body.content.trim();
     if (body.pinned !== undefined) updates.pinned = Boolean(body.pinned);
 
-    const updated = classroomDb.updateAnnouncement(annId, updates);
+    const updated = await classroomDb.updateAnnouncement(annId, updates);
     if (!updated) {
       return NextResponse.json({ error: 'Failed to update announcement' }, { status: 500 });
     }
 
-    const user = auth.context?.user || ClassroomAuth.getCurrentUser(req);
+    const user = auth.context?.user || (await ClassroomAuth.getCurrentUser(req));
     realtimeCoordinator.broadcast(
       id,
       'announcement.updated',
@@ -50,19 +50,19 @@ export async function DELETE(
 ) {
   try {
     const { id, annId } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
+    const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Only teachers can delete announcements.' }, { status: 403 });
     }
 
-    const existing = classroomDb.getAnnouncement(annId);
+    const existing = await classroomDb.getAnnouncement(annId);
     if (!existing || existing.classroomId !== id) {
       return NextResponse.json({ error: 'Announcement not found' }, { status: 404 });
     }
 
-    classroomDb.deleteAnnouncement(annId);
+    await classroomDb.deleteAnnouncement(annId);
 
-    const user = auth.context?.user || ClassroomAuth.getCurrentUser(req);
+    const user = auth.context?.user || (await ClassroomAuth.getCurrentUser(req));
     realtimeCoordinator.broadcast(
       id,
       'announcement.deleted',

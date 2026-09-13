@@ -13,14 +13,14 @@ export async function POST(
 ) {
   try {
     const { id, asgId } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const assignment = classroomDb.getAssignment(asgId);
+    const assignment = await classroomDb.getAssignment(asgId);
     if (!assignment || assignment.classroomId !== id) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
     }
@@ -30,6 +30,16 @@ export async function POST(
 
     if (!code || typeof code !== 'string') {
       return NextResponse.json({ error: 'Submission code is required' }, { status: 400 });
+    }
+
+    // Verify student is not suspended from this classroom
+    const memberRecord = await classroomDb.getMember(id, user.id);
+    if (memberRecord?.status === 'suspended') {
+      const expiresAt = (memberRecord as any).suspensionExpiresAt;
+      const isExpired = expiresAt && Date.now() >= expiresAt;
+      if (!isExpired) {
+        return NextResponse.json({ error: 'Your access to this classroom is suspended. You cannot submit assignments.' }, { status: 403 });
+      }
     }
 
     const now = Date.now();
@@ -55,7 +65,7 @@ export async function POST(
 
 
 
-    const studentPrior = classroomDb.getStudentSubmission(asgId, user.id);
+    const studentPrior = await classroomDb.getStudentSubmission(asgId, user.id);
     const version = (studentPrior?.version || 0) + 1;
 
     if (assignment.attemptsAllowed > 0 && version > assignment.attemptsAllowed) {
@@ -87,7 +97,7 @@ export async function POST(
     }
 
     // 4. Calculate similarity against other student submissions
-    const existingSubs = classroomDb.listSubmissions(asgId);
+    const existingSubs = await classroomDb.listSubmissions(asgId);
     let maxSim = 0;
     let mostSimilarStudent = '';
     for (const priorSub of existingSubs) {
@@ -123,6 +133,11 @@ export async function POST(
       testResults: testOutcome.results,
       similarityScore: maxSim,
       similarStudentName: maxSim >= 50 ? mostSimilarStudent : undefined,
+      // Immutable snapshot: records exactly what was submitted at this moment
+      // so future project edits do not silently rewrite this history
+      ...(body.projectId ? { projectId: body.projectId } : {}),
+      snapshotJson: JSON.stringify([{ name: 'main', content: code, language: language || assignment.language }]),
+
       grade: {
         id: `grd_${submissionId}`,
         submissionId,
@@ -138,7 +153,7 @@ export async function POST(
       },
     };
 
-    classroomDb.saveSubmission(submission);
+    await classroomDb.saveSubmission(submission);
 
     // 6. Broadcast Real-Time Update to Teacher and Class
     realtimeCoordinator.broadcast(

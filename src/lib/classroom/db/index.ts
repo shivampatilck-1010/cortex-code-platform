@@ -26,41 +26,89 @@ import {
 } from '../models';
 
 interface DBInstance {
-  exec(sql: string): void;
+  exec(sql: string): Promise<void>;
   prepare(sql: string): {
-    run(...params: any[]): { changes: number; lastInsertRowid: number };
-    get(...params: any[]): any;
-    all(...params: any[]): any[];
+    run(...params: any[]): Promise<{ changes: number; lastInsertRowid: number }>;
+    get(...params: any[]): Promise<any>;
+    all(...params: any[]): Promise<any[]>;
   };
+}
+
+class D1Wrapper implements DBInstance {
+  constructor(private d1: any) {}
+  async exec(sql: string): Promise<void> {
+    await this.d1.exec(sql);
+  }
+  prepare(sql: string) {
+    return {
+      run: async (...params: any[]) => {
+        const res = await this.d1.prepare(sql).bind(...params).run();
+        return { changes: res.meta.changes, lastInsertRowid: res.meta.last_row_id };
+      },
+      get: async (...params: any[]) => {
+        return await this.d1.prepare(sql).bind(...params).first();
+      },
+      all: async (...params: any[]) => {
+        const res = await this.d1.prepare(sql).bind(...params).all();
+        return res.results;
+      }
+    };
+  }
+}
+
+class SqliteWrapper implements DBInstance {
+  constructor(private sqlite: any) {}
+  async exec(sql: string): Promise<void> {
+    this.sqlite.exec(sql);
+  }
+  prepare(sql: string) {
+    return {
+      run: async (...params: any[]) => {
+        return this.sqlite.prepare(sql).run(...params);
+      },
+      get: async (...params: any[]) => {
+        return this.sqlite.prepare(sql).get(...params);
+      },
+      all: async (...params: any[]) => {
+        return this.sqlite.prepare(sql).all(...params);
+      }
+    };
+  }
 }
 
 class ClassroomDatabase {
   public db: DBInstance | null = null;
   private dbPath: string = '';
   private initialized: boolean = false;
-  private memoryUsers = new Map<string, User>();
-  private memoryClassrooms = new Map<string, Classroom>();
-  private memoryMembers = new Map<string, ClassroomMember>();
-  private memoryAnnouncements = new Map<string, Announcement>();
-  private memoryMessages = new Map<string, ClassroomMessage>();
-  private memoryAssignments = new Map<string, Assignment>();
-  private memorySubmissions = new Map<string, Submission>();
-  private memoryGrades = new Map<string, Grade>();
-  private memoryFeedback = new Map<string, Feedback>();
-  private memoryResources = new Map<string, ClassroomResource>();
-  private memoryLiveSessions = new Map<string, LiveClassSession>();
-  private memoryNotifications = new Map<string, Notification>();
 
   constructor() {}
 
   
-  private getDb() {
-    this.init();
+  private async getDb(): Promise<DBInstance> {
+    await this.init();
+    if (!this.db) {
+      throw new Error('[ClassroomDatabase] No database available. SQLite initialization failed. Check server logs.');
+    }
     return this.db!;
   }
 
-  private init() {
+  private async init() {
     if (this.initialized) return;
+
+    // Check for D1 first (production Cloudflare)
+    let d1Binding = null;
+    if (typeof process !== 'undefined' && process.env && process.env.DB) {
+      d1Binding = process.env.DB;
+    } else if (typeof globalThis !== 'undefined' && (globalThis as any).env && (globalThis as any).env.DB) {
+      d1Binding = (globalThis as any).env.DB;
+    }
+
+    if (d1Binding) {
+      this.db = new D1Wrapper(d1Binding);
+      this.initialized = true;
+      await this.createTables();
+      return;
+    }
 
     try {
       const dataDir = path.resolve(process.cwd(), 'data');
@@ -82,24 +130,25 @@ class ClassroomDatabase {
       const sqliteDb = new DatabaseSync(this.dbPath);
       sqliteDb.exec('PRAGMA journal_mode = WAL;');
       sqliteDb.exec('PRAGMA foreign_keys = ON;');
-      this.db = sqliteDb;
+      this.db = new SqliteWrapper(sqliteDb);
       this.initialized = true;
-      this.createTables();
-      this.seedDefaultClassroom();
+      await this.createTables();
     } catch (err) {
-      console.warn('[ClassroomDatabase] Falling back to in-memory fallback:', err);
-      this.db = null;
+      console.error('[ClassroomDatabase] FATAL: Could not initialize SQLite. Failing closed.', err);
       this.initialized = true;
-      this.seedDefaultClassroom();
+      this.db = null;
+      // Do NOT fall back to in-memory. Fail hard so bugs are visible.
     }
   }
 
-  private createTables() {
-    if (!this.getDb()) return;
+  private async createTables() {
+    if (!this.db) return;
 
-    this.getDb().exec(`
+    await this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
+        cortex_id TEXT UNIQUE,
+        password_hash TEXT,
         name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL,
@@ -108,6 +157,23 @@ class ClassroomDatabase {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          token_hash TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          used INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
 
       CREATE TABLE IF NOT EXISTS classrooms (
         id TEXT PRIMARY KEY,
@@ -140,6 +206,9 @@ class ClassroomDatabase {
         joined_at INTEGER NOT NULL,
         last_active_at INTEGER NOT NULL,
         is_online INTEGER DEFAULT 0,
+        suspended_at INTEGER,
+        suspension_expires_at INTEGER,
+        removed_at INTEGER,
         UNIQUE(classroom_id, user_id),
         FOREIGN KEY(classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE
       );
@@ -214,6 +283,8 @@ class ClassroomDatabase {
         student_name TEXT NOT NULL,
         code TEXT NOT NULL,
         language TEXT NOT NULL,
+        project_id TEXT,
+        snapshot_json TEXT,
         version INTEGER NOT NULL DEFAULT 1,
         status TEXT NOT NULL DEFAULT 'completed',
         submitted_at INTEGER NOT NULL,
@@ -255,28 +326,6 @@ class ClassroomDatabase {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         FOREIGN KEY(submission_id) REFERENCES submissions(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS attendance_sessions (
-        id TEXT PRIMARY KEY,
-        classroom_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        started_at INTEGER NOT NULL,
-        closed_at INTEGER,
-        status TEXT NOT NULL DEFAULT 'active',
-        FOREIGN KEY(classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS attendance_records (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        student_id TEXT NOT NULL,
-        student_name TEXT NOT NULL,
-        status TEXT NOT NULL,
-        marked_at INTEGER NOT NULL,
-        marked_by TEXT NOT NULL,
-        UNIQUE(session_id, student_id),
-        FOREIGN KEY(session_id) REFERENCES attendance_sessions(id) ON DELETE CASCADE
       );
 
       CREATE TABLE IF NOT EXISTS live_sessions (
@@ -353,541 +402,87 @@ class ClassroomDatabase {
       CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
       CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(classroom_id);
     `);
-  }
 
-  private initFallback() {
-    this.db = null;
-    this.initialized = true;
-    const now = Date.now();
-    const teacherId = 'usr_prof_elena';
-    const classId = 'C1-CS201-ADV';
-    const joinCode = 'CS201-LIVE';
-
-    this.memoryUsers.set(teacherId, {
-      id: teacherId,
-      name: 'Prof. Elena Rostova',
-      email: 'elena.rostova@cortex.edu',
-      role: 'teacher',
-      status: 'active',
-      createdAt: now - 30 * 86400000,
-      updatedAt: now,
-    });
-
-    const students = [
-      { id: 'usr_alex_chen', name: 'Alex Chen', email: 'alex.chen@student.cortex.edu' },
-      { id: 'usr_maya_patel', name: 'Maya Patel', email: 'maya.patel@student.cortex.edu' },
-      { id: 'usr_jordan_lee', name: 'Jordan Lee', email: 'jordan.lee@student.cortex.edu' },
-      { id: 'usr_sophia_ng', name: 'Sophia Nguyen', email: 'sophia.ng@student.cortex.edu' },
-      { id: 'usr_marcus_v', name: 'Marcus Vance', email: 'marcus.v@student.cortex.edu' },
-    ];
-
-    for (const s of students) {
-      this.memoryUsers.set(s.id, {
-        id: s.id,
-        name: s.name,
-        email: s.email,
-        role: 'student',
-        status: 'active',
-        createdAt: now - 25 * 86400000,
-        updatedAt: now,
-      });
-    }
-
-    this.memoryClassrooms.set(classId, {
-      id: classId,
-      name: 'Advanced Algorithms & Concurrent Systems',
-      subject: 'Computer Science',
-      description: 'Master dynamic programming, graph theory, memory models, and lock-free concurrency in C++ and Python.',
-      courseCode: 'CS-201',
-      academicYear: '2026-2027',
-      section: 'Sec 04 (Honors)',
-      teacherId,
-      teacherName: 'Prof. Elena Rostova',
-      joinCode,
-      joinEnabled: true,
-      status: 'active',
-      createdAt: now - 20 * 86400000,
-      updatedAt: now,
-      settings: {
-        allowStudentPosting: true,
-        allowStudentMessaging: true,
-        allowCodeSharing: true,
-        leaderboardEnabled: true,
-        defaultAIPolicy: 'hints_only',
-      },
-    });
-
-    this.memoryMembers.set(`${classId}:${teacherId}`, {
-      id: `mem_${teacherId}`,
-      classroomId: classId,
-      userId: teacherId,
-      userName: 'Prof. Elena Rostova',
-      userEmail: 'elena.rostova@cortex.edu',
-      role: 'teacher',
-      status: 'active',
-      joinedAt: now - 20 * 86400000,
-      lastActiveAt: now,
-      isOnline: true,
-    });
-
-    for (const s of students) {
-      this.memoryMembers.set(`${classId}:${s.id}`, {
-        id: `mem_${s.id}`,
-        classroomId: classId,
-        userId: s.id,
-        userName: s.name,
-        userEmail: s.email,
-        role: 'student',
-        status: 'active',
-        joinedAt: now - 15 * 86400000,
-        lastActiveAt: now,
-        isOnline: false,
-      });
-    }
-  }
-
-  // --- SEEDING ---
-  private seedDefaultClassroom() {
-    if (this.db) {
-      const count = this.db.prepare('SELECT COUNT(*) as c FROM classrooms').get() as { c: number };
-      if (count && count.c > 0) return;
-    } else {
-      if (this.memoryClassrooms.size > 0) return;
-    }
-
-    const now = Date.now();
-    const teacherId = 'usr_prof_elena';
-    const classId = 'C1-CS201-ADV';
-    const joinCode = 'CS201-LIVE';
-
-    this.createUser({
-      id: teacherId,
-      name: 'Prof. Elena Rostova',
-      email: 'elena.rostova@cortex.edu',
-      role: 'teacher',
-      status: 'active',
-      createdAt: now - 30 * 86400000,
-      updatedAt: now,
-    });
-
-    const students = [
-      { id: 'usr_alex_chen', name: 'Alex Chen', email: 'alex.chen@student.cortex.edu' },
-      { id: 'usr_maya_patel', name: 'Maya Patel', email: 'maya.patel@student.cortex.edu' },
-      { id: 'usr_jordan_lee', name: 'Jordan Lee', email: 'jordan.lee@student.cortex.edu' },
-      { id: 'usr_sophia_ng', name: 'Sophia Nguyen', email: 'sophia.ng@student.cortex.edu' },
-      { id: 'usr_marcus_v', name: 'Marcus Vance', email: 'marcus.v@student.cortex.edu' },
-    ];
-
-    for (const s of students) {
-      this.createUser({
-        id: s.id,
-        name: s.name,
-        email: s.email,
-        role: 'student',
-        status: 'active',
-        createdAt: now - 25 * 86400000,
-        updatedAt: now,
-      });
-    }
-
-    this.createClassroom({
-      id: classId,
-      name: 'Advanced Algorithms & Concurrent Systems',
-      subject: 'Computer Science',
-      description: 'Master dynamic programming, graph theory, memory models, and lock-free concurrency in C++ and Python.',
-      courseCode: 'CS-201',
-      academicYear: '2026-2027',
-      section: 'Sec 04 (Honors)',
-      teacherId,
-      teacherName: 'Prof. Elena Rostova',
-      joinCode,
-      joinEnabled: true,
-      status: 'active',
-      createdAt: now - 20 * 86400000,
-      updatedAt: now,
-      settings: {
-        allowStudentPosting: true,
-        allowStudentMessaging: true,
-        allowCodeSharing: true,
-        leaderboardEnabled: true,
-        defaultAIPolicy: 'hints_only',
-      },
-    });
-
-    this.addMember({
-      id: `mem_${teacherId}`,
-      classroomId: classId,
-      userId: teacherId,
-      userName: 'Prof. Elena Rostova',
-      userEmail: 'elena.rostova@cortex.edu',
-      role: 'teacher',
-      status: 'active',
-      joinedAt: now - 20 * 86400000,
-      lastActiveAt: now,
-      isOnline: true,
-    });
-
-    for (let i = 0; i < students.length; i++) {
-      const s = students[i];
-      this.addMember({
-        id: `mem_${s.id}`,
-        classroomId: classId,
-        userId: s.id,
-        userName: s.name,
-        userEmail: s.email,
-        role: 'student',
-        status: 'active',
-        joinedAt: now - (18 - i) * 86400000,
-        lastActiveAt: now - i * 3600000,
-        isOnline: i < 3,
-      });
-    }
-
-    this.createAnnouncement({
-      id: 'ann_welcome',
-      classroomId: classId,
-      authorId: teacherId,
-      authorName: 'Prof. Elena Rostova',
-      authorRole: 'teacher',
-      title: 'Welcome to CS-201 Advanced Algorithms',
-      content: 'Welcome everyone! We will be conducting live coding laboratories directly on Cortex IDE. All test cases run against the isolated sandbox runner. Review Week 1 materials in the Resources tab.',
-      pinned: true,
-      createdAt: now - 15 * 86400000,
-      updatedAt: now - 15 * 86400000,
-    });
-
-    this.createAnnouncement({
-      id: 'ann_deadline_ext',
-      classroomId: classId,
-      authorId: teacherId,
-      authorName: 'Prof. Elena Rostova',
-      authorRole: 'teacher',
-      title: 'Assignment 1 Deadline Extended + Live Code Lab',
-      content: 'Due to student requests, Assignment 1: Two-Sum & Hash Map Optimization deadline has been extended by 48 hours. Live code review will take place this Thursday in our Code Lab.',
-      pinned: false,
-      createdAt: now - 2 * 86400000,
-      updatedAt: now - 2 * 86400000,
-    });
-
-    this.createMessage({
-      id: 'msg_1',
-      classroomId: classId,
-      senderId: teacherId,
-      senderName: 'Prof. Elena Rostova',
-      senderRole: 'teacher',
-      recipientType: 'class',
-      content: 'Good morning everyone! Please check in for attendance before we start today\'s session.',
-      createdAt: now - 40 * 60000,
-      updatedAt: now - 40 * 60000,
-    });
-
-    this.createMessage({
-      id: 'msg_2',
-      classroomId: classId,
-      senderId: 'usr_alex_chen',
-      senderName: 'Alex Chen',
-      senderRole: 'student',
-      recipientType: 'class',
-      content: 'Checked in! Looking forward to the graph traversal discussion.',
-      createdAt: now - 35 * 60000,
-      updatedAt: now - 35 * 60000,
-    });
-
-    const asg1TestCases: TestCase[] = [
-      {
-        id: 'tc_1',
-        assignmentId: 'asg_hashmap_twosum',
-        input: '4\n2 7 11 15\n9',
-        expectedOutput: '0 1',
-        visibility: 'public',
-        weight: 30,
-        timeoutMs: 3000,
-        memoryLimitMb: 128,
-      },
-      {
-        id: 'tc_2',
-        assignmentId: 'asg_hashmap_twosum',
-        input: '3\n3 2 4\n6',
-        expectedOutput: '1 2',
-        visibility: 'public',
-        weight: 30,
-        timeoutMs: 3000,
-        memoryLimitMb: 128,
-      },
-      {
-        id: 'tc_3_hidden',
-        assignmentId: 'asg_hashmap_twosum',
-        input: '5\n-1 -2 -3 -4 -5\n-8',
-        expectedOutput: '2 4',
-        visibility: 'hidden',
-        weight: 40,
-        timeoutMs: 3000,
-        memoryLimitMb: 128,
-      },
-    ];
-
-    this.createAssignment({
-      id: 'asg_hashmap_twosum',
-      classroomId: classId,
-      title: 'Assignment 1: Two-Sum & Hash Map Optimization',
-      description: 'Implement an optimal O(N) time complexity solution for finding indices of the two numbers such that they add up to target.',
-      instructions: 'Read standard input: N (number of elements), followed by array elements, followed by target integer. Output 0-indexed indices separated by space. Ensure space complexity is O(N) and time complexity is O(N).',
-      type: 'coding',
-      language: 'python',
-      starterCode: `# Python 3.12 - Two Sum Assignment
-import sys
-
-def solve():
-    lines = sys.stdin.read().split()
-    if not lines:
-        return
-    n = int(lines[0])
-    nums = [int(x) for x in lines[1:n+1]]
-    target = int(lines[n+1])
-    
-    seen = {}
-    for i, num in enumerate(nums):
-        diff = target - num
-        if diff in seen:
-            print(f"{seen[diff]} {i}")
-            return
-        seen[num] = i
-
-if __name__ == "__main__":
-    solve()
-`,
-      difficulty: 'Beginner',
-      maxMarks: 100,
-      dueAt: now + 2 * 86400000,
-      publishedAt: now - 5 * 86400000,
-      attemptsAllowed: 5,
-      allowLateSubmission: true,
-      latePenaltyPercent: 10,
-      autoGrade: true,
-      manualGrade: true,
-      aiPolicy: 'hints_only',
-      plagiarismPolicy: 'review_only',
-      status: 'published',
-      createdBy: teacherId,
-      createdAt: now - 5 * 86400000,
-      updatedAt: now - 2 * 86400000,
-      testCases: asg1TestCases,
-      rubric: [
-        { id: 'r1', name: 'Algorithmic Correctness', maxPoints: 70 },
-        { id: 'r2', name: 'Time & Space Efficiency', maxPoints: 20 },
-        { id: 'r3', name: 'Clean Code & Formatting', maxPoints: 10 },
-      ],
-    });
-
-    const alexSubmissionCode = `import sys
-
-def solve():
-    lines = sys.stdin.read().split()
-    if not lines:
-        return
-    n = int(lines[0])
-    nums = [int(x) for x in lines[1:n+1]]
-    target = int(lines[n+1])
-    
-    seen = {}
-    for i, num in enumerate(nums):
-        diff = target - num
-        if diff in seen:
-            print(f"{seen[diff]} {i}")
-            return
-        seen[num] = i
-
-if __name__ == "__main__":
-    solve()`;
-
-    this.saveSubmission({
-      id: 'sub_alex_1',
-      assignmentId: 'asg_hashmap_twosum',
-      assignmentTitle: 'Assignment 1: Two-Sum & Hash Map Optimization',
-      classroomId: classId,
-      studentId: 'usr_alex_chen',
-      studentName: 'Alex Chen',
-      code: alexSubmissionCode,
-      language: 'python',
-      version: 1,
-      status: 'graded',
-      submittedAt: now - 24 * 3600000,
-      executionStartedAt: now - 24 * 3600000,
-      executionCompletedAt: now - 24 * 3600000 + 1200,
-      score: 100,
-      maxScore: 100,
-      isLate: false,
-      testResults: [
-        {
-          testCaseId: 'tc_1',
-          status: 'passed',
-          visibility: 'public',
-          input: '4\n2 7 11 15\n9',
-          expectedOutput: '0 1',
-          actualOutput: '0 1\n',
-          executionTimeMs: 42,
-          memoryUsageMb: 14,
-          score: 30,
-          maxScore: 30,
-        },
-        {
-          testCaseId: 'tc_2',
-          status: 'passed',
-          visibility: 'public',
-          input: '3\n3 2 4\n6',
-          expectedOutput: '1 2',
-          actualOutput: '1 2\n',
-          executionTimeMs: 38,
-          memoryUsageMb: 14,
-          score: 30,
-          maxScore: 30,
-        },
-        {
-          testCaseId: 'tc_3_hidden',
-          status: 'passed',
-          visibility: 'hidden',
-          executionTimeMs: 44,
-          memoryUsageMb: 14,
-          score: 40,
-          maxScore: 40,
-        },
-      ],
-      grade: {
-        id: 'grd_alex_1',
-        submissionId: 'sub_alex_1',
-        studentId: 'usr_alex_chen',
-        assignmentId: 'asg_hashmap_twosum',
-        automaticScore: 100,
-        manualAdjustment: 0,
-        finalScore: 100,
-        gradedBy: teacherId,
-        gradedByName: 'Prof. Elena Rostova',
-        gradedAt: now - 18 * 3600000,
-        releasedAt: now - 18 * 3600000,
-      },
-      feedback: {
-        id: 'fbk_alex_1',
-        submissionId: 'sub_alex_1',
-        authorId: teacherId,
-        authorName: 'Prof. Elena Rostova',
-        content: 'Exemplary single-pass hash map solution with optimal O(N) time and O(N) space. Clean imports and idiomatic Python.',
-        createdAt: now - 18 * 3600000,
-        updatedAt: now - 18 * 3600000,
-      },
-    });
-
-    this.createResource({
-      id: 'res_1',
-      classroomId: classId,
-      uploadedBy: teacherId,
-      uploadedByName: 'Prof. Elena Rostova',
-      name: 'Lecture 01 - Master Theorem & Recurrence Relations.pdf',
-      type: 'pdf',
-      url: 'https://cortexcode.io/docs/cs201-lecture1.pdf',
-      description: 'Comprehensive guide to solving divide-and-conquer recurrences with formal proofs.',
-      unit: 'Unit 1: Foundations',
-      createdAt: now - 14 * 86400000,
-    });
-
-    this.createResource({
-      id: 'res_2',
-      classroomId: classId,
-      uploadedBy: teacherId,
-      uploadedByName: 'Prof. Elena Rostova',
-      name: 'Thread-Safe Queue Starter Implementation.cpp',
-      type: 'code',
-      url: 'https://cortexcode.io/snippets/ts-queue.cpp',
-      description: 'C++20 lock-based bounded queue with std::condition_variable reference.',
-      unit: 'Unit 2: Concurrency',
-      createdAt: now - 6 * 86400000,
-    });
-
-    this.createLiveSession({
-      id: 'live_sess_demo',
-      classroomId: classId,
-      teacherId,
-      teacherName: 'Prof. Elena Rostova',
-      title: 'Live Lab: Lock-Free Queues in C++20',
-      topic: 'Atomic pointers, compare-and-swap (CAS), and the ABA problem',
-      language: 'cpp',
-      starterCode: `// C++20 Lock-Free Queue Demonstration
-#include <iostream>
-#include <atomic>
-#include <memory>
-
-template<typename T>
-class LockFreeQueue {
-private:
-    struct Node {
-        std::shared_ptr<T> data;
-        std::atomic<Node*> next{nullptr};
-        Node(T val) : data(std::make_shared<T>(val)) {}
-    };
-
-    std::atomic<Node*> head;
-    std::atomic<Node*> tail;
-
-public:
-    LockFreeQueue() {
-        Node* dummy = new Node(T{});
-        head.store(dummy);
-        tail.store(dummy);
-    }
-
-    void enqueue(T val) {
-        Node* newNode = new Node(val);
-        Node* currTail;
-        while (true) {
-            currTail = tail.load();
-            Node* next = currTail->next.load();
-            if (currTail == tail.load()) {
-                if (next == nullptr) {
-                    if (currTail->next.compare_exchange_weak(next, newNode)) {
-                        tail.compare_exchange_strong(currTail, newNode);
-                        return;
-                    }
-                } else {
-                    tail.compare_exchange_strong(currTail, next);
-                }
-            }
-        }
-    }
-};
-
-int main() {
-    std::cout << "LockFreeQueue initialized and verified on Cortex Sandbox!" << std::endl;
-    return 0;
-}
-`,
-      sharedCode: '',
-      isBroadcastingCode: true,
-      startedAt: now - 45 * 60000,
-      durationMinutes: 90,
-      status: 'active',
-      activeStudentCount: 4,
-    });
+    // Run migrations for columns that might not exist in older databases
+    try { await this.db.exec('ALTER TABLE classroom_members ADD COLUMN suspended_at INTEGER'); } catch(_) {}
+    try { await this.db.exec('ALTER TABLE classroom_members ADD COLUMN suspension_expires_at INTEGER'); } catch(_) {}
+    try { await this.db.exec('ALTER TABLE classroom_members ADD COLUMN removed_at INTEGER'); } catch(_) {}
+    try { await this.db.exec('ALTER TABLE submissions ADD COLUMN project_id TEXT'); } catch(_) {}
+    try { await this.db.exec('ALTER TABLE submissions ADD COLUMN snapshot_json TEXT'); } catch(_) {}
   }
 
   // --- USERS ---
-  createUser(user: User): User {
-    this.memoryUsers.set(user.id, user);
-    if (!this.getDb()) return user;
-    const stmt = this.getDb().prepare(`
-      INSERT OR REPLACE INTO users (id, name, email, role, avatar, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  async createUser(user: User): Promise<User> {
+    if (!(await this.getDb())) return user;
+    const stmt = (await this.getDb()).prepare(`
+      INSERT OR REPLACE INTO users (id, name, email, role, avatar, status, created_at, updated_at, cortex_id, password_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(user.id, user.name, user.email, user.role, user.avatar || null, user.status, user.createdAt, user.updatedAt);
+    await stmt.run(
+      user.id, user.name, user.email, user.role, user.avatar || null, user.status, user.createdAt, user.updatedAt,
+      (user as any).cortex_id || null, (user as any).password_hash || null
+    );
     return user;
   }
 
-  getUser(id: string): User | null {
-    if (!this.getDb()) {
-      return this.memoryUsers.get(id) || null;
-    }
-    const row = this.getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
-    if (!row) {
-      return this.memoryUsers.get(id) || null;
-    }
+
+  // --- AUTH & SESSIONS ---
+
+  async getUserByEmail(email: string): Promise<any | null> {
+    if (!(await this.getDb())) return null;
+    return await (await this.getDb()).prepare('SELECT * FROM users WHERE email = ?').get(email);
+  }
+
+  async getUserByCortexId(cortexId: string): Promise<any | null> {
+    if (!(await this.getDb())) return null;
+    return await (await this.getDb()).prepare('SELECT * FROM users WHERE cortex_id = ?').get(cortexId);
+  }
+
+  async createSession(id: string, userId: string, expiresAt: number): Promise<void> {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare(
+      'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)'
+    ).run(id, userId, expiresAt, Date.now());
+  }
+
+  async getSession(id: string): Promise<any | null> {
+    if (!(await this.getDb())) return null;
+    return await (await this.getDb()).prepare('SELECT * FROM sessions WHERE id = ?').get(id);
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('DELETE FROM sessions WHERE id = ?').run(id);
+  }
+
+  async createResetToken(tokenHash: string, userId: string, expiresAt: number): Promise<void> {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare(
+      'INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)'
+    ).run(tokenHash, userId, expiresAt, Date.now());
+  }
+
+  async getResetToken(tokenHash: string): Promise<any | null> {
+    if (!(await this.getDb())) return null;
+    return await (await this.getDb()).prepare('SELECT * FROM password_reset_tokens WHERE token_hash = ?').get(tokenHash);
+  }
+
+  async markResetTokenUsed(tokenHash: string): Promise<void> {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('UPDATE password_reset_tokens SET used = 1 WHERE token_hash = ?').run(tokenHash);
+  }
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+  }
+
+  // --- END AUTH ---
+
+  async getUser(id: string): Promise<any | null> {
+    if (!(await this.getDb())) return null;
+    const row = await (await this.getDb()).prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+    if (!row) return null;
     return {
       id: row.id,
       name: row.name,
@@ -897,22 +492,22 @@ int main() {
       status: row.status as any,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      cortex_id: row.cortex_id,
+      password_hash: row.password_hash
     };
   }
 
   // --- CLASSROOMS ---
-  createClassroom(classroom: Classroom): Classroom {
-    this.memoryClassrooms.set(classroom.id, classroom);
-    this.memoryClassrooms.set(classroom.id.toUpperCase(), classroom);
-    if (!this.getDb()) return classroom;
-    const stmt = this.getDb().prepare(`
+  async createClassroom(classroom: any): Promise<any> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO classrooms (
         id, name, subject, description, course_code, academic_year, section,
         teacher_id, teacher_name, image, join_code, join_enabled, status,
         created_at, updated_at, archived_at, settings_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
+    await stmt.run(
       classroom.id,
       classroom.name || (classroom as any).title || 'Untitled Classroom',
       classroom.subject || '',
@@ -934,77 +529,72 @@ int main() {
     return classroom;
   }
 
-  getClassroom(id: string): Classroom | null {
-    if (!this.getDb()) {
-      return this.memoryClassrooms.get(id) || this.memoryClassrooms.get(id.toUpperCase()) || null;
-    }
-    let row = this.getDb().prepare('SELECT * FROM classrooms WHERE id = ?').get(id) as any;
+  async getClassroom(id: string): Promise<Classroom | null> {
+    if (!(await this.getDb())) return null;
+    let row = await (await this.getDb()).prepare('SELECT * FROM classrooms WHERE id = ?').get(id) as any;
     if (!row) {
-      row = this.getDb().prepare('SELECT * FROM classrooms WHERE UPPER(id) = ?').get(id.toUpperCase()) as any;
+      row = await (await this.getDb()).prepare('SELECT * FROM classrooms WHERE UPPER(id) = ?').get(id.toUpperCase()) as any;
     }
-    if (!row) {
-      return this.memoryClassrooms.get(id) || this.memoryClassrooms.get(id.toUpperCase()) || null;
-    }
-    return this.mapClassroom(row);
-  }
-
-  getClassroomByJoinCode(joinCode: string): Classroom | null {
-    if (!this.getDb()) {
-      const norm = joinCode.trim().toUpperCase();
-      return Array.from(this.memoryClassrooms.values()).find((c) => c.joinCode?.trim().toUpperCase() === norm) || null;
-    }
-    const norm = joinCode.trim().toUpperCase();
-    const row = this.getDb().prepare('SELECT * FROM classrooms WHERE UPPER(join_code) = ?').get(norm) as any;
     if (!row) return null;
     return this.mapClassroom(row);
   }
 
-  listClassroomsForUser(userId: string): Classroom[] {
-    if (!this.getDb()) {
-      return Array.from(this.memoryClassrooms.values());
-    }
-    const rows = this.getDb().prepare(`
+  async getClassroomByJoinCode(joinCode: string): Promise<Classroom | null> {
+    if (!(await this.getDb())) return null;
+    const norm = joinCode.trim().toUpperCase();
+    const row = await (await this.getDb()).prepare('SELECT * FROM classrooms WHERE UPPER(join_code) = ?').get(norm) as any;
+    if (!row) return null;
+    return this.mapClassroom(row);
+  }
+
+  async listClassroomsForUser(userId: string): Promise<Classroom[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare(`
       SELECT c.* FROM classrooms c
       LEFT JOIN classroom_members m ON c.id = m.classroom_id
-      WHERE c.teacher_id = ? OR m.user_id = ?
+      WHERE c.teacher_id = ? OR (m.user_id = ? AND m.status = 'active')
       GROUP BY c.id
       ORDER BY c.created_at DESC
     `).all(userId, userId) as any[];
     return rows.map((r) => this.mapClassroom(r));
   }
 
-  updateClassroom(id: string, updates: Partial<Classroom>): Classroom | null {
-    if (!this.getDb()) return null;
-    const current = this.getClassroom(id);
+  async updateClassroom(id: string, updates: Partial<Classroom>): Promise<Classroom | null> {
+    if (!(await this.getDb())) return null;
+    const current = await this.getClassroom(id);
     if (!current) return null;
 
     const merged = { ...current, ...updates, updatedAt: Date.now() };
-    this.createClassroom(merged);
+    await this.createClassroom(merged);
     return merged;
   }
 
-  deleteClassroom(id: string): boolean {
-    if (!this.getDb()) return false;
-    this.getDb().prepare('DELETE FROM classrooms WHERE id = ?').run(id);
+  async deleteClassroom(id: string): Promise<boolean> {
+    if (!(await this.getDb())) return false;
+    await (await this.getDb()).prepare('DELETE FROM classrooms WHERE id = ?').run(id);
     return true;
   }
 
-  archiveClassroom(id: string): Classroom | null {
-    if (!this.getDb()) return null;
-    const existing = this.getClassroom(id);
-    if (!existing) return null;
+  async restoreClassroom(classroomId: string): Promise<any | null> {
+    if (!(await this.getDb())) return null;
+    const stmt = await (await this.getDb()).prepare("UPDATE classrooms SET status = 'active', join_enabled = 1, archived_at = NULL, updated_at = ? WHERE id = ?");
+    const result = await stmt.run(Date.now(), classroomId);
+    if (result.changes === 0) return null;
+    return this.getClassroom(classroomId);
+  }
+
+  async archiveClassroom(id: string): Promise<Classroom | null> {
+    if (!(await this.getDb())) return null;
     const now = Date.now();
-    this.getDb().prepare('UPDATE classrooms SET status = ?, archived_at = ?, join_enabled = 0, updated_at = ? WHERE id = ?')
+    await (await this.getDb()).prepare('UPDATE classrooms SET status = ?, archived_at = ?, join_enabled = 0, updated_at = ? WHERE id = ?')
       .run('archived', now, now, id);
     return this.getClassroom(id);
   }
 
-  regenerateJoinCode(id: string, newCode: string): Classroom | null {
-    if (!this.getDb()) return null;
-    const existing = this.getClassroom(id);
-    if (!existing) return null;
+  async regenerateJoinCode(id: string, newCode: string): Promise<Classroom | null> {
+    if (!(await this.getDb())) return null;
     const now = Date.now();
-    this.getDb().prepare('UPDATE classrooms SET join_code = ?, updated_at = ? WHERE id = ?')
+    await (await this.getDb()).prepare('UPDATE classrooms SET join_code = ?, updated_at = ? WHERE id = ?')
       .run(newCode.toUpperCase().trim(), now, id);
     return this.getClassroom(id);
   }
@@ -1032,18 +622,18 @@ int main() {
   }
 
   // --- MEMBERS ---
-  addMember(memberOrClassroomId: any, maybeMember?: any): ClassroomMember {
+  async addMember(memberOrClassroomId: any, maybeMember?: any): Promise<ClassroomMember> {
     const member: ClassroomMember = maybeMember
       ? { ...maybeMember, classroomId: memberOrClassroomId }
       : memberOrClassroomId;
 
-    this.memoryMembers.set(`${member.classroomId}:${member.userId}`, member);
-    if (!this.getDb()) return member;
-    const stmt = this.getDb().prepare(`
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO classroom_members (
         id, classroom_id, user_id, user_name, user_email, role, status,
-        joined_at, last_active_at, is_online
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        joined_at, last_active_at, is_online,
+        suspended_at, suspension_expires_at, removed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const id = member.id || `mem_${member.classroomId}_${member.userId}`;
     const userEmail = member.userEmail || `${member.userId}@cortex.edu`;
@@ -1051,7 +641,7 @@ int main() {
     const joinedAt = member.joinedAt || Date.now();
     const lastActiveAt = member.lastActiveAt || Date.now();
 
-    stmt.run(
+    await stmt.run(
       id,
       member.classroomId,
       member.userId,
@@ -1061,47 +651,84 @@ int main() {
       status,
       joinedAt,
       lastActiveAt,
-      member.isOnline ? 1 : 0
+      member.isOnline ? 1 : 0,
+      (member as any).suspendedAt || null,
+      (member as any).suspensionExpiresAt || null,
+      (member as any).removedAt || null,
     );
     return member;
   }
 
-  getMember(classroomId: string, userId: string): ClassroomMember | null {
-    if (!this.getDb()) {
-      return this.memoryMembers.get(`${classroomId}:${userId}`) || null;
-    }
-    const row = this.getDb().prepare('SELECT * FROM classroom_members WHERE classroom_id = ? AND user_id = ?').get(classroomId, userId) as any;
-    if (!row) {
-      return this.memoryMembers.get(`${classroomId}:${userId}`) || null;
-    }
+  /**
+   * Suspend a member. Stores suspendedAt and optional suspensionExpiresAt.
+   * Updates status to 'suspended'.
+   */
+  async suspendMember(classroomId: string, userId: string, suspensionExpiresAt?: number): Promise<ClassroomMember | null> {
+    if (!(await this.getDb())) return null;
+    const now = Date.now();
+    await (await this.getDb()).prepare(`
+      UPDATE classroom_members
+      SET status = 'suspended', suspended_at = ?, suspension_expires_at = ?, last_active_at = ?
+      WHERE classroom_id = ? AND user_id = ?
+    `).run(now, suspensionExpiresAt || null, now, classroomId, userId);
+    return this.getMember(classroomId, userId);
+  }
+
+  /**
+   * Restore a suspended member. Clears suspension fields.
+   */
+  async restoreMember(classroomId: string, userId: string): Promise<ClassroomMember | null> {
+    if (!(await this.getDb())) return null;
+    const now = Date.now();
+    await (await this.getDb()).prepare(`
+      UPDATE classroom_members
+      SET status = 'active', suspended_at = NULL, suspension_expires_at = NULL, last_active_at = ?
+      WHERE classroom_id = ? AND user_id = ?
+    `).run(now, classroomId, userId);
+    return this.getMember(classroomId, userId);
+  }
+
+  /**
+   * Check if a member is currently suspended (accounts for expiry).
+   */
+  isMemberSuspended(member: ClassroomMember): boolean {
+    if (member.status !== 'suspended') return false;
+    const expiresAt = (member as any).suspensionExpiresAt;
+    if (!expiresAt) return true; // Permanent suspension
+    return Date.now() < expiresAt; // Temporary - still active
+  }
+
+  async getMember(classroomId: string, userId: string): Promise<ClassroomMember | null> {
+    if (!(await this.getDb())) return null;
+    const row = await (await this.getDb()).prepare('SELECT * FROM classroom_members WHERE classroom_id = ? AND user_id = ?').get(classroomId, userId) as any;
+    if (!row) return null;
     return this.mapMember(row);
   }
 
-  listMembers(classroomId: string): ClassroomMember[] {
-    if (!this.getDb()) {
-      const norm = classroomId.toUpperCase().trim();
-      return Array.from(this.memoryMembers.values()).filter((m) => m.classroomId.toUpperCase().trim() === norm || m.classroomId === classroomId);
-    }
-    const rows = this.getDb().prepare('SELECT * FROM classroom_members WHERE classroom_id = ? ORDER BY role DESC, user_name ASC').all(classroomId) as any[];
+  async listMembers(classroomId: string): Promise<ClassroomMember[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM classroom_members WHERE classroom_id = ? ORDER BY role DESC, user_name ASC').all(classroomId) as any[];
     return rows.map((r) => this.mapMember(r));
   }
 
-  updateMemberPresence(classroomId: string, userId: string, isOnline: boolean) {
-    if (!this.getDb()) return;
-    this.getDb().prepare(`
+  async updateMemberPresence(classroomId: string, userId: string, isOnline: boolean) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare(`
       UPDATE classroom_members
       SET is_online = ?, last_active_at = ?
       WHERE classroom_id = ? AND user_id = ?
     `).run(isOnline ? 1 : 0, Date.now(), classroomId, userId);
   }
 
-  removeMember(classroomId: string, userId: string) {
-    if (!this.getDb()) return;
-    this.getDb().prepare('DELETE FROM classroom_members WHERE classroom_id = ? AND user_id = ?').run(classroomId, userId);
+  async removeMember(classroomId: string, userId: string) {
+    if (!(await this.getDb())) return;
+    const now = Date.now();
+    // Soft-delete: set removed_at and drop the record. Since we have UNIQUE constraints, hard-delete is safe.
+    await (await this.getDb()).prepare('DELETE FROM classroom_members WHERE classroom_id = ? AND user_id = ?').run(classroomId, userId);
   }
 
   private mapMember(row: any): ClassroomMember {
-    return {
+    const member: any = {
       id: row.id,
       classroomId: row.classroom_id,
       userId: row.user_id,
@@ -1113,19 +740,27 @@ int main() {
       lastActiveAt: row.last_active_at,
       isOnline: Boolean(row.is_online),
     };
+    if (row.suspended_at) member.suspendedAt = row.suspended_at;
+    if (row.suspension_expires_at) member.suspensionExpiresAt = row.suspension_expires_at;
+    if (row.removed_at) member.removedAt = row.removed_at;
+
+    // Auto-restore expired temporary suspensions (server-side check)
+    if (member.status === 'suspended' && member.suspensionExpiresAt && Date.now() >= member.suspensionExpiresAt) {
+      member.status = 'active'; // Treat as active since expiry passed
+    }
+    return member;
   }
 
   // --- ANNOUNCEMENTS ---
-  createAnnouncement(ann: Announcement): Announcement {
-    this.memoryAnnouncements.set(ann.id, ann);
-    if (!this.getDb()) return ann;
-    const stmt = this.getDb().prepare(`
+  async createAnnouncement(ann: Announcement): Promise<Announcement> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO announcements (
         id, classroom_id, author_id, author_name, author_role,
         title, content, pinned, created_at, updated_at, deleted_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
+    await stmt.run(
       ann.id,
       ann.classroomId,
       ann.authorId,
@@ -1141,14 +776,9 @@ int main() {
     return ann;
   }
 
-  listAnnouncements(classroomId: string): Announcement[] {
-    if (!this.getDb()) {
-      const norm = classroomId.toUpperCase().trim();
-      return Array.from(this.memoryAnnouncements.values())
-        .filter((a) => a.classroomId.toUpperCase().trim() === norm || a.classroomId === classroomId)
-        .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt - a.createdAt);
-    }
-    const rows = this.getDb().prepare(`
+  async listAnnouncements(classroomId: string): Promise<Announcement[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare(`
       SELECT * FROM announcements
       WHERE classroom_id = ? AND deleted_at IS NULL
       ORDER BY pinned DESC, created_at DESC
@@ -1168,9 +798,9 @@ int main() {
     }));
   }
 
-  getAnnouncement(id: string): Announcement | null {
-    if (!this.getDb()) return this.memoryAnnouncements.get(id) || null;
-    const r = this.getDb().prepare('SELECT * FROM announcements WHERE id = ? AND deleted_at IS NULL').get(id) as any;
+  async getAnnouncement(id: string): Promise<Announcement | null> {
+    if (!(await this.getDb())) return null;
+    const r = await (await this.getDb()).prepare('SELECT * FROM announcements WHERE id = ? AND deleted_at IS NULL').get(id) as any;
     if (!r) return null;
     return {
       id: r.id,
@@ -1187,37 +817,30 @@ int main() {
     };
   }
 
-  updateAnnouncement(id: string, updates: Partial<Announcement>): Announcement | null {
-    if (!this.getDb()) {
-      const existing = this.memoryAnnouncements.get(id);
-      if (!existing) return null;
-      const updated = { ...existing, ...updates, updatedAt: Date.now() };
-      this.memoryAnnouncements.set(id, updated);
-      return updated;
-    }
-    const existing = this.getAnnouncement(id);
+  async updateAnnouncement(id: string, updates: Partial<Announcement>): Promise<Announcement | null> {
+    if (!(await this.getDb())) return null;
+    const existing = await this.getAnnouncement(id);
     if (!existing) return null;
     const merged = { ...existing, ...updates, updatedAt: Date.now() };
-    this.createAnnouncement(merged);
+    await this.createAnnouncement(merged);
     return merged;
   }
 
-  deleteAnnouncement(id: string) {
-    if (!this.getDb()) return;
-    this.getDb().prepare('UPDATE announcements SET deleted_at = ? WHERE id = ?').run(Date.now(), id);
+  async deleteAnnouncement(id: string) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('UPDATE announcements SET deleted_at = ? WHERE id = ?').run(Date.now(), id);
   }
 
   // --- MESSAGES ---
-  createMessage(msg: ClassroomMessage): ClassroomMessage {
-    this.memoryMessages.set(msg.id, msg);
-    if (!this.getDb()) return msg;
-    const stmt = this.getDb().prepare(`
+  async createMessage(msg: ClassroomMessage): Promise<ClassroomMessage> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT INTO messages (
         id, classroom_id, sender_id, sender_name, sender_role,
         recipient_type, recipient_id, content, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
+    await stmt.run(
       msg.id,
       msg.classroomId,
       msg.senderId,
@@ -1232,8 +855,8 @@ int main() {
     return msg;
   }
 
-  listMessages(classroomId: string, limitOrUserId?: number | string, isTeacher = false, limit = 100): ClassroomMessage[] {
-    if (!this.getDb()) return [];
+  async listMessages(classroomId: string, limitOrUserId?: number | string, isTeacher = false, limit = 100): Promise<ClassroomMessage[]> {
+    if (!(await this.getDb())) return [];
     let actualLimit = limit;
     let requestingUserId: string | undefined = undefined;
 
@@ -1245,7 +868,7 @@ int main() {
 
     let rows: any[] = [];
     if (isTeacher || !requestingUserId) {
-      rows = this.getDb().prepare(`
+      rows = await (await this.getDb()).prepare(`
         SELECT * FROM messages
         WHERE classroom_id = ? AND deleted_at IS NULL
         ORDER BY created_at ASC
@@ -1253,7 +876,7 @@ int main() {
       `).all(classroomId, actualLimit) as any[];
     } else {
       // Direct message privacy filter for students
-      rows = this.getDb().prepare(`
+      rows = await (await this.getDb()).prepare(`
         SELECT * FROM messages
         WHERE classroom_id = ? AND deleted_at IS NULL
           AND (recipient_type = 'class' OR sender_id = ? OR recipient_id = ?)
@@ -1276,10 +899,9 @@ int main() {
   }
 
   // --- ASSIGNMENTS ---
-  createAssignment(asg: Assignment): Assignment {
-    this.memoryAssignments.set(asg.id, asg);
-    if (!this.getDb()) return asg;
-    const stmt = this.getDb().prepare(`
+  async createAssignment(asg: Assignment): Promise<Assignment> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO assignments (
         id, classroom_id, title, description, instructions, type, language,
         starter_code, difficulty, max_marks, due_at, published_at, scheduled_at,
@@ -1288,7 +910,7 @@ int main() {
         created_at, updated_at, test_cases_json, rubric_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
+    await stmt.run(
       asg.id,
       asg.classroomId,
       asg.title,
@@ -1319,21 +941,16 @@ int main() {
     return asg;
   }
 
-  getAssignment(id: string): Assignment | null {
-    if (!this.getDb()) return this.memoryAssignments.get(id) || null;
-    const row = this.getDb().prepare('SELECT * FROM assignments WHERE id = ?').get(id) as any;
+  async getAssignment(id: string): Promise<Assignment | null> {
+    if (!(await this.getDb())) return null;
+    const row = await (await this.getDb()).prepare('SELECT * FROM assignments WHERE id = ?').get(id) as any;
     if (!row) return null;
     return this.mapAssignment(row);
   }
 
-  listAssignments(classroomId: string): Assignment[] {
-    if (!this.getDb()) {
-      const norm = classroomId.toUpperCase().trim();
-      return Array.from(this.memoryAssignments.values())
-        .filter((a) => a.classroomId.toUpperCase().trim() === norm || a.classroomId === classroomId)
-        .sort((a, b) => b.createdAt - a.createdAt);
-    }
-    const rows = this.getDb().prepare('SELECT * FROM assignments WHERE classroom_id = ? ORDER BY due_at ASC, created_at DESC').all(classroomId) as any[];
+  async listAssignments(classroomId: string): Promise<Assignment[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM assignments WHERE classroom_id = ? ORDER BY due_at ASC, created_at DESC').all(classroomId) as any[];
     return rows.map((r) => this.mapAssignment(r));
   }
 
@@ -1369,17 +986,17 @@ int main() {
   }
 
   // --- SUBMISSIONS & GRADING ---
-  saveSubmission(sub: Submission): Submission {
-    if (!this.getDb()) return sub;
-    const stmt = this.getDb().prepare(`
+  async saveSubmission(sub: Submission): Promise<Submission> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO submissions (
         id, assignment_id, assignment_title, classroom_id, student_id,
-        student_name, code, language, version, status, submitted_at,
+        student_name, code, language, project_id, snapshot_json, version, status, submitted_at,
         execution_started_at, execution_completed_at, score, max_score,
         is_late, test_results_json, similarity_score, similar_student_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
+    await stmt.run(
       sub.id,
       sub.assignmentId,
       sub.assignmentTitle,
@@ -1388,7 +1005,9 @@ int main() {
       sub.studentName,
       sub.code,
       sub.language,
-      sub.version || '1.0',
+      (sub as any).projectId || null,
+      (sub as any).snapshotJson || null,
+      sub.version || 1,
       sub.status,
       sub.submittedAt,
       sub.executionStartedAt || null,
@@ -1402,49 +1021,37 @@ int main() {
     );
 
     if (sub.grade) {
-      this.saveGrade(sub.grade);
+      await this.saveGrade(sub.grade);
     }
     if (sub.feedback) {
-      this.saveFeedback(sub.feedback);
+      await this.saveFeedback(sub.feedback);
     }
 
     return sub;
   }
 
-  getSubmission(id: string): Submission | null {
-    if (!this.getDb()) return this.memorySubmissions.get(id) || null;
-    const row = this.getDb().prepare('SELECT * FROM submissions WHERE id = ?').get(id) as any;
+  async getSubmission(id: string): Promise<Submission | null> {
+    if (!(await this.getDb())) return null;
+    const row = await (await this.getDb()).prepare('SELECT * FROM submissions WHERE id = ?').get(id) as any;
     if (!row) return null;
     return this.mapSubmission(row);
   }
 
-  listSubmissions(assignmentId: string): Submission[] {
-    if (!this.getDb()) {
-      return Array.from(this.memorySubmissions.values())
-        .filter((s) => s.assignmentId === assignmentId)
-        .sort((a, b) => b.submittedAt - a.submittedAt);
-    }
-    const rows = this.getDb().prepare('SELECT * FROM submissions WHERE assignment_id = ? ORDER BY submitted_at DESC').all(assignmentId) as any[];
+  async listSubmissions(assignmentId: string): Promise<Submission[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM submissions WHERE assignment_id = ? ORDER BY submitted_at DESC').all(assignmentId) as any[];
     return rows.map((r) => this.mapSubmission(r));
   }
 
-  listSubmissionsForClassroom(classroomId: string): Submission[] {
-    if (!this.getDb()) {
-      const norm = classroomId.toUpperCase().trim();
-      return Array.from(this.memorySubmissions.values())
-        .filter((s) => s.classroomId.toUpperCase().trim() === norm || s.classroomId === classroomId)
-        .sort((a, b) => b.submittedAt - a.submittedAt);
-    }
-    const rows = this.getDb().prepare('SELECT * FROM submissions WHERE classroom_id = ? ORDER BY submitted_at DESC').all(classroomId) as any[];
+  async listSubmissionsForClassroom(classroomId: string): Promise<Submission[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM submissions WHERE classroom_id = ? ORDER BY submitted_at DESC').all(classroomId) as any[];
     return rows.map((r) => this.mapSubmission(r));
   }
 
-  getStudentSubmission(assignmentId: string, studentId: string): Submission | null {
-    if (!this.getDb()) {
-      return Array.from(this.memorySubmissions.values())
-        .find((s) => s.assignmentId === assignmentId && s.studentId === studentId) || null;
-    }
-    const row = this.getDb().prepare('SELECT * FROM submissions WHERE assignment_id = ? AND student_id = ? ORDER BY version DESC LIMIT 1').get(assignmentId, studentId) as any;
+  async getStudentSubmission(assignmentId: string, studentId: string): Promise<Submission | null> {
+    if (!(await this.getDb())) return null;
+    const row = await (await this.getDb()).prepare('SELECT * FROM submissions WHERE assignment_id = ? AND student_id = ? ORDER BY version DESC LIMIT 1').get(assignmentId, studentId) as any;
     if (!row) return null;
     return this.mapSubmission(row);
   }
@@ -1472,7 +1079,8 @@ int main() {
       similarStudentName: row.similar_student_name || undefined,
     };
 
-    const gradeRow = this.db?.prepare('SELECT * FROM grades WHERE submission_id = ?').get(sub.id) as any;
+    // Sync load grade (SQLite allows sync inside SqliteWrapper)
+    const gradeRow = (this.db as any)?.sqlite?.prepare('SELECT * FROM grades WHERE submission_id = ?')?.get(sub.id);
     if (gradeRow) {
       sub.grade = {
         id: gradeRow.id,
@@ -1490,7 +1098,7 @@ int main() {
       };
     }
 
-    const fbkRow = this.db?.prepare('SELECT * FROM feedback WHERE submission_id = ?').get(sub.id) as any;
+    const fbkRow = (this.db as any)?.sqlite?.prepare('SELECT * FROM feedback WHERE submission_id = ?')?.get(sub.id);
     if (fbkRow) {
       sub.feedback = {
         id: fbkRow.id,
@@ -1507,17 +1115,16 @@ int main() {
     return sub;
   }
 
-  saveGrade(grade: Grade): Grade {
-    this.memoryGrades.set(grade.submissionId, grade);
-    if (!this.getDb()) return grade;
-    const stmt = this.getDb().prepare(`
+  async saveGrade(grade: Grade): Promise<Grade> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO grades (
         id, submission_id, student_id, assignment_id, automatic_score,
         manual_adjustment, final_score, graded_by, graded_by_name,
         graded_at, released_at, rubric_scores_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
+    await stmt.run(
       grade.id,
       grade.submissionId,
       grade.studentId,
@@ -1532,31 +1139,26 @@ int main() {
       grade.rubricScores ? JSON.stringify(grade.rubricScores) : null
     );
 
-    this.getDb().prepare('UPDATE submissions SET score = ?, status = ? WHERE id = ?').run(grade.finalScore, 'graded', grade.submissionId);
+    await (await this.getDb()).prepare('UPDATE submissions SET score = ?, status = ? WHERE id = ?').run(grade.finalScore, 'graded', grade.submissionId);
 
     return grade;
   }
 
-  saveFeedback(fbk: Feedback): Feedback {
-    this.memoryFeedback.set(fbk.submissionId, fbk);
-    if (!this.getDb()) return fbk;
-    const stmt = this.getDb().prepare(`
+  async saveFeedback(fbk: Feedback): Promise<Feedback> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO feedback (
         id, submission_id, author_id, author_name, content, private_notes, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(fbk.id, fbk.submissionId, fbk.authorId, fbk.authorName, fbk.content, fbk.privateNotes || null, fbk.createdAt, fbk.updatedAt);
+    await stmt.run(fbk.id, fbk.submissionId, fbk.authorId, fbk.authorName, fbk.content, fbk.privateNotes || null, fbk.createdAt, fbk.updatedAt);
     return fbk;
   }
 
-  // --- ATTENDANCE ---
-
   // --- LIVE CODING SESSIONS ---
-  createLiveSession(session: LiveClassSession): LiveClassSession {
-    this.memoryLiveSessions.set(session.classroomId, session);
-    this.memoryLiveSessions.set(session.classroomId.toUpperCase().trim(), session);
-    if (!this.getDb()) return session;
-    this.getDb().prepare(`
+  async createLiveSession(session: LiveClassSession): Promise<LiveClassSession> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    await (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO live_sessions (
         id, classroom_id, teacher_id, teacher_name, title, topic, language,
         starter_code, shared_code, is_broadcasting_code, started_at, ended_at, status
@@ -1579,9 +1181,9 @@ int main() {
     return session;
   }
 
-  getActiveLiveSession(classroomId: string): LiveClassSession | null {
-    if (!this.getDb()) return null;
-    const row = this.getDb().prepare('SELECT * FROM live_sessions WHERE classroom_id = ? AND status = ? ORDER BY started_at DESC LIMIT 1').get(classroomId, 'active') as any;
+  async getActiveLiveSession(classroomId: string): Promise<LiveClassSession | null> {
+    if (!(await this.getDb())) return null;
+    const row = await (await this.getDb()).prepare('SELECT * FROM live_sessions WHERE classroom_id = ? AND status = ? ORDER BY started_at DESC LIMIT 1').get(classroomId, 'active') as any;
     if (!row) return null;
     return {
       id: row.id,
@@ -1596,40 +1198,35 @@ int main() {
       isBroadcastingCode: Boolean(row.is_broadcasting_code),
       startedAt: row.started_at,
       endedAt: row.ended_at || undefined,
-      durationMinutes: 90,
+      durationMinutes: row.ended_at ? Math.round((row.ended_at - row.started_at) / 60000) : Math.round((Date.now() - row.started_at) / 60000),
       status: row.status as any,
-      activeStudentCount: 5,
+      activeStudentCount: 0, // Real count comes from WebSocket Durable Object
     };
   }
 
-  updateLiveSessionCode(sessionId: string, sharedCode: string, isBroadcasting: boolean) {
-    if (!this.getDb()) return;
-    this.getDb().prepare('UPDATE live_sessions SET shared_code = ?, is_broadcasting_code = ? WHERE id = ?').run(sharedCode, isBroadcasting ? 1 : 0, sessionId);
+  async updateLiveSessionCode(sessionId: string, sharedCode: string, isBroadcasting: boolean) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('UPDATE live_sessions SET shared_code = ?, is_broadcasting_code = ? WHERE id = ?').run(sharedCode, isBroadcasting ? 1 : 0, sessionId);
   }
 
-  endLiveSession(sessionId: string) {
-    if (!this.getDb()) return;
-    this.getDb().prepare('UPDATE live_sessions SET status = ?, ended_at = ? WHERE id = ?').run('ended', Date.now(), sessionId);
+  async endLiveSession(sessionId: string) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('UPDATE live_sessions SET status = ?, ended_at = ? WHERE id = ?').run('ended', Date.now(), sessionId);
   }
 
   // --- RESOURCES ---
-  createResource(res: ClassroomResource): ClassroomResource {
-    this.memoryResources.set(res.id, res);
-    if (!this.getDb()) return res;
-    this.getDb().prepare(`
+  async createResource(res: ClassroomResource): Promise<ClassroomResource> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    await (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO resources (id, classroom_id, uploaded_by, uploaded_by_name, name, type, url, description, unit, created_at, pinned, visibility)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(res.id, res.classroomId, res.uploadedBy, res.uploadedByName, res.name, res.type, res.url, res.description, res.unit, res.createdAt, res.pinned ? 1 : 0, res.visibility || 'public');
+    `).run(res.id, res.classroomId, res.uploadedBy, res.uploadedByName, res.name, res.type, res.url, res.description, res.unit || '', res.createdAt, res.pinned ? 1 : 0, res.visibility || 'public');
     return res;
   }
 
-  listResources(classroomId: string): ClassroomResource[] {
-    if (!this.getDb()) {
-      const norm = classroomId.toUpperCase().trim();
-      return Array.from(this.memoryResources.values())
-        .filter((r) => r.classroomId.toUpperCase().trim() === norm || r.classroomId === classroomId);
-    }
-    const rows = this.getDb().prepare('SELECT * FROM resources WHERE classroom_id = ? ORDER BY created_at DESC').all(classroomId) as any[];
+  async listResources(classroomId: string): Promise<ClassroomResource[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM resources WHERE classroom_id = ? ORDER BY pinned DESC, created_at DESC').all(classroomId) as any[];
     return rows.map((r) => ({
       id: r.id,
       classroomId: r.classroom_id,
@@ -1646,25 +1243,24 @@ int main() {
     }));
   }
 
-  deleteResource(id: string) {
-    if (!this.getDb()) return;
-    this.getDb().prepare('DELETE FROM resources WHERE id = ?').run(id);
+  async deleteResource(id: string) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('DELETE FROM resources WHERE id = ?').run(id);
   }
 
   // --- NOTIFICATIONS ---
-  createNotification(notif: Notification): Notification {
-    this.memoryNotifications.set(notif.id, notif);
-    if (!this.getDb()) return notif;
-    this.getDb().prepare(`
+  async createNotification(notif: Notification): Promise<Notification> {
+    if (!(await this.getDb())) throw new Error('Database unavailable');
+    await (await this.getDb()).prepare(`
       INSERT INTO notifications (id, user_id, classroom_id, type, title, message, data_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(notif.id, notif.userId, notif.classroomId, notif.type, notif.title, notif.message, notif.data ? JSON.stringify(notif.data) : null, notif.createdAt);
     return notif;
   }
 
-  listNotificationsForUser(userId: string, limit = 50): Notification[] {
-    if (!this.getDb()) return [];
-    const rows = this.getDb().prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as any[];
+  async listNotificationsForUser(userId: string, limit = 50): Promise<Notification[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as any[];
     return rows.map((r) => ({
       id: r.id,
       userId: r.user_id,
@@ -1679,19 +1275,20 @@ int main() {
   }
 
   
-  markAllNotificationsRead(userId: string) {
-    this.getDb().prepare('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL').run(Date.now(), userId);
+  async markAllNotificationsRead(userId: string) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL').run(Date.now(), userId);
   }
 
-  markNotificationRead(id: string) {
-    if (!this.getDb()) return;
-    this.getDb().prepare('UPDATE notifications SET read_at = ? WHERE id = ?').run(Date.now(), id);
+  async markNotificationRead(id: string) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('UPDATE notifications SET read_at = ? WHERE id = ?').run(Date.now(), id);
   }
 
   // --- REAL-TIME EVENTS & RESYNC ---
-  recordEvent(event: ClassroomEvent): ClassroomEvent {
-    if (!this.getDb()) return event;
-    this.getDb().prepare(`
+  async recordEvent(event: ClassroomEvent): Promise<ClassroomEvent> {
+    if (!(await this.getDb())) return event;
+    await (await this.getDb()).prepare(`
       INSERT OR IGNORE INTO classroom_events (id, classroom_id, sequence, type, actor_id, actor_name, timestamp, payload_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -1707,9 +1304,9 @@ int main() {
     return event;
   }
 
-  getEventsSince(classroomId: string, sinceSequence: number): ClassroomEvent[] {
-    if (!this.getDb()) return [];
-    const rows = this.getDb().prepare(`
+  async getEventsSince(classroomId: string, sinceSequence: number): Promise<ClassroomEvent[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare(`
       SELECT * FROM classroom_events
       WHERE classroom_id = ? AND sequence > ?
       ORDER BY sequence ASC
@@ -1726,66 +1323,93 @@ int main() {
     }));
   }
 
-  getNextEventSequence(classroomId: string): number {
-    if (!this.getDb()) return 1;
-    const row = this.getDb().prepare('SELECT MAX(sequence) as max_seq FROM classroom_events WHERE classroom_id = ?').get(classroomId) as any;
+  async getNextEventSequence(classroomId: string): Promise<number> {
+    if (!(await this.getDb())) return 1;
+    const row = await (await this.getDb()).prepare('SELECT MAX(sequence) as max_seq FROM classroom_events WHERE classroom_id = ?').get(classroomId) as any;
     return (row?.max_seq || 0) + 1;
   }
 
   // --- ANALYTICS & PROGRESS ---
-  getClassroomAnalytics(classroomId: string): ClassroomAnalytics {
-    const members = this.listMembers(classroomId).filter((m) => m.role === 'student');
-    const assignments = this.listAssignments(classroomId);
-    const submissions = this.listSubmissionsForClassroom(classroomId);
+  async getClassroomAnalytics(classroomId: string): Promise<ClassroomAnalytics> {
+    const members = (await this.listMembers(classroomId)).filter((m) => m.role === 'student' && m.status !== 'suspended');
+    const assignments = await this.listAssignments(classroomId);
+    const submissions = await this.listSubmissionsForClassroom(classroomId);
 
     let totalScore = 0;
     let gradedCount = 0;
     for (const sub of submissions) {
-      if (sub.status === 'graded') {
+      if (sub.status === 'graded' || (sub.score > 0 && sub.status === 'completed')) {
         totalScore += sub.score;
         gradedCount++;
       }
     }
 
-    const classAverageScore = gradedCount > 0 ? Math.round(totalScore / gradedCount) : 85;
+    const classAverageScore = gradedCount > 0 ? Math.round(totalScore / gradedCount) : 0;
     const totalPotential = members.length * assignments.length;
-    const submissionRate = totalPotential > 0 ? Math.round((submissions.length / totalPotential) * 100) : 92;
+    const submissionRate = totalPotential > 0 ? Math.round((submissions.length / totalPotential) * 100) : 0;
 
+    // Determine at-risk students from real data
     const atRiskStudents = members
       .filter((m) => {
         const studentSubs = submissions.filter((s) => s.studentId === m.userId);
-        return studentSubs.length === 0 || studentSubs.some((s) => s.score < 60);
+        const avgScore = studentSubs.length > 0
+          ? studentSubs.reduce((sum, s) => sum + s.score, 0) / studentSubs.length
+          : -1;
+        return studentSubs.length === 0 || avgScore < 60;
       })
-      .map((m) => ({
-        studentId: m.userId,
-        studentName: m.userName,
-        reason: 'Low submission rate or failing test cases',
-        averageScore: 54,
-      }));
+      .map((m) => {
+        const studentSubs = submissions.filter((s) => s.studentId === m.userId);
+        const avgScore = studentSubs.length > 0
+          ? Math.round(studentSubs.reduce((sum, s) => sum + s.score, 0) / studentSubs.length)
+          : 0;
+        return {
+          studentId: m.userId,
+          studentName: m.userName,
+          reason: studentSubs.length === 0 ? 'No submissions yet' : 'Average score below 60%',
+          averageScore: avgScore,
+        };
+      });
+
+    // Count real failure states from test results
+    const commonFailureStates: Record<string, number> = {};
+    for (const sub of submissions) {
+      for (const tr of (sub.testResults || [])) {
+        if (tr.status === 'timeout') {
+          commonFailureStates['Time Limit Exceeded'] = (commonFailureStates['Time Limit Exceeded'] || 0) + 1;
+        } else if (tr.status === 'error') {
+          commonFailureStates['Runtime Error'] = (commonFailureStates['Runtime Error'] || 0) + 1;
+        } else if (tr.status === 'failed') {
+          commonFailureStates['Wrong Answer'] = (commonFailureStates['Wrong Answer'] || 0) + 1;
+        }
+      }
+    }
 
     return {
       classroomId,
       totalStudents: members.length,
-      activeToday: members.filter((m) => m.isOnline).length || 3,
+      activeToday: members.filter((m) => m.isOnline).length, // Real presence from DB
       classAverageScore,
       submissionRate,
       assignmentsCount: assignments.length,
-      pendingGrading: submissions.filter(s => s.status === 'pending').length,
-      commonFailureStates: { 'Time Limit Exceeded': 12, 'Compilation Error': 5 },
+      pendingGrading: submissions.filter(s => s.status === 'pending' || s.status === 'completed').length,
+      commonFailureStates: Object.keys(commonFailureStates).length > 0 ? commonFailureStates : undefined,
       atRiskCount: atRiskStudents.length,
       atRiskStudents,
     };
   }
 
-  getStudentProgress(classroomId: string, studentId: string): StudentProgress {
-    const assignments = this.listAssignments(classroomId);
-    const studentSubs = this.listSubmissionsForClassroom(classroomId).filter((s) => s.studentId === studentId);
-    const member = this.getMember(classroomId, studentId);
+  async getStudentProgress(classroomId: string, studentId: string): Promise<StudentProgress> {
+    const assignments = await this.listAssignments(classroomId);
+    const allSubs = await this.listSubmissionsForClassroom(classroomId);
+    const studentSubs = allSubs.filter((s) => s.studentId === studentId);
+    const member = await this.getMember(classroomId, studentId);
 
     const completed = studentSubs.filter((s) => s.status === 'graded' || s.status === 'completed').length;
+    const attempted = studentSubs.length;
     let sumScore = 0;
     for (const s of studentSubs) sumScore += s.score;
     const avgScore = studentSubs.length > 0 ? Math.round(sumScore / studentSubs.length) : 0;
+    const solved = studentSubs.filter(s => s.score >= 70).length;
 
     return {
       classroomId,
@@ -1794,49 +1418,44 @@ int main() {
       assignmentsCompleted: completed,
       assignmentsTotal: assignments.length,
       averageScore: avgScore,
-      solvedProblems: completed * 3,
-      codingActivityHours: 14.5,
-      assignmentsAttempted: studentSubs.length,
-      questionsAsked: 4,
-      liveSessionsJoined: 2,
-      topicMastery: {
-        'Data Structures': 88,
-        'Algorithms & DP': 82,
-        'Complexity Analysis': 90,
-      },
+      solvedProblems: solved,
+      codingActivityHours: 0, // Not tracked yet - emit 0 rather than fake value
+      assignmentsAttempted: attempted,
+      questionsAsked: 0,       // Not tracked yet - emit 0 rather than fake value
+      liveSessionsJoined: 0,   // Not tracked yet - emit 0 rather than fake value
+      topicMastery: {},         // Not tracked yet - emit empty rather than fake values
     };
   }
 
-  getLeaderboard(classroomId: string): LeaderboardEntry[] {
-    const members = this.listMembers(classroomId).filter((m) => m.role === 'student');
-    const submissions = this.listSubmissionsForClassroom(classroomId);
+  async getLeaderboard(classroomId: string): Promise<LeaderboardEntry[]> {
+    const members = (await this.listMembers(classroomId)).filter((m) => m.role === 'student' && m.status !== 'suspended');
+    const submissions = await this.listSubmissionsForClassroom(classroomId);
 
-    const entries: LeaderboardEntry[] = members.map((m, idx) => {
+    const entries: LeaderboardEntry[] = members.map((m) => {
       const studentSubs = submissions.filter((s) => s.studentId === m.userId);
       let points = 0;
       let solved = 0;
+      let totalPossible = 0;
       for (const s of studentSubs) {
         points += s.score;
+        totalPossible += s.maxScore;
         if (s.score >= 70) solved++;
       }
-      if (points === 0) {
-        points = Math.max(100, 380 - idx * 60);
-        solved = Math.max(1, 4 - idx);
-      }
+      const accuracy = totalPossible > 0 ? Math.round((points / totalPossible) * 100) : 0;
 
       return {
         classroomId,
         studentId: m.userId,
         studentName: m.userName,
         points,
-        rank: idx + 1,
+        rank: 0, // set after sort
         solved,
-        accuracy: 94 - idx * 4,
+        accuracy,
         lastActive: m.lastActiveAt,
       };
     });
 
-    entries.sort((a, b) => b.points - a.points);
+    entries.sort((a, b) => b.points - a.points || b.solved - a.solved);
     entries.forEach((e, i) => (e.rank = i + 1));
     return entries;
   }

@@ -10,7 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const session = classroomDb.getActiveLiveSession(id);
+    const session = await classroomDb.getActiveLiveSession(id);
     return NextResponse.json({ session });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to get live session' }, { status: 500 });
@@ -23,14 +23,14 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     const isTeacher = classroom?.teacherId === user.id || auth.context?.membership?.role === 'teacher';
     const body = await req.json();
     const { action, title, topic, language, starterCode, sharedCode, isBroadcastingCode } = body;
@@ -58,7 +58,7 @@ export async function POST(
         activeStudentCount: realtimeCoordinator.getOnlineCount(id),
       };
 
-      classroomDb.createLiveSession(newSession);
+      await classroomDb.createLiveSession(newSession);
 
       realtimeCoordinator.broadcast(
         id,
@@ -72,7 +72,7 @@ export async function POST(
 
     // 2. Broadcast live code updates
     if (action === 'update_code') {
-      const activeSession = classroomDb.getActiveLiveSession(id);
+      const activeSession = await classroomDb.getActiveLiveSession(id);
       if (!activeSession) {
         return NextResponse.json({ error: 'No active live session found' }, { status: 400 });
       }
@@ -81,7 +81,7 @@ export async function POST(
         return NextResponse.json({ error: 'Code sharing is not enabled for students.' }, { status: 403 });
       }
 
-      classroomDb.updateLiveSessionCode(
+      await classroomDb.updateLiveSessionCode(
         activeSession.id,
         sharedCode ?? activeSession.sharedCode,
         isBroadcastingCode !== undefined ? isBroadcastingCode : activeSession.isBroadcastingCode
@@ -109,9 +109,9 @@ export async function POST(
         return NextResponse.json({ error: 'Only teachers can end the live session.' }, { status: 403 });
       }
 
-      const activeSession = classroomDb.getActiveLiveSession(id);
+      const activeSession = await classroomDb.getActiveLiveSession(id);
       if (activeSession) {
-        classroomDb.endLiveSession(activeSession.id);
+        await classroomDb.endLiveSession(activeSession.id);
         realtimeCoordinator.broadcast(
           id,
           'session.ended',

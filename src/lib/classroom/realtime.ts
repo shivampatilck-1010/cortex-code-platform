@@ -42,7 +42,7 @@ class RealtimeCoordinator {
   }
 
   // WebSocket Client Management
-  registerWsClient(classroomId: string, client: WsClientSession): () => void {
+  async registerWsClient(classroomId: string, client: WsClientSession): () => void {
     const norm = classroomId.toUpperCase().trim();
     if (!this.wsClients.has(norm)) {
       this.wsClients.set(norm, new Set());
@@ -51,14 +51,14 @@ class RealtimeCoordinator {
     set.add(client);
 
     // Update DB presence
-    classroomDb.updateMemberPresence(norm, client.userId, true);
+    await classroomDb.updateMemberPresence(norm, client.userId, true);
 
-    return () => {
+    return async () => {
       set.delete(client);
       if (set.size === 0) {
         this.wsClients.delete(norm);
       }
-      classroomDb.updateMemberPresence(norm, client.userId, false);
+      await classroomDb.updateMemberPresence(norm, client.userId, false);
     };
   }
 
@@ -70,7 +70,7 @@ class RealtimeCoordinator {
   /**
    * Authoritative broadcast: increments DB sequence, persists event, and dispatches to all connected clients
    */
-  broadcast(
+  async broadcast(
     classroomId: string,
     type: string,
     payload: any,
@@ -78,7 +78,7 @@ class RealtimeCoordinator {
     incomingEventId?: string
   ): ClassroomEvent {
     const norm = classroomId.toUpperCase().trim();
-    const sequence = classroomDb.getNextEventSequence(norm);
+    const sequence = await classroomDb.getNextEventSequence(norm);
     const eventId = incomingEventId || `evt_${Date.now()}_${sequence}`;
 
     const event: ClassroomEvent = {
@@ -96,7 +96,7 @@ class RealtimeCoordinator {
     this.processedEventIds.add(eventId);
 
     // 2. Persistent storage in DB for ACID guarantees and replay
-    classroomDb.recordEvent(event);
+    await classroomDb.recordEvent(event);
 
     // 3. Dispatch to WebSocket connections with targeted privacy filtering
     const wsPayload = serializeRealtimeMessage({
@@ -231,9 +231,9 @@ class RealtimeCoordinator {
     return this.broadcast(norm, eventType, payload, { id: actor.id, name: actor.name }, event.id);
   }
 
-  getMissedEvents(classroomId: string, sinceSequence: number): ClassroomEvent[] {
+  async getMissedEvents(classroomId: string, sinceSequence: number): ClassroomEvent[] {
     const norm = classroomId.toUpperCase().trim();
-    return classroomDb.getEventsSince(norm, sinceSequence);
+    return await classroomDb.getEventsSince(norm, sinceSequence);
   }
 
   getOnlineCount(classroomId: string): number {

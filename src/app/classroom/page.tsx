@@ -76,6 +76,54 @@ export default function ClassroomHubPage() {
   const [currentUserName, setCurrentUserName] = useState<string>('Prof. Elena Rostova');
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('elena.rostova@cortex.edu');
 
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', role: 'student' as 'teacher' | 'student' });
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  
+  useEffect(() => {
+    fetch('/api/v1/auth/me')
+      .then(res => {
+        if (!res.ok) throw new Error('Unauthenticated');
+        return res.json();
+      })
+      .then(data => {
+        setCurrentUserId(data.user.id);
+        setCurrentUserName(data.user.name);
+        setCurrentUserEmail(data.user.email);
+        setCurrentUserRole(data.user.role);
+        setProfileLoaded(true);
+      })
+      .catch(() => {
+        router.push('/login');
+      });
+  }, [router]);
+
+
+  const handleSaveProfile = () => {
+    if (!profileForm.name.trim()) {
+       if (typeof showToast !== 'undefined') showToast('Name is required');
+       return;
+    }
+    
+    const existingId = localStorage.getItem('cortex_user_profile') ? JSON.parse(localStorage.getItem('cortex_user_profile')).id : `usr_${Date.now()}_${Math.random().toString(36).substring(2,6)}`;
+    
+    const newProfile = {
+      id: existingId,
+      name: profileForm.name,
+      email: profileForm.email || `${existingId}@cortex.edu`,
+      role: profileForm.role
+    };
+    
+    localStorage.setItem('cortex_user_profile', JSON.stringify(newProfile));
+    setCurrentUserId(newProfile.id);
+    setCurrentUserName(newProfile.name);
+    setCurrentUserEmail(newProfile.email);
+    setCurrentUserRole(newProfile.role);
+    setIsProfileModalOpen(false);
+  };
+
+
   // Classroom data
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);
@@ -104,6 +152,10 @@ export default function ClassroomHubPage() {
   const [isJoinClassModalOpen, setIsJoinClassModalOpen] = useState(false);
   const [isCreateAsgModalOpen, setIsCreateAsgModalOpen] = useState(false);
   const [isCreateResourceModalOpen, setIsCreateResourceModalOpen] = useState(false);
+
+  const [newResourceForm, setNewResourceForm] = React.useState({ name: '', type: 'link', url: '', description: '' });
+  const handleCreateResource = async (e: any) => { e.preventDefault(); setIsCreateResourceModalOpen(false); };
+
   const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [studentCodeInput, setStudentCodeInput] = useState<string>('');
@@ -742,6 +794,29 @@ export default function ClassroomHubPage() {
     }
   };
 
+
+  const handleSuspendMember = async (member: any, action: 'suspend' | 'unsuspend') => {
+    if (!selectedClassroom) return;
+    try {
+      const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/members/${member.userId}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMembers((prev) =>
+          prev.map((m) => (m.userId === member.userId ? { ...m, status: data.status } : m))
+        );
+        showToast(`${member.userName} has been ${action === 'suspend' ? 'suspended' : 'unsuspended'}`);
+      } else {
+        showToast(data.error || 'Failed to update student');
+      }
+    } catch (err) {
+      showToast('Error communicating with server');
+    }
+  };
+
   // Handler: Remove Member
   const handleRemoveMember = async () => {
     if (!selectedClassroom || !memberToRemove) return;
@@ -964,124 +1039,111 @@ export default function ClassroomHubPage() {
 
   return (
     <div className="min-h-screen w-screen bg-[#0d0e12] text-gray-200 flex flex-col font-sans select-none overflow-hidden">
-      {/* Platform Header */}
-      <header className="h-14 bg-[#13141a] border-b border-[#1f212a] px-6 flex items-center justify-between z-30 shrink-0">
-        <div className="flex items-center space-x-4">
-          <Link href="/" className="flex items-center group transition" title="Return to IDE">
-            <CortexLogo variant="header" size="sm" />
-          </Link>
-          <span className="text-gray-600">/</span>
-          <div className="flex items-center space-x-2">
-            <span className="font-heading font-bold text-xs text-[#ff9100] tracking-wide uppercase">Cortex Classroom</span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#1f222e] text-gray-400 border border-[#2d3142]">
-              Management Core
-            </span>
-          </div>
 
-          {/* Real-Time WebSocket Connection Indicator */}
-          <div className="flex items-center space-x-2 pl-2">
-            {connectionState === 'CONNECTED' ? (
-              <div
-                id="classroom-connection-indicator"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 shadow-sm"
-                title="Authoritative WebSocket connection active"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>● Realtime Connected</span>
+      {/* Create Resource Modal */}
+      {isCreateResourceModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f111a] border border-[#2a2e3d] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-2">Add Resource</h2>
+            <p className="text-[#8a91a6] text-sm mb-6">Upload a link, PDF, or reference guide for students.</p>
+            
+            <form onSubmit={handleCreateResource} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#8a91a6] mb-1">Resource Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newResourceForm.name}
+                  onChange={e => setNewResourceForm({...newResourceForm, name: e.target.value})}
+                  className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                  placeholder="e.g. Chapter 1 Slides"
+                />
               </div>
-            ) : connectionState === 'CONNECTING' || connectionState === 'RECONNECTING' ? (
-              <div
-                id="classroom-connection-indicator"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-950/60 text-amber-400 border border-amber-800/40 shadow-sm"
-                title="Attempting WebSocket reconnection with resync"
-              >
-                <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
-                <span>↻ Syncing...</span>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#8a91a6] mb-1">Type</label>
+                  <select
+                    value={newResourceForm.type}
+                    onChange={e => setNewResourceForm({...newResourceForm, type: e.target.value as any})}
+                    className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="pdf">PDF</option>
+                    <option value="link">Link</option>
+                    <option value="code">Code Repo</option>
+                    <option value="notes">Notes</option>
+                    <option value="dataset">Dataset</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#8a91a6] mb-1">URL / Link</label>
+                  <input
+                    type="url"
+                    required
+                    value={newResourceForm.url}
+                    onChange={e => setNewResourceForm({...newResourceForm, url: e.target.value})}
+                    className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                    placeholder="https://..."
+                  />
+                </div>
               </div>
-            ) : (
-              <div
-                id="classroom-connection-indicator"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-900 text-zinc-400 border border-zinc-700/50 shadow-sm"
-                title="Realtime socket disconnected"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                <span>○ Offline</span>
+              <div>
+                <label className="block text-xs font-medium text-[#8a91a6] mb-1">Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={newResourceForm.description}
+                  onChange={e => setNewResourceForm({...newResourceForm, description: e.target.value})}
+                  className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                />
               </div>
-            )}
+
+              <div className="flex justify-end space-x-3 mt-8 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateResourceModalOpen(false)}
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm text-gray-400 hover:text-white transition hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:opacity-90 transition shadow-lg shadow-cyan-500/20"
+                >
+                  Add Resource
+                </button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
 
-        {/* Persona Switcher, Notifications & Global Actions */}
+      {/* Main Header */}
+      <header className="h-16 bg-[#13141a] border-b border-[#1f212a] flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center space-x-3">
-                    
-          {/* Live Session Button */}
-          {selectedClassroom && (currentUserRole === 'teacher' || liveSession) && (
-            <button
-              onClick={handleLiveSessionClick}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition shadow-sm border ${
-                liveSession
-                  ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-              }`}
-            >
-              <Radio className={`w-3.5 h-3.5 ${liveSession ? 'animate-pulse' : ''}`} />
-              <span>{liveSession ? 'Join Live Session' : 'Start Live Session'}</span>
-            </button>
-          )}
-
-          {/* Notification Center Bell */}
-
-          <div className="relative">
-            <button 
-              className="p-2 text-gray-400 hover:text-white relative rounded hover:bg-[#20232e] transition"
-              onClick={() => setShowNotifications(!showNotifications)}
-            >
-              <Bell className="w-4 h-4" />
-              {unreadNotifCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              )}
-            </button>
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-[340px] bg-[#1e202c]/95 backdrop-blur-xl border border-[#2b2e40] rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] z-50 overflow-hidden transform origin-top-right transition-all">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#2b2e40] bg-[#1a1c26]">
-                  <h3 className="text-xs font-bold text-white">Notifications</h3>
-                  <button className="text-[10px] text-[#ff9100] hover:underline" onClick={async () => {
-                    await fetch('/api/v1/notifications', { method: 'PUT', body: JSON.stringify({ markAllRead: true }) });
-                    fetchClassrooms(); // reload data
-                  }}>
-                    Mark all read
-                  </button>
-                </div>
-                <div className="max-h-80 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-gray-500">No notifications</div>
-                  ) : (
-                    notifications.map(n => (
-                      <div key={n.id} className={`p-4 border-b border-[#2b2e40]/50 transition hover:bg-[#252837] ${!n.readAt ? 'bg-[#ff9100]/5' : ''}`}>
-                        <div className="flex justify-between items-start mb-1">
-                          <span className="font-bold text-xs text-gray-200">{n.title}</span>
-                          <span className="text-[10px] text-gray-500">{new Date(n.createdAt).toLocaleTimeString()}</span>
-                        </div>
-                        <p className="text-[11px] text-gray-400">{n.message}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#ff9100] to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
           </div>
+          <span className="text-lg font-black tracking-tight text-white">CORTEX</span>
+          <span className="text-xs font-bold text-[#ff9100] bg-[#ff9100]/10 px-2 py-0.5 rounded ml-2 uppercase tracking-widest">Classroom</span>
+        </div>
 
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-bold text-gray-300">{currentUserName}</span>
+          <span className={`px-2 py-1 rounded text-[10px] uppercase tracking-wider font-bold ${currentUserRole === 'teacher' ? 'bg-amber-500/20 text-amber-500' : 'bg-cyan-500/20 text-cyan-500'}`}>
+            {currentUserRole}
+          </span>
           <button
-            onClick={() => setCurrentUserRole(currentUserRole === 'teacher' ? 'student' : 'teacher')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition ${
-              currentUserRole === 'teacher' ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20'
-            }`}
+            onClick={async () => {
+              await fetch('/api/v1/auth/logout', { method: 'POST' });
+              window.location.href = '/login';
+            }}
+            className="px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
           >
-            {currentUserRole} View
+            Logout
           </button>
         </div>
       </header>
-
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar */}
         <aside className="w-64 bg-[#13141a] border-r border-[#1f212a] flex flex-col shrink-0">
@@ -1520,7 +1582,7 @@ export default function ClassroomHubPage() {
                               {/* Presence Badge */}
                               <div className="flex items-center space-x-1.5">
                                 <div className={`w-2 h-2 rounded-full ${member.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
-                                <span className="text-xs text-gray-400">{member.isOnline ? 'Online now' : 'Offline'}</span>
+                                <span className="text-xs text-gray-400">{member.isOnline ? 'Online now' : 'Offline'} {member.status === 'suspended' && <span className="text-amber-500 font-bold ml-2">(SUSPENDED)</span>}</span>
                               </div>
 
                               <span className="text-[11px] text-gray-500 font-mono">
@@ -1529,14 +1591,26 @@ export default function ClassroomHubPage() {
 
                               {/* Remove Student Action for Instructor */}
                               {currentUserRole === 'teacher' && !isArchived && (
-                                <button
-                                  onClick={() => setMemberToRemove(member)}
-                                  className="p-1.5 rounded-lg hover:bg-rose-950/40 text-gray-500 hover:text-rose-400 border border-transparent hover:border-rose-800/40 transition flex items-center space-x-1 text-xs"
-                                  title="Remove student from classroom"
-                                >
-                                  <UserMinus className="w-3.5 h-3.5" />
-                                  <span>Remove</span>
-                                </button>
+                                
+                                <div className="flex items-center space-x-2 mt-2">
+                                  <button
+                                    onClick={() => handleSuspendMember(member, member.status === 'suspended' ? 'unsuspend' : 'suspend')}
+                                    className={`px-2 py-1 rounded-lg text-xs font-medium transition ${member.status === 'suspended' ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-gray-800 text-gray-400 hover:text-amber-500'}`}
+                                    title={member.status === 'suspended' ? "Restore Access" : "Suspend student (Block for some days)"}
+                                  >
+                                    {member.status === 'suspended' ? 'Unsuspended' : 'Suspend'}
+                                  </button>
+                                  <button
+                                    onClick={() => setMemberToRemove(member)}
+                                    className="p-1.5 rounded-lg hover:bg-rose-950/40 text-gray-500 hover:text-rose-400 border border-transparent hover:border-rose-800/40 transition flex items-center space-x-1 text-xs"
+                                    title="Remove student completely"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+
                               )}
                             </div>
                           </div>
@@ -1743,14 +1817,25 @@ export default function ClassroomHubPage() {
             {/* TAB 6: Resources */}
             {activeTab === 'resources' && (
               <div className="flex-1 p-6 overflow-y-auto space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-bold text-white">Course Materials & Handouts</h3>
-                    <p className="text-xs text-gray-400">
-                      Syllabus, starter code repositories, lecture slide decks, and reference guides.
-                    </p>
+                
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-white">Course Materials & Handouts</h3>
+                      <p className="text-xs text-gray-400">
+                        Syllabus, starter code repositories, lecture slide decks, and reference guides.
+                      </p>
+                    </div>
+                    {currentUserRole === 'teacher' && !isArchived && (
+                      <button
+                        onClick={() => setIsCreateResourceModalOpen(true)}
+                        className="px-4 py-2 rounded-xl bg-[#ff9100] text-black font-bold text-xs hover:bg-[#e08000] transition flex items-center space-x-1"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Resource</span>
+                      </button>
+                    )}
                   </div>
-                </div>
+
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {resources.map((res) => (

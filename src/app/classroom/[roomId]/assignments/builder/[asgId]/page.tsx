@@ -178,13 +178,26 @@ export default function AssignmentBuilderPage({
                 <div>
                   <label className="block text-sm font-bold text-gray-400 mb-1">Language</label>
                   <select 
-                    value={language} onChange={(e) => setLanguage(e.target.value)}
-                    className="w-full bg-[#13141a] border border-[#252830] rounded-xl px-4 py-3 text-white focus:border-[#ff9100] outline-none"
-                  >
-                    <option value="python">Python 3.12</option>
-                    <option value="cpp">C++ 20</option>
-                    <option value="typescript">TypeScript</option>
-                  </select>
+                      value={language} onChange={(e) => setLanguage(e.target.value)}
+                      className="w-full bg-[#13141a] border border-[#252830] rounded-xl px-4 py-3 text-white focus:border-[#ff9100] outline-none"
+                    >
+                      <option value="python">Python 3</option>
+                      <option value="javascript">JavaScript (Node)</option>
+                      <option value="typescript">TypeScript</option>
+                      <option value="cpp">C++</option>
+                      <option value="c">C</option>
+                      <option value="java">Java</option>
+                      <option value="csharp">C#</option>
+                      <option value="go">Go</option>
+                      <option value="rust">Rust</option>
+                      <option value="php">PHP</option>
+                      <option value="ruby">Ruby</option>
+                      <option value="kotlin">Kotlin</option>
+                      <option value="swift">Swift</option>
+                      <option value="r">R</option>
+                      <option value="dart">Dart</option>
+                      <option value="sql">SQL</option>
+                    </select>
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-400 mb-1">Difficulty</label>

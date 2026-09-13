@@ -9,18 +9,18 @@ export async function GET(
 ) {
   try {
     const { id, asgId } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const assignment = classroomDb.getAssignment(asgId);
+    const assignment = await classroomDb.getAssignment(asgId);
     if (!assignment || assignment.classroomId !== id) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
     }
 
-    const user = ClassroomAuth.getCurrentUser(req);
-    const isTeacher = auth.context?.membership?.role === 'teacher' || classroomDb.getClassroom(id)?.teacherId === user.id;
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const isTeacher = auth.context?.membership?.role === 'teacher' || (await classroomDb.getClassroom(id))?.teacherId === user.id;
 
     // Filter hidden test cases for students
     if (!isTeacher) {
@@ -52,13 +52,13 @@ export async function PATCH(
 ) {
   try {
     const { id, asgId } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
+    const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
     if (!auth.authorized) {
       const status = auth.error?.includes('Authentication required') ? 401 : 403;
       return NextResponse.json({ error: auth.error || 'Teacher access required' }, { status });
     }
 
-    const assignment = classroomDb.getAssignment(asgId);
+    const assignment = await classroomDb.getAssignment(asgId);
     if (!assignment || assignment.classroomId !== id) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
     }
@@ -88,7 +88,7 @@ export async function PATCH(
       updatedAt: Date.now()
     };
 
-    classroomDb.createAssignment(updatedAssignment);
+    await classroomDb.createAssignment(updatedAssignment);
     
     realtimeCoordinator.broadcast(
       id,

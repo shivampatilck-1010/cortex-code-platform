@@ -10,14 +10,14 @@ export async function POST(
 ) {
   try {
     const { id, subId } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Teacher authorization required to grade.' }, { status: 403 });
     }
 
-    const submission = classroomDb.getSubmission(subId);
+    const submission = await classroomDb.getSubmission(subId);
     if (!submission || submission.classroomId !== id) {
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
@@ -42,7 +42,7 @@ export async function POST(
       rubricScores: rubricScores || submission.grade?.rubricScores,
     };
 
-    classroomDb.saveGrade(grade);
+    await classroomDb.saveGrade(grade);
 
     let feedbackRecord: Feedback | undefined;
     if ((feedbackText && feedbackText.trim()) || (privateNotes && privateNotes.trim())) {
@@ -56,7 +56,7 @@ export async function POST(
         createdAt: submission.feedback?.createdAt || Date.now(),
         updatedAt: Date.now(),
       };
-      classroomDb.saveFeedback(feedbackRecord);
+      await classroomDb.saveFeedback(feedbackRecord);
     }
 
     if (!isDraft) {
@@ -76,7 +76,7 @@ export async function POST(
       );
 
       // Notify student
-      classroomDb.createNotification({
+      await classroomDb.createNotification({
         id: `notif_${Date.now()}_${submission.studentId}`,
         userId: submission.studentId,
         classroomId: id,

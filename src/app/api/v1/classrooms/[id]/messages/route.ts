@@ -10,17 +10,17 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const user = auth.context?.user || ClassroomAuth.getCurrentUser(req);
+    const user = auth.context?.user || (await ClassroomAuth.getCurrentUser(req));
     const isTeacher = Boolean(auth.context?.isTeacher);
     const url = new URL(req.url);
     const limit = parseInt(url.searchParams.get('limit') || '100', 10);
 
-    const messages = classroomDb.listMessages(id, user.id, isTeacher, limit);
+    const messages = await classroomDb.listMessages(id, user.id, isTeacher, limit);
     return NextResponse.json({ messages });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to get messages' }, { status: 500 });
@@ -33,18 +33,18 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }
 
-    const user = auth.context?.user || ClassroomAuth.getCurrentUser(req);
+    const user = auth.context?.user || (await ClassroomAuth.getCurrentUser(req));
     const isTeacher = Boolean(auth.context?.isTeacher);
 
     // Enforce classroom settings
@@ -61,13 +61,13 @@ export async function POST(
 
     // If direct message from student to student, check allowStudentMessaging
     if (!isTeacher && recipientType === 'direct' && classroom.settings?.allowStudentMessaging === false) {
-      const recipientMember = recipientId ? classroomDb.getMember(id, recipientId) : null;
+      const recipientMember = recipientId ? await classroomDb.getMember(id, recipientId) : null;
       if (recipientMember && recipientMember.role === 'student') {
         return NextResponse.json({ error: 'Direct messaging between students is disabled.' }, { status: 403 });
       }
     }
 
-    const member = classroomDb.getMember(id, user.id);
+    const member = await classroomDb.getMember(id, user.id);
     const role: ClassroomMemberRole =
       (member?.role as ClassroomMemberRole) || (user.role === 'teacher' ? 'teacher' : 'student');
 
@@ -84,7 +84,7 @@ export async function POST(
       updatedAt: Date.now(),
     };
 
-    classroomDb.createMessage(message);
+    await classroomDb.createMessage(message);
 
     // Broadcast authoritative message.created event
     realtimeCoordinator.broadcast(

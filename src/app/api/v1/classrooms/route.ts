@@ -6,8 +6,8 @@ import { Classroom } from '@/lib/classroom/models';
 
 export async function GET(req: NextRequest) {
   try {
-    const user = ClassroomAuth.getCurrentUser(req);
-    const classrooms = classroomDb.listClassroomsForUser(user.id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const classrooms = await classroomDb.listClassroomsForUser(user.id);
     return NextResponse.json({ classrooms });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to list classrooms' }, { status: 500 });
@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = ClassroomAuth.getCurrentUser(req);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    if (user.role !== 'teacher') return NextResponse.json({ error: 'Only teachers can create classrooms' }, { status: 403 });
     const body = await req.json();
     const { name, code, subject, description, settings } = body;
 
@@ -46,17 +47,16 @@ export async function POST(req: NextRequest) {
         allowCodeSharing: true,
         leaderboardEnabled: true,
         defaultAIPolicy: 'hints_only',
-        attendanceMode: 'self_checkin',
         ...(settings || {}),
       },
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
 
-    classroomDb.createClassroom(newClassroom);
+    await classroomDb.createClassroom(newClassroom);
 
     // Register teacher as member
-    classroomDb.addMember({
+    await classroomDb.addMember({
       id: `mem_${classroomId}_${user.id}`,
       classroomId,
       userId: user.id,
@@ -81,3 +81,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || 'Failed to create classroom' }, { status: 500 });
   }
 }
+

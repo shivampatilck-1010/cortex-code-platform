@@ -8,17 +8,17 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }
 
-    let members = classroomDb.listMembers(id);
+    let members = await classroomDb.listMembers(id);
 
     // If student and member visibility is restricted, show instructors only
     if (!auth.context?.isTeacher && classroom.settings?.memberVisibility === false) {

@@ -41,7 +41,7 @@ export default {
       classroomId = classroomId.toUpperCase().trim();
 
       // 3. Pre-upgrade Authentication: Authenticate user before WebSocket upgrade
-      const user = ClassroomAuth.authenticateRequest(request);
+      const user = await ClassroomAuth.authenticateRequest(request);
       if (!user) {
         console.warn(`[Security Alert] Rejected unauthenticated WebSocket connection attempt to classroom ${classroomId}`);
         return new Response(
@@ -58,7 +58,7 @@ export default {
       }
 
       // 4. Server-Side Classroom Membership Verification
-      const membership = ClassroomAuth.verifyClassroomMembership(user, classroomId);
+      const membership = await ClassroomAuth.verifyClassroomMembership(user, classroomId);
       if (!membership.authorized) {
         const isNotFound = membership.error?.toLowerCase().includes('not found');
         const status = isNotFound ? 404 : 403;

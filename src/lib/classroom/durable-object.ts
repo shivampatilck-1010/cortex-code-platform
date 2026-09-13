@@ -116,7 +116,7 @@ export class ClassroomRoomDO {
 
       // 2. Direct authentication fallback (for direct DO calls or testing)
       if (!auth) {
-        const directUser = ClassroomAuth.authenticateRequest(request);
+        const directUser = await ClassroomAuth.authenticateRequest(request);
         if (directUser) {
           const url = new URL(request.url);
           const parts = url.pathname.split('/');
@@ -126,7 +126,7 @@ export class ClassroomRoomDO {
             reqClassroomId = parts[wsIdx - 1];
           }
           reqClassroomId = reqClassroomId.toUpperCase().trim();
-          const membership = ClassroomAuth.verifyClassroomMembership(directUser, reqClassroomId);
+          const membership = await ClassroomAuth.verifyClassroomMembership(directUser!, reqClassroomId);
           if (membership.authorized && membership.role) {
             auth = {
               userId: directUser.id,

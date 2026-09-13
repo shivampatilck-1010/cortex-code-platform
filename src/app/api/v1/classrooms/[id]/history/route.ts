@@ -8,8 +8,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       const status = auth.error?.includes('Authentication required') ? 401 : 403;
@@ -17,7 +17,7 @@ export async function GET(
     }
 
     const isInstructor = Boolean(auth.context?.isTeacher || auth.context?.isAdmin);
-    const allEvents = classroomDb.getEventsSince(id, 0);
+    const allEvents = await classroomDb.getEventsSince(id, 0);
 
     const events = allEvents.filter((ev) => {
       // 1. Direct message privacy: only sender, recipient, and instructors

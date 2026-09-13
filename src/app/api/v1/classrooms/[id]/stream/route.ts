@@ -8,8 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const user = ClassroomAuth.getCurrentUser(req);
-  const classroom = classroomDb.getClassroom(id);
+  const user = await ClassroomAuth.getCurrentUser(req);
+  const classroom = await classroomDb.getClassroom(id);
 
   if (!classroom) {
     return new Response(JSON.stringify({ error: 'Classroom not found' }), {

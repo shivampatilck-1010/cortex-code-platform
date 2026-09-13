@@ -19,27 +19,27 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
+    const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Only teachers can regenerate the join code.' }, { status: 403 });
     }
 
     let newCode = generateClassCode();
     // Ensure uniqueness
-    let existing = classroomDb.getClassroomByJoinCode(newCode);
+    let existing = await classroomDb.getClassroomByJoinCode(newCode);
     let attempts = 0;
     while (existing && attempts < 10) {
       newCode = generateClassCode();
-      existing = classroomDb.getClassroomByJoinCode(newCode);
+      existing = await classroomDb.getClassroomByJoinCode(newCode);
       attempts++;
     }
 
-    const updated = classroomDb.regenerateJoinCode(id, newCode);
+    const updated = await classroomDb.regenerateJoinCode(id, newCode);
     if (!updated) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }
 
-    const user = auth.context?.user || ClassroomAuth.getCurrentUser(req);
+    const user = auth.context?.user || (await ClassroomAuth.getCurrentUser(req));
     realtimeCoordinator.broadcast(
       id,
       'classroom.updated',

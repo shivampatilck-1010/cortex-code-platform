@@ -8,18 +8,18 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     const isTeacher = auth.context?.membership?.role === 'teacher' || classroom?.teacherId === user.id;
 
     // Get all assignments for the classroom to form the columns
-    let assignments = classroomDb.listAssignments(id);
+    let assignments = await classroomDb.listAssignments(id);
     
     // Hide un-published assignments from students
     if (!isTeacher) {
@@ -27,7 +27,7 @@ export async function GET(
     }
 
     // Get members
-    let members = classroomDb.listMembers(id);
+    let members = await classroomDb.listMembers(id);
     // Student sees only themselves
     if (!isTeacher) {
       members = members.filter(m => m.userId === user.id);
@@ -37,7 +37,7 @@ export async function GET(
     }
 
     // Get all submissions for the classroom
-    let submissions = classroomDb.listSubmissionsForClassroom(id);
+    let submissions = await classroomDb.listSubmissionsForClassroom(id);
 
     // If student, filter submissions
     if (!isTeacher) {

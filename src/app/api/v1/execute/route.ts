@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ClassroomAuth } from '@/lib/classroom/auth';
+import { projectDb } from '@/lib/project/db';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 import { ExecutionRequest, ExecutionResult } from '@/lib/execution/types';
 import { getLanguageConfig } from '@/config/languages';
@@ -51,6 +53,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    
     let body: any;
     try {
       body = await req.json();
@@ -58,7 +61,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Malformed JSON payload' }, { status: 400 });
     }
 
-    const { language, code, files, stdin, args, version, entrypoint } = body || {};
+    const { projectId, language, stdin, args, version, entrypoint } = body || {};
+
+    if (!projectId) {
+      return NextResponse.json({ error: 'projectId is required for execution' }, { status: 400 });
+    }
+
+    // 2.5 Auth & Ownership Verification
+    const user = await ClassroomAuth.authenticateRequest(req);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const project = await projectDb.getProject(projectId);
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    
+    if (project.ownerId !== user.id) {
+      return NextResponse.json({ error: 'Forbidden: You do not own this project' }, { status: 403 });
+    }
+
+    const dbFiles = await projectDb.listFilesForProject(projectId);
 
     if (!language || typeof language !== 'string') {
       return NextResponse.json({ error: 'Language is required and must be a string' }, { status: 400 });
@@ -74,17 +98,17 @@ export async function POST(req: NextRequest) {
 
     const langConfig = getLanguageConfig(normalizedLang);
 
-    // Normalize files
-    let rawFiles = files;
-    if (!rawFiles || !Array.isArray(rawFiles) || rawFiles.length === 0) {
-      rawFiles = [
-        {
-          id: 'main',
-          name: langConfig.defaultFileName,
-          path: `/${langConfig.defaultFileName}`,
-          content: typeof code === 'string' ? code : langConfig.starterCode,
-        },
-      ];
+    // Normalize files from DB
+    let rawFiles = dbFiles.map(f => ({
+      id: f.id,
+      name: f.name,
+      path: f.path,
+      content: f.content,
+      isFolder: f.isFolder
+    }));
+    
+    if (rawFiles.length === 0) {
+      return NextResponse.json({ error: 'Project has no files' }, { status: 400 });
     }
 
     // 3. Project Validation & Path Traversal Protection

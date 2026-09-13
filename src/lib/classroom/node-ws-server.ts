@@ -151,7 +151,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
     });
 
     // Connection handler
-    globalThis.__cortex_node_ws_server.on('connection', (ws: any, req: any) => {
+    globalThis.__cortex_node_ws_server.on('connection', async (ws: any, req: any) => {
       const url = new URL(req.url || '/', 'http://localhost');
       
       // Parse classroom ID from path (e.g., /api/v1/classrooms/CLS-123/ws) or query param
@@ -176,7 +176,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
       }
 
       // 2. Authoritative User Authentication via ClassroomAuth
-      const user = ClassroomAuth.authenticateRequest(req);
+      const user = await ClassroomAuth.authenticateRequest(req);
       if (!user) {
         console.warn(`[Security Alert] Rejected unauthenticated connection attempt to classroom ${classroomId}`);
         ws.send(serializeRealtimeMessage({
@@ -190,7 +190,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
       }
 
       // 3. Server-Side Classroom Membership & Role Verification
-      const membership = ClassroomAuth.verifyClassroomMembership(user, classroomId);
+      const membership = await ClassroomAuth.verifyClassroomMembership(user, classroomId);
       if (!membership.authorized) {
         const isNotFound = membership.error?.toLowerCase().includes('not found');
         const code = isNotFound ? 'NOT_FOUND' : 'FORBIDDEN';
@@ -239,8 +239,8 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
       clientMeta.unregisterRealtime = realtimeCoordinator.registerWsClient(classroomId, session);
 
       // Send initial auth_ok handshake immediately with current authoritative sequence
-      const currentSeq = classroomDb.getNextEventSequence(classroomId) - 1;
-      const members = classroomDb.listMembers(classroomId);
+      const currentSeq = (await classroomDb.getNextEventSequence(classroomId)) - 1;
+      const members = await classroomDb.listMembers(classroomId);
 
       ws.send(
         serializeRealtimeMessage({
@@ -348,13 +348,13 @@ export function getNodeWsPort(): number | null {
 /**
  * Handle incoming parsed message from WebSocket client
  */
-function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
+async function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
   const normRoom = (msg.classroomId || msg.roomId || client.classroomId || '').toUpperCase().trim();
 
   switch (msg.type) {
     case 'auth': {
       // Re-verify auth but NEVER allow client to escalate role or spoof identity
-      const currentSeq = classroomDb.getNextEventSequence(normRoom) - 1;
+      const currentSeq = (await classroomDb.getNextEventSequence(normRoom)) - 1;
       client.ws.send(
         serializeRealtimeMessage({
           type: 'auth_ok',
@@ -364,7 +364,7 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
             currentSequence: Math.max(0, currentSeq),
             userId: client.participantId,
             role: client.participantRole,
-            members: classroomDb.listMembers(normRoom).map((m) => ({
+            members: (await classroomDb.listMembers(normRoom)).map((m) => ({
               id: m.userId,
               name: m.userName,
               role: m.role,
@@ -393,7 +393,7 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
     }
 
     case 'resync_request': {
-      const currentSeq = classroomDb.getNextEventSequence(normRoom) - 1;
+      const currentSeq = (await classroomDb.getNextEventSequence(normRoom)) - 1;
       const since = typeof msg.payload?.sinceSequence === 'number' ? msg.payload.sinceSequence : (msg.sequence || 0);
       const missed = realtimeCoordinator.getMissedEvents(normRoom, since);
 
@@ -416,8 +416,8 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
 
       if (isBufferOverflow || since === 0) {
         // Authoritative full state snapshot
-        const announcements = classroomDb.listAnnouncements(normRoom);
-        const rawAssignments = classroomDb.listAssignments(normRoom);
+        const announcements = await classroomDb.listAnnouncements(normRoom);
+        const rawAssignments = await classroomDb.listAssignments(normRoom);
         const assignments = isInstructor
           ? rawAssignments
           : rawAssignments.map((a) => ({
@@ -429,8 +429,8 @@ function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
                 return tc;
               }),
             }));
-        const members = classroomDb.listMembers(normRoom);
-        const allMessages = classroomDb.listMessages(normRoom, 50);
+        const members = await classroomDb.listMembers(normRoom);
+        const allMessages = await classroomDb.listMessages(normRoom, 50);
         const filteredMessages = allMessages.filter((m) => {
           if (m.recipientType === 'direct') {
             return isInstructor || m.senderId === client.participantId || m.recipientId === client.participantId;

@@ -9,20 +9,20 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     const isTeacher = classroom?.teacherId === user.id || auth.context?.membership?.role === 'teacher';
 
     const assignmentId = req.nextUrl.searchParams.get('assignmentId');
     let submissions: Submission[] = assignmentId
-      ? classroomDb.listSubmissions(assignmentId)
-      : classroomDb.listSubmissionsForClassroom(id);
+      ? await classroomDb.listSubmissions(assignmentId)
+      : await classroomDb.listSubmissionsForClassroom(id);
 
     // If student, filter to only their submissions
     if (!isTeacher) {

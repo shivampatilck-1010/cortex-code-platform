@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = ClassroomAuth.verifyAccess(req, undefined, 'admin');
+    const auth = await ClassroomAuth.verifyAccess(req, undefined, 'admin');
     if (!auth.authorized) {
       const status = auth.error?.includes('Authentication required') ? 401 : 403;
       return NextResponse.json({ error: auth.error || 'Administrator privileges required.' }, { status });

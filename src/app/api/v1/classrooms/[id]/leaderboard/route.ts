@@ -8,13 +8,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }
@@ -23,7 +23,7 @@ export async function GET(
       return NextResponse.json({ error: 'Leaderboard is disabled by the instructor.', disabled: true }, { status: 403 });
     }
 
-    const leaderboard = classroomDb.getLeaderboard(id);
+    const leaderboard = await classroomDb.getLeaderboard(id);
     return NextResponse.json({ leaderboard });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to get leaderboard' }, { status: 500 });

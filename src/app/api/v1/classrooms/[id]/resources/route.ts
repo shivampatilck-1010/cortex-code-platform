@@ -9,13 +9,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
     if (!auth.authorized) {
       const status = auth.error?.includes('Authentication required') ? 401 : 403;
       return NextResponse.json({ error: auth.error || 'Access denied' }, { status });
     }
 
-    const resources = classroomDb.listResources(id);
+    const resources = await classroomDb.listResources(id);
     return NextResponse.json({ resources });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to list resources' }, { status: 500 });
@@ -28,8 +28,8 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
 
     if (!auth.authorized) {
       const status = auth.error?.includes('Authentication required') ? 401 : 403;
@@ -70,7 +70,7 @@ export async function POST(
       createdAt: Date.now(),
     };
 
-    classroomDb.createResource(resource);
+    await classroomDb.createResource(resource);
 
     return NextResponse.json({ success: true, resource }, { status: 201 });
   } catch (err: any) {

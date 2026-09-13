@@ -14,7 +14,6 @@ export type AssignmentType =
 
 export type AssignmentStatus = 'draft' | 'scheduled' | 'published' | 'closed' | 'archived';
 export type SubmissionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'graded';
-export type AttendanceStatus = 'present' | 'late' | 'absent' | 'excused';
 export type AIPolicy = 'full' | 'hints_only' | 'explain_only' | 'disabled';
 export type TestCaseVisibility = 'public' | 'hidden';
 
@@ -34,13 +33,17 @@ export interface Classroom {
   name: string;
   subject: string;
   description: string;
-  courseCode: string;
+  coursecode?: string; // Legacy fallback
+  projectId?: string;
+  snapshotJson?: string; // Stringified array of files at submission time
   academicYear: string;
   section: string;
   teacherId: string;
   teacherName: string;
   image?: string;
-  joinCode: string;
+  joincode?: string; // Legacy fallback
+  projectId?: string;
+  snapshotJson?: string; // Stringified array of files at submission time
   joinEnabled: boolean;
   status: ClassroomStatus;
   createdAt: number;
@@ -65,8 +68,11 @@ export interface ClassroomMember {
   userName: string;
   userEmail: string;
   role: ClassroomMemberRole;
-  status: 'active' | 'dropped';
+  status: 'active' | 'dropped' | 'suspended';
   joinedAt: number;
+  suspendedAt?: number;
+  suspensionExpiresAt?: number;
+  removedAt?: number;
   lastActiveAt: number;
   isOnline?: boolean;
 }
@@ -74,7 +80,9 @@ export interface ClassroomMember {
 export interface ClassroomInvite {
   id: string;
   classroomId: string;
-  code: string;
+  code?: string; // Legacy fallback
+  projectId?: string;
+  snapshotJson?: string; // Stringified array of files at submission time
   createdBy: string;
   expiresAt: number;
   maxUses: number;
@@ -137,7 +145,9 @@ export interface Assignment {
   instructions: string;
   type: AssignmentType;
   language: string;
-  starterCode: string;
+  startercode?: string; // Legacy fallback
+  projectId?: string;
+  snapshotJson?: string; // Stringified array of files at submission time
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   maxMarks: number;
   dueAt: number;
@@ -179,7 +189,9 @@ export interface Submission {
   classroomId: string;
   studentId: string;
   studentName: string;
-  code: string;
+  code?: string; // Legacy fallback
+  projectId?: string;
+  snapshotJson?: string; // Stringified array of files at submission time
   language: string;
   version: number;
   status: SubmissionStatus;
@@ -230,8 +242,12 @@ export interface LiveClassSession {
   title: string;
   topic: string;
   language: string;
-  starterCode: string;
-  sharedCode: string;
+  startercode?: string; // Legacy fallback
+  projectId?: string;
+  snapshotJson?: string; // Stringified array of files at submission time
+  sharedcode?: string; // Legacy fallback
+  projectId?: string;
+  snapshotJson?: string; // Stringified array of files at submission time
   isBroadcastingCode: boolean;
   startedAt: number;
   endedAt?: number;
@@ -330,3 +346,4 @@ export interface ClassroomAnalytics {
     averageScore: number;
   }>;
 }
+

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Terminal as TermIcon, 
   CheckSquare, 
@@ -137,6 +138,62 @@ const getMonacoLangForFile = (filename: string, defaultMonacoLang: string): stri
 };
 
 export default function CloudIDEPage() {
+  const router = useRouter();
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [isProjectLoading, setIsProjectLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchProject = async () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        let id = urlParams.get('projectId');
+        if (id) {
+          const res = await fetch(`/api/v1/projects/${id}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (mounted) {
+              setProjectId(data.project.id);
+              if (data.files && data.files.length > 0) {
+                 setFiles(data.files);
+                 const main = data.files.find((f: any) => !f.isFolder) || data.files[0];
+                 if (main) setActiveFileId(main.id);
+              }
+              const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
+              if (targetLang) setCurrentLang(targetLang);
+            }
+          } else {
+            // Bad ID, let's just strip it
+            router.replace('/');
+          }
+        } else {
+          // fetch all, or create new
+          const res = await fetch('/api/v1/projects');
+          if (res.ok) {
+             const data = await res.json();
+             if (data.projects && data.projects.length > 0) {
+                 router.replace(`/?projectId=${data.projects[0].id}`);
+             } else {
+                 const pRes = await fetch('/api/v1/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Default Project', language: 'python' })
+                 });
+                 if (pRes.ok) {
+                    const pData = await pRes.json();
+                    router.replace(`/?projectId=${pData.project.id}`);
+                 }
+             }
+          }
+        }
+      } finally {
+        if (mounted) setIsProjectLoading(false);
+      }
+    };
+    fetchProject();
+    return () => { mounted = false; };
+  }, [router]);
+
   // 1. Language & Files State
   const [currentLang, setCurrentLang] = useState<LanguageConfig>(SUPPORTED_LANGUAGES[0]); // Python default
   const [files, setFiles] = useState<ProjectFile[]>([
@@ -321,12 +378,26 @@ export default function CloudIDEPage() {
   const activeFile = files.find((f) => f.id === activeFileId && !f.isFolder) || files.find((f) => !f.isFolder) || files[0];
 
   // Auto-Save / Content Update
+  const saveFileRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleContentChange = (newContent: string) => {
     setFiles((prev) =>
       prev.map((f) => (f.id === activeFileId ? { ...f, content: newContent } : f))
     );
     if (collabBrokerRef.current) {
       collabBrokerRef.current.broadcastFileChange(activeFileId, newContent);
+    }
+    
+    // Auto-save
+    if (projectId && activeFileId) {
+       if (saveFileRef.current) clearTimeout(saveFileRef.current);
+       saveFileRef.current = setTimeout(() => {
+          fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
+             method: 'PATCH',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ content: newContent })
+          }).catch(console.error);
+       }, 800);
     }
   };
 
@@ -483,9 +554,23 @@ export default function CloudIDEPage() {
         (f) => !f.isFolder && (f.name === currentLang.defaultFileName || f.id === 'main')
       ) || activeFile;
 
+      
+      // Force save active file before run
+      if (projectId && activeFileId) {
+         try {
+           const currentContent = files.find(f => f.id === activeFileId)?.content || '';
+           await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
+             method: 'PATCH',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ content: currentContent })
+           });
+         } catch(e) {}
+      }
+
       const res = await executeInCloudSandbox({
+        projectId: projectId as string,
         language: currentLang.id,
-        files: files.filter((f) => !f.isFolder),
+        files: [], // Sent by backend now
         entrypoint: mainFile?.name || activeFile.name,
         stdin: customStdin,
       });
@@ -538,10 +623,23 @@ export default function CloudIDEPage() {
   const handleRunAllTests = async () => {
     setIsRunningTests(true);
     try {
+      
+      if (projectId && activeFileId) {
+         try {
+           const currentContent = files.find(f => f.id === activeFileId)?.content || '';
+           await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
+             method: 'PATCH',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ content: currentContent })
+           });
+         } catch(e) {}
+      }
+
       const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
         {
+          projectId: projectId as string,
           language: currentLang.id,
-          files: files.filter((f) => !f.isFolder),
+          files: [],
           entrypoint: activeFile.name,
         },
         testCases
@@ -558,11 +656,24 @@ export default function CloudIDEPage() {
 
   // Benchmark Runner
   const handleRunBenchmark = async () => {
-    const res = await benchmarkExecution({
-      language: currentLang.id,
-      files: files.filter((f) => !f.isFolder),
-      entrypoint: activeFile.name,
-    });
+    
+      if (projectId && activeFileId) {
+         try {
+           const currentContent = files.find(f => f.id === activeFileId)?.content || '';
+           await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
+             method: 'PATCH',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ content: currentContent })
+           });
+         } catch(e) {}
+      }
+
+      const res = await benchmarkExecution({
+        projectId: projectId as string,
+        language: currentLang.id,
+        files: [],
+        entrypoint: activeFile.name,
+      });
     setBenchmarkResult(res);
   };
 
@@ -636,6 +747,11 @@ export default function CloudIDEPage() {
     return { variables: vars, callStack: frames };
   }, [activeFile?.content, activeFile?.name, activeDebugLine]);
 
+  
+  if (isProjectLoading) {
+    return <div className="min-h-screen bg-[#0b0c0e] flex items-center justify-center text-white">Loading workspace...</div>;
+  }
+    
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0b0c0e] text-[#e6edf3] overflow-hidden font-sans select-none">
       {/* 1. Header Navigation (Permanently sleek Cortex dark #0b0c0e without theme toggle) */}
@@ -665,43 +781,68 @@ export default function CloudIDEPage() {
           currentLanguage={currentLang}
           onOpenFeedback={() => setIsFeedbackOpen(true)}
           hasActiveError={Boolean((executionResult && executionResult.status !== 'success') || executionResult?.stderr?.trim())}
-          onCreateFile={(name, isFolder, parentFolderId) => {
+          onCreateFile={async (name, isFolder, parentFolderId) => {
             const parent = parentFolderId ? files.find((f) => f.id === parentFolderId) : null;
             const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
             const initialContent = isFolder ? '' : getStarterContentForFile(name, currentLang);
-            const newF: ProjectFile = {
-              id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              name,
-              path: parent ? `${parentPath}/${name}` : `/${name}`,
-              content: initialContent,
-              isFolder,
-              parentId: parentFolderId || undefined,
-            };
-            setFiles((prev) => [...prev, newF]);
-            if (!isFolder) setActiveFileId(newF.id);
+            const path = parent ? `${parentPath}/${name}` : `/${name}`;
+            
+            if (projectId) {
+              try {
+                const res = await fetch(`/api/v1/projects/${projectId}/files`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name, path, content: initialContent, isFolder })
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  const newF = data.file;
+                  setFiles((prev) => [...prev, newF]);
+                  if (!isFolder) setActiveFileId(newF.id);
+                }
+              } catch (e) { console.error(e); }
+            }
           }}
-          onDeleteFile={(id) => {
+          onDeleteFile={async (id) => {
+            if (projectId) {
+               try {
+                 await fetch(`/api/v1/projects/${projectId}/files/${id}`, { method: 'DELETE' });
+               } catch (e) { console.error(e); }
+            }
             const getDescendantIds = (targetId: string): string[] => {
               const children = files.filter((f) => f.parentId === targetId);
               return [targetId, ...children.flatMap((c) => getDescendantIds(c.id))];
             };
-            const idsToDelete = new Set(getDescendantIds(id));
-            setFiles((prev) => prev.filter((f) => !idsToDelete.has(f.id)));
-            if (idsToDelete.has(activeFileId)) {
-              const remaining = files.filter((f) => !idsToDelete.has(f.id) && !f.isFolder);
-              setActiveFileId(remaining[0]?.id || 'main');
+            const toDelete = getDescendantIds(id);
+            setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
+            if (toDelete.includes(activeFileId)) {
+              const remaining = files.filter((f) => !toDelete.includes(f.id) && !f.isFolder);
+              setActiveFileId(remaining[0]?.id || '');
             }
           }}
-          onRenameFile={(id, newName) => {
+          onRenameFile={async (id, newName) => {
+            if (projectId) {
+              const f = files.find(x => x.id === id);
+              if (f) {
+                const parentPath = f.path.substring(0, f.path.lastIndexOf('/'));
+                const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
+                try {
+                  await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName, path: newPath })
+                  });
+                } catch(e) { console.error(e); }
+              }
+            }
             setFiles((prev) =>
               prev.map((f) => {
                 if (f.id !== id) return f;
-                const parent = f.parentId ? prev.find((p) => p.id === f.parentId) : null;
-                const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
+                const parentPath = f.path.substring(0, f.path.lastIndexOf('/'));
                 return {
                   ...f,
                   name: newName,
-                  path: parent ? `${parentPath}/${newName}` : `/${newName}`,
+                  path: parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`,
                 };
               })
             );

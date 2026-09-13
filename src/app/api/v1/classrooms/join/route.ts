@@ -5,7 +5,7 @@ import { realtimeCoordinator } from '@/lib/classroom/realtime';
 
 export async function POST(req: NextRequest) {
   try {
-    const user = ClassroomAuth.getCurrentUser(req);
+    const user = await ClassroomAuth.getCurrentUser(req);
     const body = await req.json().catch(() => ({}));
     const { joinCode } = body;
 
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanCode = joinCode.toUpperCase().trim();
-    const classroom = classroomDb.getClassroomByJoinCode(cleanCode);
+    const classroom = await classroomDb.getClassroomByJoinCode(cleanCode);
 
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found. Please verify the code.' }, { status: 404 });
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user is already an active member
-    const existing = classroomDb.getMember(classroom.id, user.id);
+    const existing = await classroomDb.getMember(classroom.id, user.id);
     if (existing && existing.status === 'active') {
       return NextResponse.json({
         error: 'You are already an active member of this classroom.',
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Add or reactivate member
-    const member = classroomDb.addMember({
+    const member = await classroomDb.addMember({
       id: existing ? existing.id : `mem_${classroom.id}_${user.id}`,
       classroomId: classroom.id,
       userId: user.id,
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Notify instructor
-    classroomDb.createNotification({
+    await classroomDb.createNotification({
       id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       userId: classroom.teacherId,
       classroomId: classroom.id,

@@ -9,19 +9,19 @@ export async function GET(
 ) {
   try {
     const { id, subId } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const user = await ClassroomAuth.getCurrentUser(req);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
 
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 403 });
     }
 
-    const submission = classroomDb.getSubmission(subId);
+    const submission = await classroomDb.getSubmission(subId);
     if (!submission || submission.classroomId !== id) {
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
 
-    const isTeacher = auth.context?.membership?.role === 'teacher' || classroomDb.getClassroom(id)?.teacherId === user.id;
+    const isTeacher = auth.context?.membership?.role === 'teacher' || (await classroomDb.getClassroom(id))?.teacherId === user.id;
 
     // Student can only view their own submission
     if (!isTeacher && submission.studentId !== user.id) {

@@ -10,7 +10,7 @@ export async function GET(
   const upgrade = req.headers.get('Upgrade');
 
   // 1. Authenticate request before upgrade
-  const user = ClassroomAuth.authenticateRequest(req);
+  const user = await ClassroomAuth.authenticateRequest(req);
   if (!user) {
     return NextResponse.json(
       { error: 'Unauthorized', code: 'AUTH_REQUIRED', message: 'Authentication required. Please log in.' },
@@ -19,7 +19,7 @@ export async function GET(
   }
 
   // 2. Server-side Classroom Membership & Role Verification
-  const membership = ClassroomAuth.verifyClassroomMembership(user, id);
+  const membership = await ClassroomAuth.verifyClassroomMembership(user, id);
   if (!membership.authorized) {
     const isNotFound = membership.error?.toLowerCase().includes('not found');
     return NextResponse.json(

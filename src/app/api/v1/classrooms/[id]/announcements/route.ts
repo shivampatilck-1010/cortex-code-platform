@@ -10,13 +10,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id);
+    const auth = await ClassroomAuth.verifyAccess(req, id);
     if (!auth.authorized) {
       const status = auth.error?.includes('Authentication required') ? 401 : 403;
       return NextResponse.json({ error: auth.error || 'Access denied' }, { status });
     }
 
-    const announcements = classroomDb.listAnnouncements(id);
+    const announcements = await classroomDb.listAnnouncements(id);
     return NextResponse.json({ announcements });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to get announcements' }, { status: 500 });
@@ -29,7 +29,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const auth = ClassroomAuth.verifyAccess(req, id, 'teacher');
+    const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
     if (!auth.authorized) {
       const status = auth.error?.includes('Authentication required') ? 401 : 403;
       return NextResponse.json({ error: auth.error || 'Only teachers can post announcements.' }, { status });
@@ -56,7 +56,7 @@ export async function POST(
       updatedAt: Date.now(),
     };
 
-    classroomDb.createAnnouncement(announcement);
+    await classroomDb.createAnnouncement(announcement);
 
     // Broadcast authoritative announcement.created event
     realtimeCoordinator.broadcast(

@@ -9,13 +9,13 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const user = ClassroomAuth.getCurrentUser(req);
+    const user = await ClassroomAuth.getCurrentUser(req);
     const body = await req.json().catch(() => ({}));
     const { joinCode } = body;
 
-    let classroom = classroomDb.getClassroom(id);
+    let classroom = await classroomDb.getClassroom(id);
     if (!classroom && joinCode) {
-      classroom = classroomDb.getClassroomByJoinCode(joinCode);
+      classroom = await classroomDb.getClassroomByJoinCode(joinCode);
     }
 
     if (!classroom) {
@@ -35,7 +35,7 @@ export async function POST(
     }
 
     // Check if user is already an active member
-    const existing = classroomDb.getMember(classroom.id, user.id);
+    const existing = await classroomDb.getMember(classroom.id, user.id);
     if (existing && existing.status === 'active') {
       return NextResponse.json({
         error: 'You are already an active member of this classroom.',
@@ -45,7 +45,7 @@ export async function POST(
     }
 
     // Add or reactivate member
-    const member = classroomDb.addMember({
+    const member = await classroomDb.addMember({
       id: existing ? existing.id : `mem_${classroom.id}_${user.id}`,
       classroomId: classroom.id,
       userId: user.id,
@@ -59,7 +59,7 @@ export async function POST(
     });
 
     // Notify instructor
-    classroomDb.createNotification({
+    await classroomDb.createNotification({
       id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       userId: classroom.teacherId,
       classroomId: classroom.id,

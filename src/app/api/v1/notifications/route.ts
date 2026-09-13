@@ -2,13 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 
+export async function GET(req: NextRequest) {
+  try {
+    const user = await ClassroomAuth.authenticateRequest(req);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const url = new URL(req.url);
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const notifications = await classroomDb.listNotificationsForUser(user.id, limit);
+    return NextResponse.json({ notifications });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message }, { status: 500 });
+  }
+}
+
 export async function PUT(req: NextRequest) {
   try {
-    const user = ClassroomAuth.getCurrentUser(req);
+    const user = await ClassroomAuth.getCurrentUser(req);
     const body = await req.json();
 
     if (body.markAllRead) {
-      classroomDb.markAllNotificationsRead(user.id);
+      await classroomDb.markAllNotificationsRead(user.id);
       return NextResponse.json({ success: true });
     }
     

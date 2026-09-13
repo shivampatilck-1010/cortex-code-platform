@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       const inviteUrl = `${baseUrl}/classroom/${room.roomId}`;
 
       // Persist in relational DB
-      classroomDb.createUser({
+      await classroomDb.createUser({
         id: adminParticipant.id,
         name: adminParticipant.name,
         email: `${adminParticipant.name.toLowerCase().replace(/\s+/g, '.')}@cortex.edu`,
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         updatedAt: Date.now(),
       });
 
-      classroomDb.createClassroom({
+      await classroomDb.createClassroom({
         id: room.roomId,
         name: body.classroomName || `${name.trim()}'s Interactive Classroom`,
         subject: body.subject || 'Computer Science & Algorithms',
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      classroomDb.addMember({
+      await classroomDb.addMember({
         id: `mem_${adminParticipant.id}_${room.roomId}`,
         classroomId: room.roomId,
         userId: adminParticipant.id,
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
       const inviteUrl = `${baseUrl}/classroom/${room.roomId}`;
 
       // Persist in relational DB
-      classroomDb.createUser({
+      await classroomDb.createUser({
         id: participant.id,
         name: participant.name,
         email: `${participant.name.toLowerCase().replace(/\s+/g, '.')}@student.cortex.edu`,
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
         updatedAt: Date.now(),
       });
 
-      classroomDb.addMember({
+      await classroomDb.addMember({
         id: `mem_${participant.id}_${room.roomId}`,
         classroomId: room.roomId,
         userId: participant.id,
