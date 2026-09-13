@@ -330,11 +330,12 @@ export interface ClassroomAnalytics {
   classroomId: string;
   totalStudents: number;
   activeToday: number;
-  classAverageScore: number;
-  averageScore?: number;
-  submissionRate: number;
-  completionRate?: number;
+  averageScore: number;
+  
+  completionRate: number;
+  
   assignmentsCount: number;
+  recentTrend?: number[];
   pendingGrading?: number;
   commonFailureStates?: Record<string, number>;
   atRiskCount: number;

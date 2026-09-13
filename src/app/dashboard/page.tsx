@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { 
+  Users,
   Code2, 
   Play, 
   Trophy, 
@@ -20,24 +21,28 @@ import {
 import { CortexLogo } from '@/components/brand/CortexLogo';
 
 export default function DashboardPage() {
+  const [dashboardData, setDashboardData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch('/api/v1/auth/me/dashboard')
+      .then(r => r.json())
+      .then(d => {
+        setDashboardData(d);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
   const stats = [
-    { label: 'Total Executions', val: '1,428', change: '+14% this week', icon: Play, color: 'text-emerald-400' },
-    { label: 'Challenges Solved', val: '46', change: 'Top 8% globally', icon: Trophy, color: 'text-yellow-400' },
-    { label: 'Active Projects', val: '12', change: '3 shared public', icon: FolderGit2, color: 'text-[#ff9100]' },
-    { label: 'AI Auto-Fixes Applied', val: '89', change: '98.2% verified', icon: Sparkles, color: 'text-purple-400' },
+    { label: 'Total Executions', val: dashboardData?.stats?.totalExecutions || 0, change: '', icon: Play, color: 'text-emerald-400' },
+    { label: 'Challenges Solved', val: dashboardData?.stats?.challengesSolved || 0, change: '', icon: Trophy, color: 'text-yellow-400' },
+    { label: 'Active Projects', val: dashboardData?.stats?.activeProjectsCount || 0, change: '', icon: FolderGit2, color: 'text-[#ff9100]' },
+    { label: 'Classrooms Enrolled', val: dashboardData?.stats?.classroomsEnrolled || 0, change: '', icon: Users, color: 'text-purple-400' },
   ];
 
-  const recentProjects = [
-    { id: 'proj-1', name: 'High-Throughput C++ Router', lang: 'C++20', updated: '2 hours ago', status: 'Healthy' },
-    { id: 'proj-2', name: 'Python Async Scraper & ETL', lang: 'Python 3.12', updated: 'Yesterday', status: 'Deployed' },
-    { id: 'proj-3', name: 'Rust Memory-Safe Cache', lang: 'Rust 1.75', updated: '3 days ago', status: 'Passing Tests' },
-  ];
-
-  const recentExecutions = [
-    { lang: 'Python', file: 'main.py', time: '38 ms', memory: '14 MB', status: 'Passed', when: '10 mins ago' },
-    { lang: 'C++', file: 'main.cpp', time: '12 ms', memory: '8 MB', status: 'Passed', when: '1 hour ago' },
-    { lang: 'Java', file: 'Main.java', time: '120 ms', memory: '34 MB', status: 'Compilation Error', when: '3 hours ago' },
-  ];
+  const recentProjects = dashboardData?.recentProjects || [];
+  const recentExecutions = dashboardData?.recentExecutions || [];
 
   return (
     <div className="min-h-screen bg-[#0b0c0e] text-gray-100 flex flex-col font-sans select-none">

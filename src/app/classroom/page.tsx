@@ -1927,7 +1927,6 @@ export default function ClassroomHubPage() {
                         <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 z-10">Average Score</span>
                         <div className="flex items-end space-x-2 z-10">
                           <span className="text-3xl font-extrabold text-white tracking-tighter">{analytics.averageScore}%</span>
-                          <span className="text-[10px] text-emerald-400 font-medium mb-1">+2.4%</span>
                         </div>
                       </div>
 
@@ -1961,7 +1960,7 @@ export default function ClassroomHubPage() {
                         <div className="p-6 flex-1 flex flex-col items-center justify-center min-h-[250px]">
                           {/* Visualization stub */}
                           <div className="w-full flex items-end justify-between h-40 gap-2">
-                            {[35, 45, 30, 60, 80, 50, 90, 75, 40, 65, 85, 100].map((val, i) => (
+                            {(analytics.recentTrend || []).map((val, i) => (
                               <div key={i} className="w-full bg-[#1e202b] rounded-t-sm relative group transition-all duration-300 hover:bg-[#2d3142]" style={{ height: '100%' }}>
                                 <div 
                                   className="absolute bottom-0 w-full bg-[#ff9100] rounded-t-sm opacity-80 group-hover:opacity-100 transition-all duration-300"

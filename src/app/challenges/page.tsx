@@ -19,6 +19,18 @@ import { CortexLogo } from '@/components/brand/CortexLogo';
 export default function ChallengesPage() {
   const [filterDifficulty, setFilterDifficulty] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [solvedIds, setSolvedIds] = React.useState<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    fetch('/api/v1/auth/me/dashboard')
+      .then(r => r.json())
+      .then(d => {
+        if (d.stats?.solvedChallengeIds) {
+          setSolvedIds(new Set(d.stats.solvedChallengeIds));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const filteredChallenges = CHALLENGES.filter((c) => {
     const matchDiff = filterDifficulty === 'All' || c.difficulty === filterDifficulty;
@@ -129,7 +141,11 @@ export default function ChallengesPage() {
             {filteredChallenges.map((c) => (
               <div key={c.id} className="grid grid-cols-12 px-4 py-3.5 items-center text-xs hover:bg-[#1d1e24] transition">
                 <div className="col-span-1">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500/70" />
+                  {solvedIds.has(c.id) ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  ) : (
+                    <div className="w-4 h-4 border-2 border-gray-700 rounded-full" />
+                  )}
                 </div>
                 <div className="col-span-5">
                   <Link href={`/challenges/${c.id}`} className="font-semibold text-gray-200 hover:text-cyan-400 transition">

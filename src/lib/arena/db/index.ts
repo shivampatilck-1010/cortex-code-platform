@@ -225,6 +225,29 @@ export class ArenaDatabase {
     return s;
   }
 
+  
+  async listSubmissionsForUser(userId: string): Promise<ArenaSubmission[]> {
+    const db = await this.getDb();
+    if (!db) return [];
+    const rows = await db.prepare('SELECT * FROM arena_submissions WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      challengeId: r.challenge_id,
+      userId: r.user_id,
+      language: r.language,
+      code: r.code,
+      status: r.status,
+      score: r.score,
+      executionTimeMs: r.execution_time_ms,
+      memoryUsageMb: r.memory_usage_mb,
+      error: r.error,
+      createdAt: r.created_at,
+      sourceCode: r.code,
+      testSummary: r.test_summary ? JSON.parse(r.test_summary) : undefined
+    } as any));
+  }
+
+
   async listSubmissions(userId: string, challengeId: string): Promise<ArenaSubmission[]> {
     const db = await this.getDb();
     if (!db) return [];

@@ -705,6 +705,15 @@ class ClassroomDatabase {
     return this.mapMember(row);
   }
 
+  
+  async listMembershipsForUser(userId: string): Promise<ClassroomMember[]> {
+    const db = await this.getDb();
+    if (!db) return [];
+    const rows = await db.prepare('SELECT * FROM classroom_members WHERE user_id = ?').all(userId) as any[];
+    return rows.map(r => this.mapMember(r));
+  }
+
+
   async listMembers(classroomId: string): Promise<ClassroomMember[]> {
     if (!(await this.getDb())) return [];
     const rows = await (await this.getDb()).prepare('SELECT * FROM classroom_members WHERE classroom_id = ? ORDER BY role DESC, user_name ASC').all(classroomId) as any[];
@@ -1041,6 +1050,14 @@ class ClassroomDatabase {
     if (!(await this.getDb())) return [];
     const rows = await (await this.getDb()).prepare('SELECT * FROM submissions WHERE assignment_id = ? ORDER BY submitted_at DESC').all(assignmentId) as any[];
     return rows.map((r) => this.mapSubmission(r));
+  }
+
+  
+  async listSubmissionsForUser(studentId: string): Promise<Submission[]> {
+    const db = await this.getDb();
+    if (!db) return [];
+    const rows = await db.prepare('SELECT * FROM submissions WHERE student_id = ?').all(studentId) as any[];
+    return rows.map(r => this.mapSubmission(r));
   }
 
   async listSubmissionsForClassroom(classroomId: string): Promise<Submission[]> {
@@ -1384,13 +1401,27 @@ class ClassroomDatabase {
       }
     }
 
+    
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    const trendCounts = new Array(12).fill(0);
+    for (const sub of submissions) {
+      const daysAgo = Math.floor((now - sub.submittedAt) / DAY);
+      if (daysAgo >= 0 && daysAgo < 12) {
+        trendCounts[11 - daysAgo]++;
+      }
+    }
+    const maxCount = Math.max(...trendCounts, 1);
+    const recentTrend = trendCounts.map(count => Math.round((count / maxCount) * 100));
+
     return {
       classroomId,
       totalStudents: members.length,
       activeToday: members.filter((m) => m.isOnline).length, // Real presence from DB
-      classAverageScore,
-      submissionRate,
+      averageScore: classAverageScore,
+      completionRate: submissionRate,
       assignmentsCount: assignments.length,
+      recentTrend,
       pendingGrading: submissions.filter(s => s.status === 'pending' || s.status === 'completed').length,
       commonFailureStates: Object.keys(commonFailureStates).length > 0 ? commonFailureStates : undefined,
       atRiskCount: atRiskStudents.length,
