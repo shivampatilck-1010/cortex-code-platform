@@ -31,14 +31,14 @@ export async function POST(req: NextRequest) {
     const newClassroom: Classroom = {
       id: classroomId,
       name: name.trim(),
-      courseCode: body.courseCode || code || 'CS-NEW',
+      coursecode: body.coursecode || code || 'CS-NEW',
       academicYear: body.academicYear || '2024-2025',
       section: body.section || 'Sec 01',
       subject: subject || 'Computer Science',
       description: description || '',
       teacherId: user.id,
       teacherName: user.name,
-      joinCode,
+      joincode: joinCode,
       joinEnabled: true,
       status: 'active',
       settings: {

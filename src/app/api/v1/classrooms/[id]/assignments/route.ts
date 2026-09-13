@@ -99,7 +99,7 @@ export async function POST(
       instructions: instructions || 'Complete the task according to the specifications provided.',
       type: (type as any) || 'code',
       language: language || 'cpp',
-      starterCode: starterCode || '// Write your solution here\n',
+      startercode: starterCode || '// Write your solution here\n',
       difficulty: difficulty || 'Intermediate',
       maxMarks: maxMarks || 100,
       dueAt: dueAt || Date.now() + 7 * 24 * 3600 * 1000,

@@ -69,7 +69,7 @@ class ProjectDatabase {
     if (this.initialized) return;
 
     // Check for D1 first (for production)
-    let d1Binding = null;
+    let d1Binding: any = null;
     if (typeof process !== 'undefined' && process.env && process.env.DB) {
       d1Binding = process.env.DB;
     } else if (typeof globalThis !== 'undefined' && (globalThis as any).env && (globalThis as any).env.DB) {

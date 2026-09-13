@@ -42,7 +42,7 @@ class RealtimeCoordinator {
   }
 
   // WebSocket Client Management
-  async registerWsClient(classroomId: string, client: WsClientSession): () => void {
+  async registerWsClient(classroomId: string, client: WsClientSession): Promise<() => void> {
     const norm = classroomId.toUpperCase().trim();
     if (!this.wsClients.has(norm)) {
       this.wsClients.set(norm, new Set());
@@ -76,7 +76,7 @@ class RealtimeCoordinator {
     payload: any,
     actor?: { id: string; name: string },
     incomingEventId?: string
-  ): ClassroomEvent {
+  ): Promise<ClassroomEvent> {
     const norm = classroomId.toUpperCase().trim();
     const sequence = await classroomDb.getNextEventSequence(norm);
     const eventId = incomingEventId || `evt_${Date.now()}_${sequence}`;
@@ -173,11 +173,11 @@ class RealtimeCoordinator {
   /**
    * Handle incoming event from client with duplicate detection and role authorization
    */
-  handleIncomingClientEvent(
+  async handleIncomingClientEvent(
     classroomId: string,
     event: Partial<ClassroomRealtimeEvent>,
     actor: { id: string; name: string; role?: string }
-  ): ClassroomEvent | null {
+  ): Promise<ClassroomEvent | null> {
     const norm = classroomId.toUpperCase().trim();
 
     if (event.id && this.processedEventIds.has(event.id)) {
@@ -231,7 +231,7 @@ class RealtimeCoordinator {
     return this.broadcast(norm, eventType, payload, { id: actor.id, name: actor.name }, event.id);
   }
 
-  async getMissedEvents(classroomId: string, sinceSequence: number): ClassroomEvent[] {
+  async getMissedEvents(classroomId: string, sinceSequence: number): Promise<ClassroomEvent[]> {
     const norm = classroomId.toUpperCase().trim();
     return await classroomDb.getEventsSince(norm, sinceSequence);
   }

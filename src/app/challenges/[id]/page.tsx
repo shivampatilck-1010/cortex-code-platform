@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { 
@@ -16,25 +16,89 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import Editor from '@monaco-editor/react';
-import { CHALLENGES } from '@/lib/challenges/challenges-data';
-import { runTestCases } from '@/lib/execution/engine';
 import { TestCase } from '@/lib/execution/types';
+import { Challenge } from '@/lib/challenges/challenges-data'; // just for type
 
 export default function ChallengeSolverPage() {
   const params = useParams();
   const challengeId = (params?.id as string) || 'two-sum';
-  const challenge = CHALLENGES.find((c) => c.id === challengeId) || CHALLENGES[0];
 
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [language, setLanguage] = useState<'python' | 'cpp' | 'javascript'>('python');
-  const [code, setCode] = useState(challenge.starterTemplates.python || '');
+  const [code, setCode] = useState('');
   const [activeTab, setActiveTab] = useState<'desc' | 'hints'>('desc');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [testResults, setTestResults] = useState<TestCase[]>(challenge.testCases);
+  const [testResults, setTestResults] = useState<TestCase[]>([]);
   const [submissionVerdict, setSubmissionVerdict] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadWorkspace() {
+      try {
+        const res = await fetch('/api/v1/arena/workspace', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ challengeId, language })
+        });
+        if (!res.ok) throw new Error('Failed to load workspace');
+        const data = await res.json();
+        
+        setChallenge(data.challenge);
+        
+        // Find the main file
+        const mainFile = data.files.find((f: any) => f.name.startsWith('solution.'));
+        if (mainFile) {
+            setCode(mainFile.content);
+            const ext = mainFile.name.split('.').pop();
+            if (ext === 'py') setLanguage('python');
+            else if (ext === 'cpp' || ext === 'c') setLanguage('cpp');
+            else if (ext === 'js' || ext === 'ts') setLanguage('javascript');
+        } else if (data.challenge) {
+            setCode(data.challenge.starterTemplates[language] || '');
+        }
+
+        setTestResults(data.challenge?.testCases || []);
+        setLoading(false);
+      } catch (e: any) {
+        setError(e.message);
+        setLoading(false);
+      }
+    }
+    loadWorkspace();
+  }, [challengeId]);
 
   const handleLanguageChange = (newLang: 'python' | 'cpp' | 'javascript') => {
     setLanguage(newLang);
-    setCode(challenge.starterTemplates[newLang] || '');
+    if (challenge) {
+       setCode(challenge.starterTemplates[newLang] || '');
+    }
+  };
+
+  const handleRun = async () => {
+    setIsSubmitting(true);
+    setSubmissionVerdict(null);
+
+    try {
+      const res = await fetch('/api/v1/arena/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId,
+          language,
+          files: [{ id: 'sol', name: `solution.${language === 'python' ? 'py' : language === 'cpp' ? 'cpp' : 'js'}`, path: '/sol', content: code }]
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Run failed');
+
+      setTestResults(data.testResults);
+      setSubmissionVerdict(data.allPassed ? 'Accepted (Visible)' : 'Failed (Visible)');
+    } catch (e: any) {
+      setSubmissionVerdict(`Error: ${e.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -42,33 +106,47 @@ export default function ChallengeSolverPage() {
     setSubmissionVerdict(null);
 
     try {
-      const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
-        {
+      const res = await fetch('/api/v1/arena/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId,
           language,
-          files: [{ id: 'sol', name: `solution.${language === 'python' ? 'py' : language === 'cpp' ? 'cpp' : 'js'}`, path: '/sol', content: code }],
-        },
-        challenge.testCases
-      );
+          files: [{ id: 'sol', name: `solution.${language === 'python' ? 'py' : language === 'cpp' ? 'cpp' : 'js'}`, path: '/sol', content: code }]
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Submit failed');
 
-      setTestResults(evaluated);
-
-      if (passedCount === totalCount) {
-        setSubmissionVerdict(`Accepted! (${passedCount}/${totalCount} Test Cases Passed)`);
-        confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
+      setTestResults(JSON.parse(data.submission.testSummary));
+      
+      if (data.submission.status === 'PASSED') {
+         setSubmissionVerdict('Accepted (All Tests)');
+         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
       } else {
-        setSubmissionVerdict(`Failed: ${passedCount}/${totalCount} Test Cases Passed`);
+         setSubmissionVerdict(`Failed: ${data.submission.status}`);
       }
+    } catch (e: any) {
+      setSubmissionVerdict(`Error: ${e.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (loading) {
+     return <div className="min-h-screen bg-[#121316] text-gray-100 flex items-center justify-center font-mono">LOADING</div>;
+  }
+  
+  if (error || !challenge) {
+     return <div className="min-h-screen bg-[#121316] text-rose-400 flex items-center justify-center font-mono">{error || 'Challenge Not Found'}</div>;
+  }
+
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#121316] text-gray-100 font-sans select-none overflow-hidden">
+    <div className="min-h-screen bg-[#121316] text-gray-100 flex flex-col font-sans select-none">
       {/* Header */}
-      <header className="h-12 bg-[#18191c] border-b border-[#2a2c33] px-4 flex items-center justify-between text-xs">
-        <div className="flex items-center space-x-3">
-          <Link href="/challenges" className="flex items-center space-x-1.5 text-gray-400 hover:text-white transition">
+      <header className="h-14 bg-[#18191c] border-b border-[#2a2c33] px-6 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Link href="/challenges" className="flex items-center text-gray-400 hover:text-white transition space-x-1">
             <ArrowLeft className="w-4 h-4" />
             <span>Problem Set</span>
           </Link>
@@ -98,6 +176,17 @@ export default function ChallengeSolverPage() {
           </select>
 
           <button
+            onClick={handleRun}
+            disabled={isSubmitting}
+            className={`flex items-center space-x-1.5 px-4 py-1 rounded text-xs font-semibold shadow transition ${
+              isSubmitting ? 'bg-[#252830] text-gray-400 cursor-not-allowed' : 'bg-[#252830] hover:bg-[#2d313c] text-gray-300'
+            }`}
+          >
+            <Play className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-pulse' : ''}`} />
+            <span>Run</span>
+          </button>
+
+          <button
             onClick={handleSubmit}
             disabled={isSubmitting}
             className={`flex items-center space-x-1.5 px-4 py-1 rounded text-xs font-semibold shadow transition ${
@@ -105,7 +194,7 @@ export default function ChallengeSolverPage() {
             }`}
           >
             <Send className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
-            <span>{isSubmitting ? 'Evaluating Sandbox...' : 'Submit Solution'}</span>
+            <span>{isSubmitting ? 'Evaluating...' : 'Submit Solution'}</span>
           </button>
         </div>
       </header>
@@ -222,7 +311,7 @@ export default function ChallengeSolverPage() {
               {testResults.map((tc) => (
                 <div
                   key={tc.id}
-                  className={`p-2 rounded border flex items-center justify-between ${
+                  className={`p-2 rounded border flex flex-col ${
                     tc.passed === true
                       ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300'
                       : tc.passed === false
@@ -230,19 +319,31 @@ export default function ChallengeSolverPage() {
                       : 'bg-[#18191d] border-[#262832] text-gray-400'
                   }`}
                 >
-                  <div className="flex items-center space-x-2">
-                    {tc.passed === true ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : tc.passed === false ? (
-                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                    ) : (
-                      <span className="w-3 h-3 rounded-full border border-gray-600 inline-block" />
-                    )}
-                    <span className="font-semibold">{tc.name}</span>
-                    {tc.isHidden && <span className="text-[10px] text-gray-500">(Hidden Case)</span>}
-                  </div>
+                  <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        {tc.passed === true ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : tc.passed === false ? (
+                          <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                        ) : (
+                          <span className="w-3 h-3 rounded-full border border-gray-600 inline-block" />
+                        )}
+                        <span className="font-semibold">{tc.name}</span>
+                        {tc.isHidden && <span className="text-[10px] text-gray-500">(Hidden Case)</span>}
+                      </div>
 
-                  {tc.timeMs !== undefined && <span>{tc.timeMs} ms</span>}
+                      {tc.timeMs !== undefined && <span>{tc.timeMs} ms</span>}
+                  </div>
+                  {tc.passed === false && tc.error && (
+                      <div className="mt-2 text-rose-400 bg-rose-950/30 p-1.5 rounded font-mono text-[10px]">
+                          Error: {tc.error}
+                      </div>
+                  )}
+                  {tc.passed === false && !tc.isHidden && tc.actualStdout && (
+                      <div className="mt-1 text-gray-400 bg-[#131417] p-1.5 rounded font-mono text-[10px]">
+                          Output: {tc.actualStdout}
+                      </div>
+                  )}
                 </div>
               ))}
             </div>

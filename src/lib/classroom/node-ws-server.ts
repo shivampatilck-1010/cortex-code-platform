@@ -236,7 +236,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
         lastActive: Date.now(),
       };
 
-      clientMeta.unregisterRealtime = realtimeCoordinator.registerWsClient(classroomId, session);
+      clientMeta.unregisterRealtime = await realtimeCoordinator.registerWsClient(classroomId, session);
 
       // Send initial auth_ok handshake immediately with current authoritative sequence
       const currentSeq = (await classroomDb.getNextEventSequence(classroomId)) - 1;
@@ -395,7 +395,7 @@ async function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
     case 'resync_request': {
       const currentSeq = (await classroomDb.getNextEventSequence(normRoom)) - 1;
       const since = typeof msg.payload?.sinceSequence === 'number' ? msg.payload.sinceSequence : (msg.sequence || 0);
-      const missed = realtimeCoordinator.getMissedEvents(normRoom, since);
+      const missed = await realtimeCoordinator.getMissedEvents(normRoom, since);
 
       const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
       const filteredMissed = missed.filter((e) => {
@@ -567,7 +567,7 @@ async function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         }
       }
 
-      const recorded = realtimeCoordinator.handleIncomingClientEvent(
+      const recorded = await realtimeCoordinator.handleIncomingClientEvent(
         normRoom,
         eventData,
         { id: client.participantId, name: client.participantName, role: client.participantRole }

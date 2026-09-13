@@ -133,7 +133,7 @@ export default function SubmissionReviewPage() {
                 id: 'main',
                 name: `main.${submission.language}`,
                 path: `/main.${submission.language}`,
-                content: submission.code
+                content: submission.code || ''
               }]}
               activeFileId="main"
               onSelectFile={() => {}}

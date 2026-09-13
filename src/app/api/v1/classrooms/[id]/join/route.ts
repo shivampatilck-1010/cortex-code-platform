@@ -11,11 +11,11 @@ export async function POST(
     const { id } = await params;
     const user = await ClassroomAuth.getCurrentUser(req);
     const body = await req.json().catch(() => ({}));
-    const { joinCode } = body;
+    const { joincode } = body;
 
     let classroom = await classroomDb.getClassroom(id);
-    if (!classroom && joinCode) {
-      classroom = await classroomDb.getClassroomByJoinCode(joinCode);
+    if (!classroom && joincode) {
+      classroom = await classroomDb.getClassroomByJoinCode(joincode);
     }
 
     if (!classroom) {
@@ -30,7 +30,7 @@ export async function POST(
       return NextResponse.json({ error: 'Joining is currently disabled for this classroom by the instructor.' }, { status: 400 });
     }
 
-    if (joinCode && classroom.joinCode.toUpperCase() !== joinCode.toUpperCase().trim()) {
+    if (joincode && (classroom.joincode || '').toUpperCase() !== joincode.toUpperCase().trim()) {
       return NextResponse.json({ error: 'Invalid class code. Please check with your instructor.' }, { status: 400 });
     }
 

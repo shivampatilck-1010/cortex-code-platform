@@ -33,7 +33,7 @@ export async function POST(
     const classroom = await classroomDb.getClassroom(id);
     const isTeacher = classroom?.teacherId === user.id || auth.context?.membership?.role === 'teacher';
     const body = await req.json();
-    const { action, title, topic, language, starterCode, sharedCode, isBroadcastingCode } = body;
+    const { action, title, topic, language, startercode, sharedcode, isBroadcastingCode } = body;
 
     // 1. Teacher starts live coding session
     if (action === 'start') {
@@ -49,8 +49,8 @@ export async function POST(
         title: title || 'Interactive Code Lab',
         topic: topic || 'Algorithm Exploration',
         language: language || 'cpp',
-        starterCode: starterCode || '// Write code together\n',
-        sharedCode: starterCode || '// Write code together\n',
+        startercode: startercode || '// Write code together\n',
+        sharedcode: startercode || '// Write code together\n',
         isBroadcastingCode: true,
         startedAt: Date.now(),
         durationMinutes: 90,
@@ -83,7 +83,7 @@ export async function POST(
 
       await classroomDb.updateLiveSessionCode(
         activeSession.id,
-        sharedCode ?? activeSession.sharedCode,
+        sharedcode ?? activeSession.sharedcode,
         isBroadcastingCode !== undefined ? isBroadcastingCode : activeSession.isBroadcastingCode
       );
 
@@ -91,7 +91,7 @@ export async function POST(
         id,
         'code.updated',
         {
-          sharedCode,
+          sharedcode,
           isBroadcastingCode,
           senderId: user.id,
           senderName: user.name,

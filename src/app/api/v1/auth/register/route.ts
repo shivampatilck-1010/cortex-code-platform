@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Role provisioning
-    let userRole = 'student';
+    let userRole: 'student' | 'teacher' | 'admin' = 'student';
+    
     if (role === 'teacher') {
       // Secure teacher provisioning check
       if (inviteCode !== 'cortex-prof-2026') {
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       email: normalizedEmail,
       role: userRole,
-      status: 'active',
+      status: 'active' as const,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };

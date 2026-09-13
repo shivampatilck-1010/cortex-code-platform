@@ -106,7 +106,7 @@ export default function ClassroomHubPage() {
        return;
     }
     
-    const existingId = localStorage.getItem('cortex_user_profile') ? JSON.parse(localStorage.getItem('cortex_user_profile')).id : `usr_${Date.now()}_${Math.random().toString(36).substring(2,6)}`;
+    const existingId = localStorage.getItem('cortex_user_profile') ? JSON.parse(localStorage.getItem('cortex_user_profile') || '{}').id : `usr_${Date.now()}_${Math.random().toString(36).substring(2,6)}`;
     
     const newProfile = {
       id: existingId,
@@ -184,11 +184,11 @@ export default function ClassroomHubPage() {
   const [newAnnTitle, setNewAnnTitle] = useState('');
   const [newAnnContent, setNewAnnContent] = useState('');
   const [newAnnPinned, setNewAnnPinned] = useState(false);
-  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [joincodeInput, setJoinCodeInput] = useState('');
   const [createClassForm, setCreateClassForm] = useState({
     name: '',
     subject: 'Computer Science',
-    courseCode: 'CS-301',
+    coursecode: 'CS-301',
     section: 'Sec 01',
     description: '',
   });
@@ -196,7 +196,7 @@ export default function ClassroomHubPage() {
   // Settings tab form state
   const [settingsForm, setSettingsForm] = useState({
     name: '',
-    courseCode: '',
+    coursecode: '',
     section: '',
     subject: '',
     academicYear: '2025-2026',
@@ -214,7 +214,7 @@ export default function ClassroomHubPage() {
     description: '',
     instructions: '',
     language: 'python',
-    starterCode: '# Write code here\n',
+    startercode: '# Write code here\n',
     difficulty: 'Intermediate',
     maxMarks: 100,
     testInput1: '4\n2 7 11 15\n9',
@@ -347,7 +347,7 @@ export default function ClassroomHubPage() {
         setAssignments(asgData.assignments);
         if (!selectedAssignment && asgData.assignments.length > 0) {
           setSelectedAssignment(asgData.assignments[0]);
-          setStudentCodeInput(asgData.assignments[0].starterCode || '');
+          setStudentCodeInput(asgData.assignments[0].startercode || '');
         }
       }
       if (subData.submissions) setSubmissions(subData.submissions);
@@ -371,7 +371,7 @@ export default function ClassroomHubPage() {
       // Initialize settings form
       setSettingsForm({
         name: selectedClassroom.name || '',
-        courseCode: selectedClassroom.courseCode || '',
+        coursecode: selectedClassroom.coursecode || '',
         section: selectedClassroom.section || '',
         subject: selectedClassroom.subject || '',
         academicYear: selectedClassroom.academicYear || '2025-2026',
@@ -587,9 +587,9 @@ export default function ClassroomHubPage() {
           }
 
           case 'classroom.code_regenerated': {
-            if (payload.classroomId === selectedClassroom.id && payload.joinCode) {
-              setSelectedClassroom((prev) => prev ? { ...prev, joinCode: payload.joinCode } : null);
-              showToast(`New Class Join Code: ${payload.joinCode}`);
+            if (payload.classroomId === selectedClassroom.id && payload.joincode) {
+              setSelectedClassroom((prev) => prev ? { ...prev, joincode: payload.joincode } : null);
+              showToast(`New Class Join Code: ${payload.joincode}`);
             }
             break;
           }
@@ -739,7 +739,7 @@ export default function ClassroomHubPage() {
       if (data.classroom) {
         setIsCreateClassModalOpen(false);
         showToast(`Created ${data.classroom.name}`);
-        setCreateClassForm({ name: '', subject: 'Computer Science', courseCode: 'CS-301', section: 'Sec 01', description: '' });
+        setCreateClassForm({ name: '', subject: 'Computer Science', coursecode: 'CS-301', section: 'Sec 01', description: '' });
         await fetchClassrooms();
         setSelectedClassroom(data.classroom);
       }
@@ -751,12 +751,12 @@ export default function ClassroomHubPage() {
   // Handler: Join Classroom
   const handleJoinClassroom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinCodeInput.trim()) return;
+    if (!joincodeInput.trim()) return;
     try {
       const res = await fetch('/api/v1/classrooms/join', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ joinCode: joinCodeInput.trim() }),
+        body: JSON.stringify({ joincode: joincodeInput.trim() }),
       });
       const data = await res.json();
       if (res.ok && data.classroom) {
@@ -782,10 +782,10 @@ export default function ClassroomHubPage() {
         headers: getAuthHeaders(),
       });
       const data = await res.json();
-      if (res.ok && data.joinCode) {
-        setSelectedClassroom((prev) => prev ? { ...prev, joinCode: data.joinCode } : null);
-        setClassrooms((prev) => prev.map((c) => c.id === selectedClassroom.id ? { ...c, joinCode: data.joinCode } : c));
-        showToast(`Generated new join code: ${data.joinCode}`);
+      if (res.ok && data.joincode) {
+        setSelectedClassroom((prev) => prev ? { ...prev, joincode: data.joincode } : null);
+        setClassrooms((prev) => prev.map((c) => c.id === selectedClassroom.id ? { ...c, joincode: data.joincode } : c));
+        showToast(`Generated new join code: ${data.joincode}`);
       } else {
         showToast(data.error || 'Failed to regenerate code');
       }
@@ -849,7 +849,7 @@ export default function ClassroomHubPage() {
         headers: getAuthHeaders(),
         body: JSON.stringify({
           name: settingsForm.name,
-          courseCode: settingsForm.courseCode,
+          coursecode: settingsForm.coursecode,
           section: settingsForm.section,
           subject: settingsForm.subject,
           academicYear: settingsForm.academicYear,
@@ -913,7 +913,7 @@ export default function ClassroomHubPage() {
           description: createAsgForm.description,
           instructions: createAsgForm.instructions,
           language: createAsgForm.language,
-          starterCode: createAsgForm.starterCode,
+          startercode: createAsgForm.startercode,
           difficulty: createAsgForm.difficulty,
           maxMarks: createAsgForm.maxMarks,
           testCases: [
@@ -980,7 +980,7 @@ export default function ClassroomHubPage() {
 
   const handleCopyInviteLink = () => {
     if (!selectedClassroom) return;
-    const url = typeof window !== 'undefined' ? `${window.location.origin}/classroom?join=${selectedClassroom.joinCode}` : '';
+    const url = typeof window !== 'undefined' ? `${window.location.origin}/classroom?join=${selectedClassroom.joincode}` : '';
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -1647,7 +1647,7 @@ export default function ClassroomHubPage() {
                           key={asg.id}
                           onClick={() => {
                             setSelectedAssignment(asg);
-                            setStudentCodeInput(asg.starterCode || '');
+                            setStudentCodeInput(asg.startercode || '');
                             setLastSubmissionResult(null);
                           }}
                           className={`w-full text-left p-3 rounded-lg border transition space-y-1.5 ${
@@ -2056,8 +2056,8 @@ export default function ClassroomHubPage() {
                         <input
                           type="text"
                           required
-                          value={settingsForm.courseCode}
-                          onChange={(e) => setSettingsForm({ ...settingsForm, courseCode: e.target.value })}
+                          value={settingsForm.coursecode}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, coursecode: e.target.value })}
                           className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-white font-mono"
                         />
                       </div>
@@ -2106,7 +2106,7 @@ export default function ClassroomHubPage() {
                       </div>
                       <div className="flex items-center space-x-2">
                         <span className="font-mono text-base font-bold text-[#ff9100] px-3 py-1 bg-[#13141a] border border-[#252838] rounded-lg">
-                          {selectedClassroom.joinCode}
+                          {selectedClassroom.joincode}
                         </span>
                         <button
                           type="button"
@@ -2270,8 +2270,8 @@ export default function ClassroomHubPage() {
                   <label className="text-gray-400 font-medium">Course Code:</label>
                   <input
                     type="text"
-                    value={createClassForm.courseCode}
-                    onChange={(e) => setCreateClassForm({ ...createClassForm, courseCode: e.target.value })}
+                    value={createClassForm.coursecode}
+                    onChange={(e) => setCreateClassForm({ ...createClassForm, coursecode: e.target.value })}
                     className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white font-mono"
                   />
                 </div>
@@ -2330,7 +2330,7 @@ export default function ClassroomHubPage() {
                   type="text"
                   required
                   placeholder="e.g. CS201-LIVE"
-                  value={joinCodeInput}
+                  value={joincodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                   className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white font-mono text-center tracking-widest uppercase text-sm"
                 />

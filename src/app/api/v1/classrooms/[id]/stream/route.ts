@@ -26,7 +26,7 @@ export async function GET(
   let keepAliveTimer: any = null;
 
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       const encoder = new TextEncoder();
 
       const sendEvent = (data: string) => {
@@ -49,7 +49,7 @@ export async function GET(
 
       // 2. Reconnection Replay (Catchup)
       if (lastClientSeq > 0) {
-        const missedEvents = realtimeCoordinator.getMissedEvents(id, lastClientSeq);
+        const missedEvents = await realtimeCoordinator.getMissedEvents(id, lastClientSeq);
         for (const evt of missedEvents) {
           sendEvent(JSON.stringify(evt));
         }

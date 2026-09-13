@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { projectDb } from '@/lib/project/db';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const project = await projectDb.getProject(id);
     
     if (!project) {
@@ -29,14 +29,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const project = await projectDb.getProject(id);
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (project.ownerId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -49,14 +49,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const project = await projectDb.getProject(id);
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (project.ownerId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

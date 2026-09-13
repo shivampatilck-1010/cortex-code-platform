@@ -78,7 +78,7 @@ export async function POST(
       'submission.started',
       {
         assignmentId: asgId,
-        studentId: user.id,
+        studentId: user.id || '',
         studentName: user.name,
         timestamp: now,
       },
@@ -102,7 +102,7 @@ export async function POST(
     let mostSimilarStudent = '';
     for (const priorSub of existingSubs) {
       if (priorSub.studentId !== user.id) {
-        const sim = calculateCodeSimilarity(code, priorSub.code);
+        const sim = calculateCodeSimilarity(code, priorSub.code || '');
         if (sim > maxSim) {
           maxSim = sim;
           mostSimilarStudent = priorSub.studentName;
@@ -118,7 +118,7 @@ export async function POST(
       assignmentId: asgId,
       assignmentTitle: assignment.title,
       classroomId: id,
-      studentId: user.id,
+      studentId: user.id || '',
       studentName: user.name,
       code,
       language: language || assignment.language,
@@ -141,7 +141,7 @@ export async function POST(
       grade: {
         id: `grd_${submissionId}`,
         submissionId,
-        studentId: user.id,
+        studentId: user.id || '',
         assignmentId: asgId,
         automaticScore: Math.round(finalCalculatedScore),
         manualAdjustment: 0,

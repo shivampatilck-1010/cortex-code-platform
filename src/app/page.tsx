@@ -568,7 +568,7 @@ export default function CloudIDEPage() {
       }
 
       const res = await executeInCloudSandbox({
-        projectId: projectId as string,
+        
         language: currentLang.id,
         files: [], // Sent by backend now
         entrypoint: mainFile?.name || activeFile.name,
@@ -637,7 +637,7 @@ export default function CloudIDEPage() {
 
       const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
         {
-          projectId: projectId as string,
+          
           language: currentLang.id,
           files: [],
           entrypoint: activeFile.name,
@@ -669,7 +669,7 @@ export default function CloudIDEPage() {
       }
 
       const res = await benchmarkExecution({
-        projectId: projectId as string,
+        
         language: currentLang.id,
         files: [],
         entrypoint: activeFile.name,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
+import { User } from '@/lib/classroom/models';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedIdentifier = identifier.trim();
-    let user = null;
+    let user: User | null = null;
 
     if (normalizedIdentifier.includes('@')) {
       user = await classroomDb.getUserByEmail(normalizedIdentifier.toLowerCase());

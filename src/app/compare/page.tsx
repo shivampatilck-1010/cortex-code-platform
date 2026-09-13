@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { SUPPORTED_LANGUAGES, getLanguageConfig } from '@/config/languages';
-import { executeInCloudSandbox } from '@/lib/execution/engine';
+
 import { ExecutionResult } from '@/lib/execution/types';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 
@@ -316,93 +316,75 @@ export default function ComparePage() {
   };
 
   // Run Code A independently
-  const handleRunA = async () => {
-    if (isRunningA || isComparing) return;
-    setIsRunningA(true);
-    try {
-      const res = await executeInCloudSandbox({
-        language: langA,
-        files: [{ id: 'a', name: getLanguageConfig(langA).defaultFileName, path: '/a', content: codeA }],
-        stdin: customStdin,
-      }).catch((err) => ({
-        status: 'runtime_error' as const,
-        stdout: '',
-        stderr: err?.message || 'Execution error in Code A',
-        exitCode: 1,
-        executionTimeMs: 0,
-        memoryUsageMb: 0,
-        timestamp: new Date().toISOString(),
-        provider: 'cloud_sandbox' as const,
-      }));
-      setResultA(res);
-    } finally {
-      setIsRunningA(false);
-    }
-  };
+  
 
   // Run Code B independently
-  const handleRunB = async () => {
-    if (isRunningB || isComparing) return;
-    setIsRunningB(true);
-    try {
-      const res = await executeInCloudSandbox({
-        language: langB,
-        files: [{ id: 'b', name: getLanguageConfig(langB).defaultFileName, path: '/b', content: codeB }],
-        stdin: customStdin,
-      }).catch((err) => ({
-        status: 'runtime_error' as const,
-        stdout: '',
-        stderr: err?.message || 'Execution error in Code B',
-        exitCode: 1,
-        executionTimeMs: 0,
-        memoryUsageMb: 0,
-        timestamp: new Date().toISOString(),
-        provider: 'cloud_sandbox' as const,
-      }));
-      setResultB(res);
-    } finally {
-      setIsRunningB(false);
-    }
-  };
+  
 
   // Run Both in Parallel (Benchmark)
-  const handleRunBenchmark = async () => {
-    if (isComparing) return;
-    setIsComparing(true);
+    const handleRunBenchmark = async () => {
+    handleRun('BOTH');
+  };
+
+  const handleRun = async (runType: 'A' | 'B' | 'BOTH') => {
+    if (isComparing || isRunningA || isRunningB) return;
+    
+    if (runType === 'A' || runType === 'BOTH') setIsRunningA(true);
+    if (runType === 'B' || runType === 'BOTH') setIsRunningB(true);
+    if (runType === 'BOTH') setIsComparing(true);
+
     try {
-      const [resA, resB] = await Promise.all([
-        executeInCloudSandbox({
-          language: langA,
-          files: [{ id: 'a', name: getLanguageConfig(langA).defaultFileName, path: '/a', content: codeA }],
-          stdin: customStdin,
-        }).catch((err) => ({
-          status: 'runtime_error' as const,
+      const benchmarkId = mode === 'presets' ? selectedPreset : roomId || 'custom';
+      const fileA = { id: 'solA', name: getLanguageConfig(langA).defaultFileName, path: '/a', content: codeA };
+      const fileB = { id: 'solB', name: getLanguageConfig(langB).defaultFileName, path: '/b', content: codeB };
+
+      const res = await fetch('/api/v1/benchmark/run', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+            benchmarkId,
+            runType,
+            langA,
+            langB,
+            filesA: [fileA],
+            filesB: [fileB]
+         })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Benchmark failed');
+
+      if (data.resultA) setResultA(data.resultA);
+      if (data.resultB) setResultB(data.resultB);
+
+    } catch (err: any) {
+      console.error(err);
+      if (runType === 'A' || runType === 'BOTH') {
+         setResultA({
+          status: 'runtime_error',
           stdout: '',
           stderr: err?.message || 'Execution error in Code A',
           exitCode: 1,
           executionTimeMs: 0,
           memoryUsageMb: 0,
           timestamp: new Date().toISOString(),
-          provider: 'cloud_sandbox' as const,
-        })),
-        executeInCloudSandbox({
-          language: langB,
-          files: [{ id: 'b', name: getLanguageConfig(langB).defaultFileName, path: '/b', content: codeB }],
-          stdin: customStdin,
-        }).catch((err) => ({
-          status: 'runtime_error' as const,
+          provider: 'cloud_sandbox',
+        } as ExecutionResult);
+      }
+      if (runType === 'B' || runType === 'BOTH') {
+         setResultB({
+          status: 'runtime_error',
           stdout: '',
           stderr: err?.message || 'Execution error in Code B',
           exitCode: 1,
           executionTimeMs: 0,
           memoryUsageMb: 0,
           timestamp: new Date().toISOString(),
-          provider: 'cloud_sandbox' as const,
-        })),
-      ]);
-      setResultA(resA);
-      setResultB(resB);
+          provider: 'cloud_sandbox',
+        } as ExecutionResult);
+      }
     } finally {
+      setIsRunningA(false);
+      setIsRunningB(false);
       setIsComparing(false);
     }
   };
@@ -681,7 +663,7 @@ Please provide a concise, structured comparative analysis with:
               </select>
 
               <button
-                onClick={handleRunA}
+                onClick={() => handleRun('A')}
                 disabled={isRunningA || isComparing}
                 className="px-2 py-0.5 rounded bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 text-[11px] font-semibold transition border border-cyan-700/50 flex items-center space-x-1"
                 title="Run Code A only"
@@ -751,7 +733,7 @@ Please provide a concise, structured comparative analysis with:
               </select>
 
               <button
-                onClick={handleRunB}
+                onClick={() => handleRun('B')}
                 disabled={isRunningB || isComparing}
                 className="px-2 py-0.5 rounded bg-amber-900/40 hover:bg-amber-800/60 text-amber-300 text-[11px] font-semibold transition border border-amber-700/50 flex items-center space-x-1"
                 title="Run Code B only"

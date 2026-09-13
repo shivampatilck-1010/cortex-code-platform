@@ -2,6 +2,7 @@
 const nextConfig = {
   
   reactStrictMode: false,
+  serverExternalPackages: ['node:sqlite'],
   typescript: {
     ignoreBuildErrors: true,
   },

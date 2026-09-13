@@ -11,14 +11,14 @@ function sanitizePath(filePath: string): string {
   return normalized;
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string, fileId: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string, fileId: string }> }) {
   try {
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     }
 
-    const { id: projectId, fileId } = params;
+    const { id: projectId, fileId } = await params;
     
     // Auth & ownership check
     const project = await projectDb.getProject(projectId);
@@ -50,14 +50,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string, fileId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string, fileId: string }> }) {
   try {
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     }
 
-    const { id: projectId, fileId } = params;
+    const { id: projectId, fileId } = await params;
     
     const project = await projectDb.getProject(projectId);
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });

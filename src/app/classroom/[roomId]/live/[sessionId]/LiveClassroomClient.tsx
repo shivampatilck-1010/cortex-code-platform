@@ -333,10 +333,10 @@ export default function LiveClassroomClient({ roomId, sessionId }: { roomId: str
               </div>
               <div className="flex-1 overflow-auto p-4 font-mono text-sm">
                 {teacherOutput ? (
-                  teacherOutput.success ? (
-                    <div className="text-emerald-400 whitespace-pre-wrap">{teacherOutput.output}</div>
+                  teacherOutput.status === 'success' ? (
+                    <div className="text-emerald-400 whitespace-pre-wrap">{teacherOutput.stdout}</div>
                   ) : (
-                    <div className="text-red-400 whitespace-pre-wrap">{teacherOutput.error}</div>
+                    <div className="text-red-400 whitespace-pre-wrap">{teacherOutput.stderr}</div>
                   )
                 ) : (
                   <div className="text-gray-600 italic">No output yet. Run the code to see results.</div>

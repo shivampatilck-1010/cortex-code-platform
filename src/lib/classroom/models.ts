@@ -21,7 +21,10 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  cortex_id?: string;
+  cortexId?: string;
   role: UserGlobalRole;
+  password_hash?: string;
   avatar?: string;
   status: 'active' | 'suspended';
   createdAt: number;
@@ -42,8 +45,6 @@ export interface Classroom {
   teacherName: string;
   image?: string;
   joincode?: string; // Legacy fallback
-  projectId?: string;
-  snapshotJson?: string; // Stringified array of files at submission time
   joinEnabled: boolean;
   status: ClassroomStatus;
   createdAt: number;
@@ -246,8 +247,6 @@ export interface LiveClassSession {
   projectId?: string;
   snapshotJson?: string; // Stringified array of files at submission time
   sharedcode?: string; // Legacy fallback
-  projectId?: string;
-  snapshotJson?: string; // Stringified array of files at submission time
   isBroadcastingCode: boolean;
   startedAt: number;
   endedAt?: number;
@@ -343,7 +342,6 @@ export interface ClassroomAnalytics {
     studentId: string;
     studentName: string;
     reason: string;
-    averageScore: number;
   }>;
 }
 

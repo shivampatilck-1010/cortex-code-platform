@@ -99,12 +99,12 @@ async function runTests() {
     // 6. Classroom joining
     const getCls = await fetch(`${BASE_URL}/classrooms/${classId}`, { headers: { 'Cookie': profSession }});
     const clsData = await getCls.json();
-    const joinCode = clsData.classroom?.joinCode || classId;
+    const joinCode = (clsData.classroom?.joincode || clsData.classroom?.joinCode) || classId;
 
     const realJoinRes = await fetch(`${BASE_URL}/classrooms/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': stuSession },
-      body: JSON.stringify({ joinCode: joinCode })
+      body: JSON.stringify({ joincode: joinCode, joinCode: joinCode })
     });
 
     if (realJoinRes.ok) {

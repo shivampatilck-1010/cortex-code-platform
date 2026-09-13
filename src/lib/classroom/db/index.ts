@@ -96,7 +96,7 @@ class ClassroomDatabase {
     if (this.initialized) return;
 
     // Check for D1 first (production Cloudflare)
-    let d1Binding = null;
+    let d1Binding: any = null;
     if (typeof process !== 'undefined' && process.env && process.env.DB) {
       d1Binding = process.env.DB;
     } else if (typeof globalThis !== 'undefined' && (globalThis as any).env && (globalThis as any).env.DB) {
@@ -512,13 +512,13 @@ class ClassroomDatabase {
       classroom.name || (classroom as any).title || 'Untitled Classroom',
       classroom.subject || '',
       classroom.description || '',
-      classroom.courseCode || (classroom as any).code || '',
+      classroom.coursecode || (classroom as any).code || '',
       classroom.academicYear || '',
       classroom.section || '',
       classroom.teacherId,
       classroom.teacherName || '',
       classroom.image || null,
-      classroom.joinCode || (classroom as any).code || '',
+      classroom.joincode || classroom.joinCode || (classroom as any).code || '',
       classroom.joinEnabled !== undefined ? (classroom.joinEnabled ? 1 : 0) : 1,
       classroom.status || 'active',
       classroom.createdAt || Date.now(),
@@ -539,9 +539,9 @@ class ClassroomDatabase {
     return this.mapClassroom(row);
   }
 
-  async getClassroomByJoinCode(joinCode: string): Promise<Classroom | null> {
+  async getClassroomByJoinCode(joincode: string): Promise<Classroom | null> {
     if (!(await this.getDb())) return null;
-    const norm = joinCode.trim().toUpperCase();
+    const norm = joincode.trim().toUpperCase();
     const row = await (await this.getDb()).prepare('SELECT * FROM classrooms WHERE UPPER(join_code) = ?').get(norm) as any;
     if (!row) return null;
     return this.mapClassroom(row);
@@ -605,13 +605,13 @@ class ClassroomDatabase {
       name: row.name,
       subject: row.subject,
       description: row.description,
-      courseCode: row.course_code,
+      coursecode: row.course_code,
       academicYear: row.academic_year,
       section: row.section,
       teacherId: row.teacher_id,
       teacherName: row.teacher_name,
       image: row.image || undefined,
-      joinCode: row.join_code,
+      joincode: row.join_code,
       joinEnabled: Boolean(row.join_enabled),
       status: row.status as any,
       createdAt: row.created_at,
@@ -918,7 +918,7 @@ class ClassroomDatabase {
       asg.instructions,
       asg.type,
       asg.language,
-      asg.starterCode || '',
+      asg.startercode || '',
       asg.difficulty || 'medium',
       asg.maxMarks ?? 100,
       asg.dueAt || null,
@@ -963,7 +963,7 @@ class ClassroomDatabase {
       instructions: row.instructions,
       type: row.type as any,
       language: row.language,
-      starterCode: row.starter_code,
+      startercode: row.starter_code,
       difficulty: row.difficulty as any,
       maxMarks: row.max_marks,
       dueAt: row.due_at,
@@ -1171,8 +1171,8 @@ class ClassroomDatabase {
       session.title,
       session.topic,
       session.language,
-      session.starterCode,
-      session.sharedCode,
+      session.startercode,
+      session.sharedcode,
       session.isBroadcastingCode ? 1 : 0,
       session.startedAt,
       session.endedAt || null,
@@ -1193,8 +1193,8 @@ class ClassroomDatabase {
       title: row.title,
       topic: row.topic,
       language: row.language,
-      starterCode: row.starter_code,
-      sharedCode: row.shared_code,
+      startercode: row.starter_code,
+      sharedcode: row.shared_code,
       isBroadcastingCode: Boolean(row.is_broadcasting_code),
       startedAt: row.started_at,
       endedAt: row.ended_at || undefined,
@@ -1204,9 +1204,9 @@ class ClassroomDatabase {
     };
   }
 
-  async updateLiveSessionCode(sessionId: string, sharedCode: string, isBroadcasting: boolean) {
+  async updateLiveSessionCode(sessionId: string, sharedcode: string, isBroadcasting: boolean) {
     if (!(await this.getDb())) return;
-    await (await this.getDb()).prepare('UPDATE live_sessions SET shared_code = ?, is_broadcasting_code = ? WHERE id = ?').run(sharedCode, isBroadcasting ? 1 : 0, sessionId);
+    await (await this.getDb()).prepare('UPDATE live_sessions SET shared_code = ?, is_broadcasting_code = ? WHERE id = ?').run(sharedcode, isBroadcasting ? 1 : 0, sessionId);
   }
 
   async endLiveSession(sessionId: string) {

@@ -58,21 +58,21 @@ export class ClassroomAuth {
     if (saltHex) {
       salt = new Uint8Array(saltHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
     } else {
-      salt = crypto.getRandomValues(new Uint8Array(16));
+      salt = crypto.getRandomValues((new Uint8Array(16) as unknown as Uint8Array) as unknown as Uint8Array);
     }
     
     const keyMaterial = await crypto.subtle.importKey(
-      'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits', 'deriveKey']
+      'raw', enc.encode(password).buffer as ArrayBuffer, { name: 'PBKDF2' }, false, ['deriveBits', 'deriveKey']
     );
     
     const hashBuffer = await crypto.subtle.deriveBits(
-      { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
+      { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations: 100000, hash: 'SHA-256' },
       keyMaterial,
       256
     );
     
     const saltStr = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
-    const hashStr = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const hashStr = Array.from(new Uint8Array(hashBuffer as any)).map(b => b.toString(16).padStart(2, '0')).join('');
     
     return `${saltStr}:${hashStr}`;
   }

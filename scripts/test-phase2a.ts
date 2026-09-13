@@ -7,7 +7,7 @@ async function logAuthAndRunTests() {
   const u1Res = await fetch(`${APP_URL}/api/v1/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Alice', email: 'alice.phase2.20260913135733@example.com', password: 'Password123!', confirmPassword: 'Password123!', cortexId: 'alice' + Math.random().toString(36).substring(7), role: 'student' })
+    body: JSON.stringify({ name: 'Alice', email: 'alice.phase2.27840.' + Date.now() + Math.random() + '@example.com', password: 'Password123!', confirmPassword: 'Password123!', cortexId: 'alice' + Math.random().toString(36).substring(7), role: 'student' })
   });
   const u1Cookies = u1Res.headers.get('set-cookie');
   if (!u1Cookies) throw new Error('User 1 failed to register: ' + (await u1Res.text()));
@@ -15,7 +15,7 @@ async function logAuthAndRunTests() {
   const u2Res = await fetch(`${APP_URL}/api/v1/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Bob', email: 'bob.phase2.20260913135733@example.com', password: 'Password123!', confirmPassword: 'Password123!', cortexId: 'alice' + Math.random().toString(36).substring(7), role: 'student' })
+    body: JSON.stringify({ name: 'Bob', email: 'bob.phase2.27840.' + Date.now() + Math.random() + '@example.com', password: 'Password123!', confirmPassword: 'Password123!', cortexId: 'alice' + Math.random().toString(36).substring(7), role: 'student' })
   });
   const u2Cookies = u2Res.headers.get('set-cookie');
   if (!u2Cookies) throw new Error('User 2 failed to register: ' + (await u2Res.text()));
