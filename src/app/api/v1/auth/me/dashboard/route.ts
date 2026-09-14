@@ -62,6 +62,9 @@ export async function GET(req: NextRequest) {
       recentExecutions,
     });
   } catch (err: any) {
+    if (err?.message?.includes('Authentication required')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

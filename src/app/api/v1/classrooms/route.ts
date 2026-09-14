@@ -6,7 +6,8 @@ import { Classroom } from '@/lib/classroom/models';
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await ClassroomAuth.getCurrentUser(req);
+    const user = await ClassroomAuth.authenticateRequest(req);
+    if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const classrooms = await classroomDb.listClassroomsForUser(user.id);
     return NextResponse.json({ classrooms });
   } catch (err: any) {
@@ -16,8 +17,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await ClassroomAuth.getCurrentUser(req);
+    // CSRF: Validate Content-Type to reject cross-origin form posts
+    const ct = req.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      return NextResponse.json({ error: 'Invalid Content-Type. Expected application/json.' }, { status: 415 });
+    }
+
+    const user = await ClassroomAuth.authenticateRequest(req);
+    if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     if (user.role !== 'teacher') return NextResponse.json({ error: 'Only professors can create classrooms.' }, { status: 403 });
+
     const body = await req.json();
     const { name, code, subject, description, settings } = body;
 

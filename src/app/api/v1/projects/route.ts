@@ -21,6 +21,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // CSRF: Validate Content-Type to reject cross-origin form posts
+    const ct = req.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      return NextResponse.json({ error: 'Invalid Content-Type. Expected application/json.' }, { status: 415 });
+    }
+
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });

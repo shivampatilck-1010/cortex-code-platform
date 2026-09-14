@@ -54,6 +54,12 @@ function parseGeminiJson(rawText: string): any {
 
 export async function POST(req: NextRequest) {
   try {
+    // CSRF: Validate Content-Type to reject cross-origin form posts
+    const contentType = req.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return NextResponse.json({ error: 'Invalid Content-Type. Expected application/json.' }, { status: 415 });
+    }
+
     const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
     const rateCheck = aiRateLimiter.checkRateLimit(ip);
     if (!rateCheck.allowed) {

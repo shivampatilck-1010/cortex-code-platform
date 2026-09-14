@@ -18,6 +18,12 @@ const CANDIDATE_MODELS = [
 
 export async function POST(req: NextRequest) {
   try {
+    // CSRF: Validate Content-Type to reject cross-origin form posts
+    const contentType = req.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return NextResponse.json({ error: 'Invalid Content-Type. Expected application/json.' }, { status: 415 });
+    }
+
     const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
     const rateCheck = aiRateLimiter.checkRateLimit(ip);
     if (!rateCheck.allowed) {
@@ -28,11 +34,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { userMessage = '', code = '', language = 'javascript', apiKey } = body as {
+    const { userMessage = '', code = '', language = 'javascript', apiKey, classroomId, assignmentId } = body as {
       userMessage: string;
       code: string;
       language: string;
       apiKey?: string;
+      classroomId?: string;
+      assignmentId?: string;
     };
 
     if (userMessage.length > 16384) {
@@ -40,6 +48,46 @@ export async function POST(req: NextRequest) {
     }
     if (code.length > 65536) {
       return NextResponse.json({ error: 'Code context exceeds maximum length of 64KB.' }, { status: 413 });
+    }
+
+    // Classroom AI policy enforcement: if caller provides classroomId or assignmentId,
+    // verify server-side membership and enforce aiPolicy. Prevents students from bypassing
+    // teacher-configured AI restrictions — never trust client-controlled flags.
+    if (classroomId || assignmentId) {
+      const { ClassroomAuth } = await import('@/lib/classroom/auth');
+      const { classroomDb } = await import('@/lib/classroom/db');
+
+      const user = await ClassroomAuth.authenticateRequest(req);
+      if (!user) {
+        return NextResponse.json({ error: 'Authentication required for classroom AI context.' }, { status: 401 });
+      }
+
+      if (classroomId) {
+        const membershipResult = await ClassroomAuth.verifyClassroomMembership(user, classroomId);
+        if (!membershipResult.authorized) {
+          return NextResponse.json({ error: 'Not a member of this classroom.' }, { status: 403 });
+        }
+
+        if (assignmentId) {
+          const assignment = await classroomDb.getAssignment(assignmentId);
+          // Strict: assignment must belong to the provided classroom (prevents cross-classroom context leakage)
+          if (!assignment || assignment.classroomId !== classroomId) {
+            return NextResponse.json({ error: 'Assignment not found in this classroom.' }, { status: 404 });
+          }
+
+          // Enforce aiPolicy server-side — disabled means disabled regardless of client payload
+          const isTeacher = membershipResult.role === 'teacher' || membershipResult.role === 'admin';
+          if (!isTeacher) {
+            const policy = assignment.aiPolicy || 'hints_only';
+            if (policy === 'disabled') {
+              return NextResponse.json(
+                { error: 'AI assistance has been disabled by your instructor for this assignment.' },
+                { status: 403 }
+              );
+            }
+          }
+        }
+      }
     }
 
     const key = apiKey || FALLBACK_KEY;

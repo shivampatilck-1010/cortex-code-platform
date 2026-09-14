@@ -82,6 +82,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ workspace, files, created, challenge: safeChallenge });
   } catch (err: any) {
+    if (err?.message?.includes('Authentication required')) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 });
   }
 }

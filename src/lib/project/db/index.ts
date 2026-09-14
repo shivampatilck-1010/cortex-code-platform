@@ -60,48 +60,17 @@ class ProjectDatabase {
 
   private async init() {
     if (this.initialized) return;
-
-    // Check for D1 first (for production)
-    let d1Binding: any = null;
-    if (typeof process !== 'undefined' && process.env && process.env.DB) {
-      d1Binding = process.env.DB;
-    } else if (typeof globalThis !== 'undefined' && (globalThis as any).env && (globalThis as any).env.DB) {
-      d1Binding = (globalThis as any).env.DB;
-    }
-
-    if (d1Binding) {
-      this.db = d1Binding as any; // Map D1 api
-      this.initialized = true;
-      return;
-    }
-
-    // Local SQLite fallback for Development
     try {
-      const dataDir = path.join(process.cwd(), 'data');
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
-      this.dbPath = path.join(dataDir, 'cortex_classroom.db'); // use same database file for simplicity
-
-      let DatabaseSync: any = null;
-      if (typeof require !== 'undefined') {
-        // @ts-ignore
-        DatabaseSync = require('node:sqlite').DatabaseSync;
-      } else {
-        const customReq = createRequire(import.meta.url);
-        DatabaseSync = customReq('node:sqlite').DatabaseSync;
-      }
-
-      const sqliteDb = new DatabaseSync(this.dbPath);
-      sqliteDb.exec('PRAGMA journal_mode = WAL;');
-      sqliteDb.exec('PRAGMA foreign_keys = ON;');
-      this.db = new SqliteWrapper(sqliteDb);
-      this.initialized = true;
-      await this.createTables();
-    } catch (err) {
-      console.warn('[ProjectDatabase] Failed to init sqlite:', err);
-      this.db = null;
-      this.initialized = true;
+        const dataDir = path.join(process.cwd(), 'data');
+        this.dbPath = path.join(dataDir, 'cortex_classroom.db');
+        this.db = await getDbInstance(this.dbPath);
+    } catch(e) {
+        console.warn('[ProjectDatabase] Failed to init DB:', e);
+        this.db = null;
+    }
+    this.initialized = true;
+    if (this.db) {
+        await this.createTables();
     }
   }
 
@@ -140,7 +109,7 @@ class ProjectDatabase {
     await (await this.getDb()).prepare(`
       INSERT INTO projects (id, owner_id, name, description, language, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(p.id, p.ownerId, p.name, p.description, p.language, p.status, p.createdAt, p.updatedAt);
+    `).run(p.id || '', p.ownerId || '', p.name || '', p.description || '', p.language || '', p.status || '', p.createdAt || 0, p.updatedAt || 0);
     return p;
   }
 
@@ -197,7 +166,7 @@ class ProjectDatabase {
     await (await this.getDb()).prepare(`
       INSERT INTO project_files (id, project_id, name, path, content, is_folder, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(f.id, f.projectId, f.name, f.path, f.content, f.isFolder ? 1 : 0, f.createdAt, f.updatedAt);
+    `).run(f.id || '', f.projectId || '', f.name || '', f.path || '', f.content || '', f.isFolder ? 1 : 0, f.createdAt || 0, f.updatedAt || 0);
     return f;
   }
 

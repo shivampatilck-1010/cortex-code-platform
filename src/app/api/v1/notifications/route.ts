@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await ClassroomAuth.getCurrentUser(req);
+    const user = await ClassroomAuth.authenticateRequest(req);
+    if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     const body = await req.json();
 
     if (body.markAllRead) {

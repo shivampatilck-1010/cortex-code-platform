@@ -5,6 +5,12 @@ import { realtimeCoordinator } from '@/lib/classroom/realtime';
 
 export async function POST(req: NextRequest) {
   try {
+    // CSRF: Validate Content-Type to reject cross-origin form posts
+    const ct = req.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      return NextResponse.json({ error: 'Invalid Content-Type. Expected application/json.' }, { status: 415 });
+    }
+
     const user = await ClassroomAuth.getCurrentUser(req);
     const body = await req.json().catch(() => ({}));
     const { joinCode } = body;

@@ -20,6 +20,13 @@ export async function GET(
     const isTeacher = classroom?.teacherId === user.id || auth.context?.membership?.role === 'teacher';
 
     const assignmentId = req.nextUrl.searchParams.get('assignmentId');
+    // Security: verify assignmentId belongs to this classroom (prevents cross-classroom IDOR)
+    if (assignmentId) {
+      const assignment = await classroomDb.getAssignment(assignmentId);
+      if (!assignment || assignment.classroomId !== id) {
+        return NextResponse.json({ error: 'Assignment not found in this classroom.' }, { status: 404 });
+      }
+    }
     let submissions: Submission[] = assignmentId
       ? await classroomDb.listSubmissions(assignmentId)
       : await classroomDb.listSubmissionsForClassroom(id);
