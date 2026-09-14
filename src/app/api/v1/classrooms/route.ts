@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await ClassroomAuth.getCurrentUser(req);
-    if (user.role !== 'teacher') return NextResponse.json({ error: 'Only teachers can create classrooms' }, { status: 403 });
+    if (user.role !== 'teacher') return NextResponse.json({ error: 'Only professors can create classrooms.' }, { status: 403 });
     const body = await req.json();
     const { name, code, subject, description, settings } = body;
 
