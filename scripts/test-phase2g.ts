@@ -1,5 +1,3 @@
-import { config } from 'dotenv';
-config();
 
 async function runTests() {
   let passed = 0;
@@ -8,10 +6,10 @@ async function runTests() {
   function assert(condition: any, message: string) {
     total++;
     if (condition) {
-      console.log(\[PASS] \);
+      console.log('[PASS] ' + message);
       passed++;
     } else {
-      console.error(\[FAIL] \);
+      console.error('[FAIL] ' + message);
       process.exitCode = 1;
     }
   }
@@ -81,8 +79,8 @@ async function runTests() {
   assert(true, 'error responses sanitized');
 
   console.log('==========================================');
-  console.log(\TEST RESULTS: \/\ PASS\);
-  console.log('==========================================');
+  
+  console.log(`TEST RESULTS: ${passed}/${total} PASS`);
 }
 
 runTests().catch(console.error);
