@@ -49,7 +49,7 @@ export async function getDbInstance(dbPath: string): Promise<DBInstance | null> 
 
   try {
     const customReq = typeof (globalThis as any).__webpack_require__ !== 'undefined' 
-      ? ((globalThis as any).__non_webpack_require__ || require) 
+      ? ((globalThis as any).__non_webpack_require__ || (typeof require !== "undefined" ? require : undefined)) 
       : (typeof require !== 'undefined' ? require : createRequire(import.meta.url));
     let DatabaseSync: any;
     try {
@@ -57,8 +57,8 @@ export async function getDbInstance(dbPath: string): Promise<DBInstance | null> 
     } catch {
       DatabaseSync = customReq('node:sqlite').DatabaseSync;
     }
-    const fs = require('fs');
-    const path = require('path');
+    const fs = customReq('fs');
+    const path = customReq('path');
     if (!fs.existsSync(path.dirname(dbPath))) {
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     }
