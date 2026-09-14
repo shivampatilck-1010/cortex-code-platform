@@ -568,7 +568,7 @@ export default function CloudIDEPage() {
       }
 
       const res = await executeInCloudSandbox({
-        
+        projectId: projectId || undefined,
         language: currentLang.id,
         files: [], // Sent by backend now
         entrypoint: mainFile?.name || activeFile.name,
@@ -594,6 +594,7 @@ export default function CloudIDEPage() {
         f.id === activeFileId ? { ...f, content: fixToApply.fixedCode } : f
       );
       const retestRes = await executeInCloudSandbox({
+        projectId: projectId || undefined,
         language: currentLang.id,
         files: updatedFiles,
         entrypoint: activeFile.name,
@@ -637,7 +638,7 @@ export default function CloudIDEPage() {
 
       const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
         {
-          
+          projectId: projectId || undefined,
           language: currentLang.id,
           files: [],
           entrypoint: activeFile.name,
@@ -669,7 +670,7 @@ export default function CloudIDEPage() {
       }
 
       const res = await benchmarkExecution({
-        
+        projectId: projectId || undefined,
         language: currentLang.id,
         files: [],
         entrypoint: activeFile.name,
@@ -708,44 +709,14 @@ export default function CloudIDEPage() {
 
   // Real Dynamic Debugger Variable & Callstack Parser
   const parsedDebugInfo = useMemo(() => {
-    if (!activeFile?.content) return { variables: {}, callStack: [] };
-
-    const lines = activeFile.content.split('\n');
-    const limit = activeDebugLine ? Math.min(activeDebugLine, lines.length) : lines.length;
-    const vars: Record<string, any> = {};
-    const frames: Array<{ name: string; file: string; line: number }> = [
-      { name: 'main (global)', file: activeFile.name, line: activeDebugLine || 1 },
-    ];
-
-    for (let i = 0; i < limit; i++) {
-      const line = lines[i].trim();
-      if (!line || line.startsWith('#') || line.startsWith('//')) continue;
-
-      // Detect function definitions
-      const fnMatch = line.match(/(?:def|function|const|let|var)\s+([a-zA-Z0-9_]+)\s*(?:=\s*(?:async\s*)?\([^)]*\)\s*=>|\()/);
-      if (fnMatch && fnMatch[1]) {
-        frames.unshift({ name: `${fnMatch[1]}()`, file: activeFile.name, line: i + 1 });
-      }
-
-      // Variable assignments (Python, JS, TS, C++, C, etc.)
-      const assignMatch = line.match(/^(?:let|const|var|auto|int|float|double|char|string)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;]+);?$/);
-      if (assignMatch) {
-        const varName = assignMatch[1];
-        const rawVal = assignMatch[2].trim();
-        if (/^-?\d+(\.\d+)?$/.test(rawVal)) {
-          vars[varName] = Number(rawVal);
-        } else if (rawVal === 'true' || rawVal === 'false') {
-          vars[varName] = rawVal === 'true';
-        } else if (rawVal.startsWith('[') || rawVal.startsWith('{') || rawVal.startsWith('"') || rawVal.startsWith("'")) {
-          vars[varName] = rawVal;
-        } else {
-          vars[varName] = rawVal;
-        }
-      }
-    }
-
-    return { variables: vars, callStack: frames };
-  }, [activeFile?.content, activeFile?.name, activeDebugLine]);
+    return {
+      variables: {
+        STATUS: 'NOT SUPPORTED',
+        REASON: 'Interactive step-debugging (DAP) cannot be safely supported over a stateless edge HTTP boundary.',
+      },
+      callStack: [{ name: 'Debugger Disabled', file: 'N/A', line: 0 }],
+    };
+  }, []);
 
   
   if (isProjectLoading) {
@@ -848,11 +819,37 @@ export default function CloudIDEPage() {
             );
           }}
           onExportProject={() => {
-            const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(files, null, 2));
-            const dl = document.createElement('a');
-            dl.setAttribute('href', dataStr);
-            dl.setAttribute('download', `${currentLang.id}-project.json`);
-            dl.click();
+            if (projectId) {
+              window.open(`/api/v1/projects/${projectId}/export`, '_blank');
+            } else {
+              const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(files, null, 2));
+              const dl = document.createElement('a');
+              dl.setAttribute('href', dataStr);
+              dl.setAttribute('download', `${currentLang.id}-project.json`);
+              dl.click();
+            }
+          }}
+          onImportProject={async (file) => {
+            if (!projectId) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+              const res = await fetch(`/api/v1/projects/${projectId}/import`, {
+                method: 'POST',
+                body: formData,
+              });
+              if (res.ok) {
+                const data = await res.json();
+                setFiles(data.files || []);
+                if (data.files && data.files.length > 0) {
+                   const firstFile = data.files.find((f: ProjectFile) => !f.isFolder);
+                   if (firstFile) setActiveFileId(firstFile.id);
+                }
+              }
+            } catch (e) {
+              console.error('Import failed', e);
+            }
           }}
           isDarkMode={true}
         />

@@ -6,6 +6,8 @@ import { CHALLENGES } from '@/lib/challenges/challenges-data';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 import { TestCase } from '@/lib/execution/types';
 
+export const runtime = 'edge';
+
 export async function POST(req: NextRequest) {
   try {
     const user = await ClassroomAuth.getCurrentUser(req);
@@ -13,8 +15,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { challengeId, files, language } = await req.json();
-    if (!challengeId || !files || !language) {
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Request payload too large (max 2MB)' }, { status: 413 });
+    }
+
+    const body = await req.json();
+    const { challengeId, language, files: clientFiles } = body;
+
+    // Validate sizes of client files
+    if (clientFiles && Array.isArray(clientFiles)) {
+      const totalSize = clientFiles.reduce((acc: number, f: any) => acc + (f.content?.length || 0), 0);
+      if (totalSize > 1024 * 1024) {
+        return NextResponse.json({ error: 'File content too large (max 1MB total)' }, { status: 413 });
+      }
+    }
+
+    if (!challengeId || !language) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -22,7 +39,42 @@ export async function POST(req: NextRequest) {
     if (!challenge) {
       return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
     }
-    
+
+    // Verify user owns this workspace
+    const workspace = await arenaDb.getArenaWorkspace(user.id, challenge.id);
+    if (!workspace) {
+      return NextResponse.json({ error: 'Workspace not found. Initialize workspace first.' }, { status: 404 });
+    }
+
+    // If client sent updated files, autosave to workspace (persists code changes)
+    if (clientFiles && Array.isArray(clientFiles) && clientFiles.length > 0) {
+      const existingFiles = await projectDb.listFilesForProject(workspace.projectId);
+      for (const clientFile of clientFiles) {
+        const existing = existingFiles.find(f => f.name === clientFile.name || f.id === clientFile.id);
+        if (existing) {
+          await projectDb.updateFile(existing.id, { content: clientFile.content, updatedAt: Date.now() });
+        } else {
+          // New file in workspace
+          await projectDb.createFile({
+            id: clientFile.id || `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            projectId: workspace.projectId,
+            name: clientFile.name,
+            path: clientFile.path || `/${clientFile.name}`,
+            content: clientFile.content || '',
+            isFolder: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    }
+
+    // AUTHORITATIVE: Load files from server-side workspace project
+    const serverFiles = await projectDb.listFilesForProject(workspace.projectId);
+    if (!serverFiles || serverFiles.length === 0) {
+      return NextResponse.json({ error: 'Workspace files not found. Initialize workspace first.' }, { status: 404 });
+    }
+
     // Only test against VISIBLE tests for "Run"
     const visibleTests = challenge.testCases.filter(tc => !tc.isHidden);
     const results: TestCase[] = [];
@@ -32,7 +84,7 @@ export async function POST(req: NextRequest) {
     for (const test of visibleTests) {
        const res = await executeInCloudRunner({
          language,
-         files,
+         files: serverFiles,
          stdin: test.stdin,
          runTimeoutMs: 2000,
          memoryLimitMb: 128

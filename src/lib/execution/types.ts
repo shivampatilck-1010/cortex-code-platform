@@ -9,6 +9,7 @@ export interface ProjectFile {
 }
 
 export interface ExecutionRequest {
+  projectId?: string;
   language: string;
   version?: string;
   files: ProjectFile[];

@@ -10,6 +10,7 @@ import {
   Trash2, 
   Edit2, 
   Download, 
+  Upload,
   Search,
   ChevronDown,
   ChevronRight,
@@ -28,6 +29,7 @@ interface FileExplorerProps {
   onDeleteFile: (id: string) => void;
   onRenameFile: (id: string, newName: string) => void;
   onExportProject: () => void;
+  onImportProject?: (file: File) => void;
   isDarkMode?: boolean;
   width?: number;
   currentLanguage?: LanguageConfig;
@@ -43,6 +45,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onDeleteFile,
   onRenameFile,
   onExportProject,
+  onImportProject,
   isDarkMode = true,
   width,
   currentLanguage,
@@ -418,12 +421,31 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           >
             <FolderPlus className="w-3.5 h-3.5" />
           </button>
+          <label
+            className={`p-1 rounded transition cursor-pointer ${
+              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900'
+            }`}
+            title="Import Project (ZIP)"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <input 
+              type="file" 
+              accept=".zip" 
+              className="hidden" 
+              onChange={(e) => {
+                if (e.target.files?.[0] && onImportProject) {
+                  onImportProject(e.target.files[0]);
+                }
+                e.target.value = ''; // Reset
+              }} 
+            />
+          </label>
           <button
             onClick={onExportProject}
             className={`p-1 rounded transition ${
               isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900'
             }`}
-            title="Export Project (JSON)"
+            title="Export Project (ZIP)"
           >
             <Download className="w-3.5 h-3.5" />
           </button>

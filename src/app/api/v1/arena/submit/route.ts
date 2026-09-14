@@ -6,6 +6,7 @@ import { CHALLENGES } from '@/lib/challenges/challenges-data';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 import { TestCase } from '@/lib/execution/types';
 
+export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,8 +15,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { challengeId, files, language } = await req.json();
-    if (!challengeId || !files || !language) {
+    const body = await req.json();
+    const { challengeId, language, files: clientFiles } = body;
+
+    if (!challengeId || !language) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -23,7 +26,41 @@ export async function POST(req: NextRequest) {
     if (!challenge) {
       return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
     }
-    
+
+    // Verify user owns this workspace (prevents IDOR)
+    const workspace = await arenaDb.getArenaWorkspace(user.id, challenge.id);
+    if (!workspace) {
+      return NextResponse.json({ error: 'Workspace not found. Initialize workspace first.' }, { status: 404 });
+    }
+
+    // If client sent updated files, autosave to workspace before evaluating
+    if (clientFiles && Array.isArray(clientFiles) && clientFiles.length > 0) {
+      const existingFiles = await projectDb.listFilesForProject(workspace.projectId);
+      for (const clientFile of clientFiles) {
+        const existing = existingFiles.find(f => f.name === clientFile.name || f.id === clientFile.id);
+        if (existing) {
+          await projectDb.updateFile(existing.id, { content: clientFile.content, updatedAt: Date.now() });
+        } else {
+          await projectDb.createFile({
+            id: clientFile.id || `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            projectId: workspace.projectId,
+            name: clientFile.name,
+            path: clientFile.path || `/${clientFile.name}`,
+            content: clientFile.content || '',
+            isFolder: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    }
+
+    // AUTHORITATIVE: Load files from server-side workspace
+    const serverFiles = await projectDb.listFilesForProject(workspace.projectId);
+    if (!serverFiles || serverFiles.length === 0) {
+      return NextResponse.json({ error: 'Workspace files not found. Initialize workspace first.' }, { status: 404 });
+    }
+
     // Test against ALL tests for "Submit"
     const allTests = challenge.testCases;
     const results: TestCase[] = [];
@@ -37,7 +74,7 @@ export async function POST(req: NextRequest) {
     for (const test of allTests) {
        const res = await executeInCloudRunner({
          language,
-         files,
+         files: serverFiles,
          stdin: test.stdin,
          runTimeoutMs: 2000,
          memoryLimitMb: 128
@@ -70,7 +107,7 @@ export async function POST(req: NextRequest) {
            allPassed = false;
        }
 
-       // Sanitize output for hidden tests
+       // Sanitize output for hidden tests — never leak stdin/expectedStdout
        if (test.isHidden) {
            results.push({
                id: test.id,
@@ -98,6 +135,9 @@ export async function POST(req: NextRequest) {
 
     const score = allTests.length > 0 ? Math.round((passedCount / allTests.length) * 100) : 100;
     
+    // Snapshot the authoritative server-side files (not client-supplied)
+    const sourceSnapshot = JSON.stringify(serverFiles.map(f => ({ name: f.name, content: f.content })));
+    
     const submissionId = `sub_${crypto.randomUUID()}`;
     const submission = await arenaDb.createSubmission({
         id: submissionId,
@@ -106,7 +146,7 @@ export async function POST(req: NextRequest) {
         language,
         status: overallStatus as any,
         score,
-        sourceCode: JSON.stringify(files),
+        sourceCode: sourceSnapshot,
         testSummary: JSON.stringify(results),
         executionTimeMs: totalTime,
         memoryUsageMb: maxMemory,

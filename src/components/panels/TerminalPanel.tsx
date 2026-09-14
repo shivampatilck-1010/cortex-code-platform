@@ -136,20 +136,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
       // Tab Autocomplete
       const trimmed = inputVal.trim();
       const commands = [
-        'help',
-        'ls',
-        'cat',
-        'pwd',
+        'run',
+        'python',
+        'node',
+        'gcc',
+        'g++',
         'clear',
-        'npm install',
-        'pip install',
-        'cargo add',
-        'git status',
-        'git log',
-        'whoami',
-        'uname -a',
-        'date',
-        'echo',
       ];
       const match = commands.find((c) => c.startsWith(trimmed) && c !== trimmed);
       if (match) {
@@ -195,7 +187,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
         {
           id: `out-${Date.now()}-1`,
           type: 'info',
-          content: 'Cortex Interactive Workspace Terminal:',
+          content: 'Cortex Interactive Workspace Terminal (Execution Only):',
         },
         {
           id: `out-${Date.now()}-2`,
@@ -205,16 +197,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
   node [file] [args]    Execute JavaScript script (e.g. node index.js)
   g++ [files...]        Compile C++ files with G++
   gcc [files...]        Compile C files with GCC
-  ls [-la]              List workspace files and folders
-  cat <file>            Display file contents
-  touch <file>          Create a new file in workspace
-  mkdir <dir>           Create a new folder in workspace
-  rm [-r] <file/dir>    Delete file or folder from workspace
-  pwd                   Print current working directory (/home/sandbox/workspace)
-  whoami                Print current sandbox user
-  date                  Print current date and time
-  echo <text>           Print text or write to file
-  clear                 Clear terminal output`,
+  clear                 Clear terminal output
+  
+  Note: Interactive filesystem commands (ls, cat, mkdir, rm) are NOT supported in this stateless edge execution environment.`,
         },
       ]);
       return;
