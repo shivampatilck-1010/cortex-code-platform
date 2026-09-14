@@ -570,7 +570,7 @@ export async function analyzeCode(
 ): Promise<AIAnalysisResult> {
   const lang = getLanguageConfig(languageId);
   // Use the user's key or fall back to the platform default
-  const FALLBACK = process.env.NEXT_PUBLIC_GEMINI_KEY || process.env.GEMINI_API_KEY || '';
+  const FALLBACK = process.env.GEMINI_API_KEY || '';
   const apiKey = settings.apiKey || FALLBACK;
 
 
