@@ -1,3 +1,4 @@
+import { DBInstance, getDbInstance } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
@@ -24,14 +25,6 @@ export interface ProjectFile {
   updatedAt: number;
 }
 
-interface DBInstance {
-  exec(sql: string): Promise<void>;
-  prepare(sql: string): {
-    run(...params: any[]): Promise<any>;
-    get(...params: any[]): Promise<any>;
-    all(...params: any[]): Promise<any[]>;
-  };
-}
 
 class SqliteWrapper implements DBInstance {
   constructor(private sqlite: any) {}

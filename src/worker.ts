@@ -14,6 +14,8 @@ export interface Env {
 
 export default {
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
+    // Inject env globally so database wrappers can find D1 bindings
+    (globalThis as any).env = env;
     const url = new URL(request.url);
 
     // Production Cloudflare WebSocket Path:

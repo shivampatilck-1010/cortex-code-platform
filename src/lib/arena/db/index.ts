@@ -1,3 +1,4 @@
+import { DBInstance, getDbInstance } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
@@ -50,14 +51,6 @@ export interface BenchmarkRun {
   createdAt: number;
 }
 
-interface DBInstance {
-  exec(sql: string): Promise<void>;
-  prepare(sql: string): {
-    run(...params: any[]): Promise<any>;
-    get(...params: any[]): Promise<any>;
-    all(...params: any[]): Promise<any[]>;
-  };
-}
 
 class SqliteWrapper implements DBInstance {
   constructor(private sqlite: any) {}
@@ -84,50 +77,16 @@ export class ArenaDatabase {
   private initializing = false;
   private initPromise: Promise<void> | null = null;
 
-  async getDb(): Promise<DBInstance | null> {
+    async getDb(): Promise<DBInstance | null> {
     if (this.db) return this.db;
-    
-    // Cloudflare D1 environment check (Production)
-    if (typeof process !== 'undefined' && (process.env as any).ARENA_DB) {
-      this.db = (process.env as any).ARENA_DB as DBInstance;
+    this.db = (await getDbInstance('.cortex/data/arena.db')) as any;
+    if (this.db) {
       await this.init();
-      return this.db;
     }
-
-    if (typeof window !== 'undefined') {
-      return null;
-    }
-
-    // SQLite fallback for local development
-    if (!this.initializing) {
-      this.initializing = true;
-      this.initPromise = (async () => {
-        try {
-          let DatabaseSync;
-          if (typeof require !== 'undefined') {
-            DatabaseSync = require('node:sqlite').DatabaseSync;
-          } else {
-            const customReq = createRequire(import.meta.url);
-            DatabaseSync = customReq('node:sqlite').DatabaseSync;
-          }
-          const dbDir = path.join(process.cwd(), '.cortex', 'data');
-          if (!fs.existsSync(dbDir)) {
-            fs.mkdirSync(dbDir, { recursive: true });
-          }
-          const dbPath = path.join(dbDir, 'arena.db');
-          const sqlite = new DatabaseSync(dbPath);
-          this.db = new SqliteWrapper(sqlite);
-          await this.init();
-        } catch (err) {
-          console.error('[Arena DB] Failed to initialize SQLite fallback:', err);
-        } finally {
-          this.initializing = false;
-        }
-      })();
-    }
-    await this.initPromise;
     return this.db;
   }
+
+
 
   async init(): Promise<void> {
     if (!this.db) return;

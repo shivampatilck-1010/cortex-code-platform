@@ -1,3 +1,4 @@
+import { DBInstance, getDbInstance } from '@/lib/db';
 // Cortex Classroom Database Layer
 // High-performance relational store using Node.js 22 native node:sqlite with ACID durability,
 // transactional integrity, foreign key relations, and event sequence indexing.
@@ -25,14 +26,6 @@ import {
   ClassroomAnalytics,
 } from '../models';
 
-interface DBInstance {
-  exec(sql: string): Promise<void>;
-  prepare(sql: string): {
-    run(...params: any[]): Promise<{ changes: number; lastInsertRowid: number }>;
-    get(...params: any[]): Promise<any>;
-    all(...params: any[]): Promise<any[]>;
-  };
-}
 
 class D1Wrapper implements DBInstance {
   constructor(private d1: any) {}
