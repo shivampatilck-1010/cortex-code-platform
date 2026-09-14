@@ -22,77 +22,57 @@ export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
   sql: 82,          // SQL (SQLite 3.27.2)
 };
 
+import { zipSync, strToU8 } from 'fflate';
+
 /**
  * Prepares the unified source code from a multi-file project for single-payload execution.
+ * Uses Judge0's native additional_files via base64 encoded zip for true multi-file execution.
  */
-function prepareSourceCode(req: ExecutionRequest): string {
+function getMultiFilePayload(req: ExecutionRequest): { source_code: string; additional_files?: string } {
   const nonFolderFiles = req.files.filter((f) => !f.isFolder);
-  if (nonFolderFiles.length === 0) return '';
+  if (nonFolderFiles.length === 0) return { source_code: '' };
 
   const langConfig = getLanguageConfig(req.language);
-  const mainFile =
-    nonFolderFiles.find(
-      (f) => f.name === req.entrypoint || f.name === langConfig.defaultFileName || f.id === 'main'
-    ) ||
-    nonFolderFiles.find((f) => f.name.endsWith(langConfig.fileExtension)) ||
-    nonFolderFiles[0];
-
-  if (!mainFile) return '';
-
-  // For Python: only include valid Python (.py) modules, never markdown or config files
-  if (req.language === 'python') {
-    const pyFiles = nonFolderFiles.filter(
-      (f) => f !== mainFile && f.name.endsWith('.py') && !f.name.startsWith('.')
-    );
-
-    if (pyFiles.length === 0) {
-      return mainFile.content;
-    }
-
-    let combined = `import sys, types\n`;
-    for (const file of pyFiles) {
-      const moduleName = file.name.replace(/\.py$/, '').replace(/\W/g, '_');
-      const escapedContent = JSON.stringify(file.content);
-      combined += `\n# Module: ${file.name}\n`;
-      combined += `_mod_${moduleName} = types.ModuleType('${moduleName}')\n`;
-      combined += `exec(${escapedContent}, _mod_${moduleName}.__dict__)\n`;
-      combined += `sys.modules['${moduleName}'] = _mod_${moduleName}\n`;
-    }
-    combined += `\n# === Entrypoint: ${mainFile.name} ===\n`;
-    combined += mainFile.content;
-    return combined;
+  let mainFile = req.entrypoint ? nonFolderFiles.find((f) => f.name === req.entrypoint) : undefined;
+  if (!mainFile) {
+    mainFile = nonFolderFiles.find((f) => f.name === langConfig.defaultFileName || f.id === 'main') ||
+               nonFolderFiles.find((f) => f.name.endsWith(langConfig.fileExtension)) ||
+               nonFolderFiles[0];
   }
 
-  // For C/C++: prepend ONLY headers and C/C++ source files (never README or other docs)
-  if (req.language === 'c' || req.language === 'cpp') {
-    const isCpp = req.language === 'cpp';
-    const headerExts = ['.h', '.hpp', '.hxx'];
-    const sourceExts = isCpp ? ['.cpp', '.cc', '.cxx'] : ['.c'];
+  if (!mainFile) return { source_code: '' };
 
-    const headers = nonFolderFiles.filter(
-      (f) => f !== mainFile && headerExts.some((ext) => f.name.toLowerCase().endsWith(ext))
-    );
-    const sources = nonFolderFiles.filter(
-      (f) => f !== mainFile && sourceExts.some((ext) => f.name.toLowerCase().endsWith(ext))
-    );
+  const additionalFiles = nonFolderFiles.filter((f) => f.id !== mainFile.id);
 
-    if (headers.length === 0 && sources.length === 0) {
-      return mainFile.content;
-    }
-
-    let combined = '';
-    for (const h of headers) {
-      combined += `// === Header: ${h.name} ===\n${h.content}\n\n`;
-    }
-    for (const s of sources) {
-      combined += `// === Source: ${s.name} ===\n${s.content}\n\n`;
-    }
-    combined += `// === Main: ${mainFile.name} ===\n${mainFile.content}`;
-    return combined;
+  if (additionalFiles.length === 0) {
+    return { source_code: mainFile.content };
   }
 
-  // Default: return main entrypoint
-  return mainFile.content;
+  // Create zip for Judge0 additional_files
+  const zipData: Record<string, Uint8Array> = {};
+  for (const f of additionalFiles) {
+    let filePath = f.path || f.name;
+    // Strip leading slashes to prevent traversal outside extraction dir
+    filePath = filePath.replace(/^\/+/, '');
+    if (!filePath) continue;
+    
+    zipData[filePath] = strToU8(f.content || '');
+  }
+
+  const zipped = zipSync(zipData);
+  
+  // Convert Uint8Array to base64
+  let binary = '';
+  const bytes = new Uint8Array(zipped);
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const additionalFilesBase64 = btoa(binary);
+
+  return {
+    source_code: mainFile.content,
+    additional_files: additionalFilesBase64
+  };
 }
 
 /**
@@ -105,7 +85,7 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
   const langConfig = getLanguageConfig(req.language);
   const languageId = JUDGE0_LANGUAGE_IDS[langConfig.id] || JUDGE0_LANGUAGE_IDS['python'];
 
-  const sourceCode = prepareSourceCode(req);
+  const payload = getMultiFilePayload(req);
   const requestedTimeoutSec = Math.ceil((req.runTimeoutMs || langConfig.timeoutSec * 1000) / 1000);
   const cpuTimeLimit = Math.min(EXECUTION_LIMITS.maxCpuTimeSec, Math.max(1, requestedTimeoutSec));
   const wallTimeLimit = Math.min(EXECUTION_LIMITS.maxWallTimeSec, Math.max(2, cpuTimeLimit * 2));
@@ -120,7 +100,8 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
       method: 'POST',
       headers,
       body: JSON.stringify({
-        source_code: sourceCode,
+        source_code: payload.source_code,
+        additional_files: payload.additional_files,
         language_id: languageId,
         stdin: req.stdin || '',
         cpu_time_limit: cpuTimeLimit,

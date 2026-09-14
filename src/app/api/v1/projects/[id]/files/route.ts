@@ -2,15 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { projectDb, ProjectFile } from '@/lib/project/db';
 import crypto from 'crypto';
-
-function sanitizePath(filePath: string): string {
-  // Prevent directory traversal
-  const normalized = filePath.replace(/\\/g, '/');
-  if (normalized.includes('..') || normalized.includes('//')) {
-    throw new Error('Invalid file path');
-  }
-  return normalized;
-}
+import { validateAndSanitizePath } from '@/lib/execution/path-sanitizer';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -31,12 +23,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Missing name or path' }, { status: 400 });
     }
 
-    let safePath = '';
-    try {
-      safePath = sanitizePath(path);
-    } catch (e) {
-      return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+    const pathValidation = validateAndSanitizePath(path);
+    if (!pathValidation.valid) {
+      return NextResponse.json({ error: pathValidation.error || 'Invalid path' }, { status: 400 });
     }
+    const safePath = pathValidation.sanitizedPath || path;
 
     const newFile: ProjectFile = {
       id: `file_${crypto.randomUUID()}`,
