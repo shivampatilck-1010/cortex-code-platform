@@ -11,20 +11,41 @@ export interface DBInstance {
 export class D1Wrapper implements DBInstance {
   constructor(private d1: any) {}
   async exec(sql: string): Promise<void> {
-    await this.d1.exec(sql);
+    const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    if (statements.length === 0) return;
+    const batch = statements.map(s => this.d1.prepare(s));
+    await this.d1.batch(batch);
   }
   prepare(sql: string) {
     return {
       run: async (...params: any[]) => {
-        const res = await this.d1.prepare(sql).bind(...params).run();
-        return { changes: res.meta.changes, lastInsertRowid: res.meta.last_row_id };
+        const safeParams = params.map(p => p === undefined ? null : p);
+        try {
+            const res = await this.d1.prepare(sql).bind(...safeParams).run();
+            return { changes: res.meta?.changes, lastInsertRowid: res.meta?.last_row_id };
+        } catch(e) {
+            console.error('D1Wrapper RUN Error', e.message, sql, safeParams);
+            throw e;
+        }
       },
       get: async (...params: any[]) => {
-        return await this.d1.prepare(sql).bind(...params).first();
+        const safeParams = params.map(p => p === undefined ? null : p);
+        try {
+            return await this.d1.prepare(sql).bind(...safeParams).first();
+        } catch(e) {
+            console.error('D1Wrapper GET Error', e.message, sql, safeParams);
+            throw e;
+        }
       },
       all: async (...params: any[]) => {
-        const res = await this.d1.prepare(sql).bind(...params).all();
-        return res.results;
+        const safeParams = params.map(p => p === undefined ? null : p);
+        try {
+            const res = await this.d1.prepare(sql).bind(...safeParams).all();
+            return res.results;
+        } catch(e) {
+            console.error('D1Wrapper ALL Error', e.message, sql, safeParams);
+            throw e;
+        }
       }
     };
   }
@@ -82,3 +103,6 @@ export async function getDbInstance(dbPath: string): Promise<DBInstance | null> 
     return null;
   }
 }
+
+
+

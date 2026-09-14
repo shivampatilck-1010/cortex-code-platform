@@ -97,9 +97,7 @@ class ClassroomDatabase {
     }
 
     if (d1Binding) {
-      this.db = new D1Wrapper(d1Binding);
-      this.initialized = true;
-      await this.createTables();
+      this.db = new D1Wrapper(d1Binding); this.initialized = true;
       return;
     }
 
@@ -1486,3 +1484,4 @@ class ClassroomDatabase {
 }
 
 export const classroomDb = new ClassroomDatabase();
+

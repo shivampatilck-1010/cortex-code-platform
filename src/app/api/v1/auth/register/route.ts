@@ -85,15 +85,7 @@ export async function POST(req: NextRequest) {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, cortexId: user.cortex_id }
     });
     
-    response.cookies.set({
-      name: 'cortex_session',
-      value: sessionId,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      expires: new Date(expiresAt),
-    });
+    response.headers.append('Set-Cookie', 'cortex_session=' + sessionId + '; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=' + new Date(expiresAt).toUTCString());
 
     return response;
   } catch (err: any) {
@@ -101,3 +93,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+
