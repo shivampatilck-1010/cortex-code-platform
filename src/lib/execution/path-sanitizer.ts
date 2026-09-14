@@ -58,6 +58,12 @@ export function validateAndSanitizePath(rawPath: string, rootDir?: string): Path
   if (baseName.startsWith('.env') || baseName === '.git' || baseName === 'node_modules') {
     return { valid: false, error: `Access to "${baseName}" is prohibited` };
   }
+  for (const seg of segments) {
+    const s = seg.toLowerCase();
+    if (s === '.git' || s === 'node_modules') {
+      return { valid: false, error: `Access to directory "${s}" is prohibited` };
+    }
+  }
 
   // 6. If a rootDir is provided, verify resolved path is inside rootDir
   if (rootDir) {
