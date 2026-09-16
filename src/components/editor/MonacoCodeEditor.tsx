@@ -87,8 +87,8 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   enableInlineSuggestionsRef.current = enableInlineSuggestions;
   const languageRef = useRef(language);
   languageRef.current = language;
-  const apiKeyRef = useRef(apiKey);
-  apiKeyRef.current = apiKey;
+  
+  
 
   const activeFile = files.find((f) => f.id === activeFileId) || files[0];
 
@@ -199,7 +199,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                 currentLinePrefix,
                 languageRef.current,
                 textAfter,
-                apiKeyRef.current
+                undefined
               );
 
               if (!suggestion || token.isCancellationRequested) {

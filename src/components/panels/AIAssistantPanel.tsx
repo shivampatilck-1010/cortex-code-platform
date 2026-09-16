@@ -86,13 +86,13 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
       const res = await fetch('/api/v1/ai/verify-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: trimmed }),
+        
       });
       const data = await res.json();
       if (res.ok && data.valid) {
         setKeyStatus('valid');
         setKeyMsg('Connected! Gemini AI is ready.');
-        onUpdateSettings({ apiKey: trimmed, provider: 'gemini' });
+        
         if (typeof window !== 'undefined') localStorage.setItem('cortex_gemini_api_key', trimmed);
         setTimeout(() => setShowKeyBanner(false), 1500);
       } else {
@@ -136,7 +136,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
           userMessage: trimmed,
           code: currentCode,
           language,
-          apiKey: settings.apiKey,
+          
         }),
       });
 

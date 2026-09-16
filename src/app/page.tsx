@@ -456,7 +456,7 @@ export default function CloudIDEPage() {
         (typeof window !== 'undefined' ? localStorage.getItem('cortex_gemini_api_key') || '' : '');
 
       if (keyToUse) {
-        autoFixWithGeminiOrOffline(code, stderr, currentLang.id, diagnostics, keyToUse)
+        autoFixWithGeminiOrOffline(code, stderr, currentLang.id, diagnostics)
           .then(({ provider, fix }) => {
             if (provider === 'gemini' && fix && fix.fixedCode) {
               setFixResult(fix);
@@ -1053,7 +1053,7 @@ export default function CloudIDEPage() {
                       setIsAnalyzingAI(false);
                     }}
                     onTriggerConvert={async (toLang) => {
-                      const res = await convertCode(activeFile.content, currentLang.id, toLang, aiSettings.apiKey);
+                      const res = await convertCode(activeFile.content, currentLang.id, toLang);
                       const targetLangConfig = getLanguageConfig(toLang);
                       setCurrentLang(targetLangConfig);
                       handleContentChange(res.convertedCode);

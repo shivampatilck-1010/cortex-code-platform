@@ -233,14 +233,7 @@ export const InlineQuickFixWidget: React.FC<InlineQuickFixWidgetProps> = ({
 
           <div className="flex items-center space-x-1.5">
             {/* Toggle Gemini Key */}
-            <button
-              onClick={() => setShowKeyInput(!showKeyInput)}
-              className="text-xs font-heading font-semibold px-2.5 py-1 rounded border border-[#282a34] bg-[#14151a] hover:bg-[#1f2128] text-gray-300 hover:text-white flex items-center space-x-1.5 transition"
-              title="Configure Gemini API Key"
-            >
-              <Key className="w-3.5 h-3.5 text-[#ff9100]" />
-              <span>{isConnected ? 'API Key' : 'Connect Gemini'}</span>
-            </button>
+            
 
             <button
               onClick={onClose}
