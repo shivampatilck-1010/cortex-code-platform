@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { 
@@ -15,32 +15,103 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import Editor from '@monaco-editor/react';
-import { COURSES } from '@/lib/learning/courses-data';
 import { executeInCloudSandbox } from '@/lib/execution/engine';
+import { LearningCourse, LearningLesson, LearningProgress } from '@/lib/learning/db';
+
+type CourseData = LearningCourse & { lessons: LearningLesson[] };
 
 export default function CourseLessonPage() {
   const params = useParams();
   const courseId = (params?.courseId as string) || 'cpp-fundamentals';
-  const course = COURSES.find((c) => c.id === courseId) || COURSES[0];
+
+  const [course, setCourse] = useState<CourseData | null>(null);
+  const [progress, setProgress] = useState<LearningProgress[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [currentLessonIdx, setCurrentLessonIdx] = useState(0);
-  const currentLesson = course.lessons[currentLessonIdx] || course.lessons[0];
-
-  const [code, setCode] = useState(currentLesson.starterCode);
+  const [code, setCode] = useState('');
   const [output, setOutput] = useState<string | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isPassed, setIsPassed] = useState<boolean | null>(null);
   const [showHint, setShowHint] = useState(false);
 
+  useEffect(() => {
+    const fetchCourseAndProgress = async () => {
+      try {
+        const [cRes, pRes] = await Promise.all([
+          fetch(`/api/v1/learn/courses/${courseId}`).then(r => r.json()),
+          fetch(`/api/v1/learn/progress?courseId=${courseId}`).then(r => r.json().catch(() => ({ progress: [] })))
+        ]);
+
+        if (cRes.course) {
+          setCourse(cRes.course);
+          const userProgress = pRes.progress || [];
+          setProgress(userProgress);
+          
+          // Find first uncompleted lesson, or default to 0
+          let initialIdx = 0;
+          for (let i = 0; i < cRes.course.lessons.length; i++) {
+            const lessonProgress = userProgress.find((p: any) => p.lesson_id === cRes.course.lessons[i].id);
+            if (!lessonProgress || lessonProgress.status !== 'completed') {
+              initialIdx = i;
+              break;
+            }
+          }
+          
+          setCurrentLessonIdx(initialIdx);
+          const initialLesson = cRes.course.lessons[initialIdx];
+          const initialProg = userProgress.find((p: any) => p.lesson_id === initialLesson.id);
+          setCode(initialProg?.last_code || initialLesson.starter_code);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCourseAndProgress();
+  }, [courseId]);
+
   const handleLessonSwitch = (idx: number) => {
+    if (!course) return;
     setCurrentLessonIdx(idx);
-    setCode(course.lessons[idx].starterCode);
+    const newLesson = course.lessons[idx];
+    const lessonProg = progress.find(p => p.lesson_id === newLesson.id);
+    setCode(lessonProg?.last_code || newLesson.starter_code);
     setOutput(null);
-    setIsPassed(null);
+    setIsPassed(lessonProg?.status === 'completed' ? true : null);
     setShowHint(false);
   };
 
+  const saveProgress = async (status: 'completed' | 'in_progress', currentCode: string) => {
+    if (!course) return;
+    const currentLesson = course.lessons[currentLessonIdx];
+    try {
+      const res = await fetch('/api/v1/learn/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: course.id,
+          lessonId: currentLesson.id,
+          status,
+          lastCode: currentCode
+        })
+      });
+      const data = await res.json();
+      if (data.progress) {
+        setProgress(prev => {
+          const filtered = prev.filter(p => p.id !== data.progress.id);
+          return [...filtered, data.progress];
+        });
+      }
+    } catch (e) {
+      console.error('Failed to save progress', e);
+    }
+  };
+
   const handleCheckSolution = async () => {
+    if (!course) return;
+    const currentLesson = course.lessons[currentLessonIdx];
     setIsEvaluating(true);
     setIsPassed(null);
 
@@ -51,19 +122,31 @@ export default function CourseLessonPage() {
       });
 
       const actual = (res.stdout || '').trim();
-      const expected = currentLesson.expectedOutput.trim();
+      const expected = currentLesson.expected_output.trim();
       setOutput(res.stdout || res.stderr);
 
       if (actual.includes(expected)) {
         setIsPassed(true);
         confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+        await saveProgress('completed', code);
       } else {
         setIsPassed(false);
+        await saveProgress('in_progress', code);
       }
     } finally {
       setIsEvaluating(false);
     }
   };
+
+  if (loading) {
+    return <div className="h-screen w-screen flex items-center justify-center bg-[#121316] text-gray-400">Loading course...</div>;
+  }
+
+  if (!course) {
+    return <div className="h-screen w-screen flex items-center justify-center bg-[#121316] text-rose-400">Course not found.</div>;
+  }
+
+  const currentLesson = course.lessons[currentLessonIdx] || course.lessons[0];
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#121316] text-gray-100 font-sans select-none overflow-hidden">
@@ -125,7 +208,7 @@ export default function CourseLessonPage() {
 
             <div className="p-3 bg-[#131417] rounded border border-[#252832] font-mono text-[11px]">
               <span className="text-gray-500 block mb-1 font-sans font-semibold">Expected Output:</span>
-              <pre className="text-emerald-400">{currentLesson.expectedOutput}</pre>
+              <pre className="text-emerald-400">{currentLesson.expected_output}</pre>
             </div>
 
             {/* Hint Drawer */}

@@ -14,7 +14,7 @@ const suites = [
   'test-phase2i-a.mjs',
   'test-phase2i-b.ts',
   'test-phase2i-c.ts',
-  'test-phase2i-d.ts'
+  'test-phase2i-d.ts', 'test-phase2i-e.ts'
 ];
 
 console.log('=== RUNNING ALL REGRESSION SUITES LOCALLY ===');
