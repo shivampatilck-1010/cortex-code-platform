@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
+  Folder, FolderGit2,
   Terminal as TermIcon, 
   CheckSquare, 
   Sparkles, 
@@ -18,6 +19,7 @@ import confetti from 'canvas-confetti';
 import { Navbar } from '@/components/layout/Navbar';
 import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
 import { FileExplorer } from '@/components/sidebar/FileExplorer';
+import { SourceControlPanel } from '@/components/sidebar/SourceControlPanel';
 import { OutputPanel } from '@/components/panels/OutputPanel';
 import { TerminalPanel } from '@/components/panels/TerminalPanel';
 import { TestCasesPanel } from '@/components/panels/TestCasesPanel';
@@ -285,6 +287,7 @@ export default function CloudIDEPage() {
 
   // 7. Resizable Panels & Fullscreen State
   const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [activeSidebarTab, setActiveSidebarTab] = useState<'files'|'git'>('files');
   const [dockHeight, setDockHeight] = useState(280);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingDock, setIsResizingDock] = useState(false);
@@ -744,8 +747,21 @@ export default function CloudIDEPage() {
       {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
       <div className="flex-1 flex overflow-hidden bg-[#0b0c0e]">
         {/* Left Sidebar: File Explorer (Resizable width & custom #3d3c3b background) */}
-        <FileExplorer
-          width={sidebarWidth}
+        {/* Activity Bar */}
+        <div className="w-12 bg-[#1C1B1A] border-r border-[#3D3C3B] flex flex-col items-center py-2 gap-4 flex-shrink-0 z-10">
+          <button onClick={() => setActiveSidebarTab('files')} className={`p-2 rounded-md transition-colors ${activeSidebarTab === 'files' ? 'bg-[#3D3C3B] text-white' : 'text-[#8a8886] hover:text-white'}`}>
+            <Folder className="w-5 h-5" />
+          </button>
+          <button onClick={() => setActiveSidebarTab('git')} className={`p-2 rounded-md transition-colors ${activeSidebarTab === 'git' ? 'bg-[#3D3C3B] text-white' : 'text-[#8a8886] hover:text-white'}`}>
+            <FolderGit2 className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Left Sidebar: dynamic content */}
+        <div style={{ width: `${sidebarWidth - 48}px`, minWidth: `${sidebarWidth - 48}px` }} className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0">
+          {activeSidebarTab === 'files' ? (
+            <FileExplorer
+          width={undefined}
           files={files}
           activeFileId={activeFileId}
           onSelectFile={setActiveFileId}
@@ -853,6 +869,10 @@ export default function CloudIDEPage() {
           }}
           isDarkMode={true}
         />
+          ) : (
+            <SourceControlPanel projectId={projectId!} />
+          )}
+        </div>
 
         {/* Horizontal Resize Splitter */}
         <div

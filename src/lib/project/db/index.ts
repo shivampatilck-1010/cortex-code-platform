@@ -100,6 +100,27 @@ class ProjectDatabase {
         updated_at INTEGER NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS github_connections (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL UNIQUE,
+          github_user_id TEXT NOT NULL,
+          github_username TEXT NOT NULL,
+          access_token TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS project_github_links (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL UNIQUE,
+          repo_owner TEXT NOT NULL,
+          repo_name TEXT NOT NULL,
+          default_branch TEXT NOT NULL DEFAULT 'main',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
     `);
   }
 
@@ -216,6 +237,47 @@ class ProjectDatabase {
     if (!(await this.getDb())) return;
     await (await this.getDb()).prepare('DELETE FROM project_files WHERE id = ?').run(id);
   }
+
+  // --- GitHub Integration ---
+  
+  async getGitHubConnection(userId: string) {
+    if (!(await this.getDb())) return null;
+    return await (await this.getDb()).prepare('SELECT * FROM github_connections WHERE user_id = ?').get(userId);
+  }
+
+  async saveGitHubConnection(userId: string, githubUserId: string, githubUsername: string, accessToken: string) {
+    if (!(await this.getDb())) return;
+    const now = Date.now();
+    await (await this.getDb()).prepare(
+      'INSERT INTO github_connections (id, user_id, github_user_id, github_username, access_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET github_user_id=excluded.github_user_id, github_username=excluded.github_username, access_token=excluded.access_token, updated_at=excluded.updated_at'
+    ).run("ghc_" + now, userId, githubUserId, githubUsername, accessToken, now, now);
+  }
+
+  async deleteGitHubConnection(userId: string) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('DELETE FROM github_connections WHERE user_id = ?').run(userId);
+  }
+
+  async getProjectGitHubLink(projectId: string) {
+    if (!(await this.getDb())) return null;
+    return await (await this.getDb()).prepare('SELECT * FROM project_github_links WHERE project_id = ?').get(projectId);
+  }
+
+  async saveProjectGitHubLink(projectId: string, repoOwner: string, repoName: string, defaultBranch: string = 'main') {
+    if (!(await this.getDb())) return;
+    const now = Date.now();
+    await (await this.getDb()).prepare(
+      'INSERT INTO project_github_links (id, project_id, repo_owner, repo_name, default_branch, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET repo_owner=excluded.repo_owner, repo_name=excluded.repo_name, default_branch=excluded.default_branch, updated_at=excluded.updated_at'
+    ).run("pgh_" + now, projectId, repoOwner, repoName, defaultBranch, now, now);
+  }
+
+  async deleteProjectGitHubLink(projectId: string) {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('DELETE FROM project_github_links WHERE project_id = ?').run(projectId);
+  }
+
+
+
 }
 
 export const projectDb = new ProjectDatabase();
