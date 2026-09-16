@@ -18,13 +18,14 @@ const suites = [
 ];
 
 console.log('=== RUNNING ALL REGRESSION SUITES LOCALLY ===');
+const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 for (const suite of suites) {
   if (fs.existsSync('scripts/' + suite)) {
     try {
       console.log('--- RUNNING ' + suite + ' ---');
       const out = execSync('npx tsx scripts/' + suite, { 
           encoding: 'utf-8', 
-          env: { ...process.env, BASE_URL: 'http://localhost:3001' }
+          env: { ...process.env, BASE_URL: baseUrl }
       });
       const passMatch = out.match(/(\\d+)\\s*PASS/);
       const failMatch = out.match(/(\\d+)\\s*FAIL/);

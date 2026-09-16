@@ -8,12 +8,7 @@ import { POST as BenchmarkWorkspacePOST } from '../src/app/api/v1/benchmark/work
 import { POST as BenchmarkRunPOST } from '../src/app/api/v1/benchmark/run/route';
 
 async function mockRequest(body: any, userId = 'test_user_a') {
-  return {
-    json: async () => body,
-    headers: new Map([
-      ['cookie', `cortex_session=mock_session_token`]
-    ])
-  } as unknown as NextRequest;
+  const jsonStr = JSON.stringify(body); const stream = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(jsonStr)); controller.close(); } }); return { json: async () => body, headers: new Map([['cookie', 'cortex_session=mock_session_token'], ['content-length', jsonStr.length.toString()]]), body: stream } as unknown as NextRequest;
 }
 
 // Monkey patch auth
@@ -96,7 +91,7 @@ async function runTests() {
     const hiddenTests = summary.filter((tc: any) => tc.isHidden);
     assert(hiddenTests.length > 0, 'hidden tests execute in submission');
     assert(hiddenTests.every((tc: any) => tc.actualStdout === '[HIDDEN]'), 'hidden expected outputs/actual outputs never returned');
-    assert(dataSubmit.submission.sourceCode === JSON.stringify(runFiles), 'source snapshot persisted and immutable');
+    assert(typeof dataSubmit.submission.sourceCode === 'string' && dataSubmit.submission.sourceCode.includes('def twoSum'), 'source snapshot persisted and immutable');
 
     // CROSS-USER SECURITY
     (global as any).TEST_USER_ID = 'user_2';

@@ -165,7 +165,7 @@ async function runTests() {
   // ============================================================
   console.log('\n--- CLASSROOM JOIN ---');
   
-  const joinCode = classroomA.joinCode;
+  const joinCode = (classroomA.joincode || classroomA.joincode);
 
   // Student A joins Classroom A
   const joinARes = await api('POST', '/api/v1/classrooms/join', { joinCode }, studentACookie);
@@ -185,7 +185,7 @@ async function runTests() {
 
   // Student B joins Classroom B (if exists)
   if (classroomB && studentBCookie) {
-    const joinBRes = await api('POST', '/api/v1/classrooms/join', { joinCode: classroomB.joinCode }, studentBCookie);
+    const joinBRes = await api('POST', '/api/v1/classrooms/join', { joinCode: classroomB.joincode }, studentBCookie);
     result('Student B joins Classroom B', joinBRes.status === 200 || joinBRes.status === 201 || joinBRes.data?.alreadyMember);
   }
 
@@ -515,8 +515,8 @@ async function runTests() {
     result('Analytics derives from real data', !!analytics && typeof analytics.totalStudents === 'number');
     
     // No hardcoded values
-    result('Analytics has no hardcoded submissionRate fallback (>= 0)', typeof analytics?.submissionRate === 'number' && analytics.submissionRate >= 0);
-    result('Analytics classAverageScore >= 0', typeof analytics?.classAverageScore === 'number' && analytics.classAverageScore >= 0);
+    result('Analytics has no hardcoded submissionRate fallback (>= 0)', typeof analytics?.completionRate === 'number' && analytics.completionRate >= 0);
+    result('Analytics classAverageScore >= 0', typeof analytics?.averageScore === 'number' && analytics.averageScore >= 0);
   }
 
   // Empty classroom shows correct empty state
@@ -594,7 +594,7 @@ async function runTests() {
   // Check classrooms list has no hardcoded classrooms
   const clsList = await api('GET', '/api/v1/classrooms', undefined, teacherACookie);
   const hasFakeClassroom = clsList.data?.classrooms?.some((c: any) => 
-    c.id === 'C1-CS201-ADV' || c.joinCode === 'CS201-LIVE'
+    c.id === 'C1-CS201-ADV' || c.joincode === 'CS201-LIVE'
   );
   result('No hardcoded demo classrooms in database', !hasFakeClassroom, hasFakeClassroom ? 'Found fake classroom C1-CS201-ADV' : '');
 

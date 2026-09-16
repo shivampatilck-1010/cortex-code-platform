@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 import { WebSocket } from 'ws';
 
 // Setup Test Utilities (Similar to test-phase2c.ts)
-const API_BASE = 'http://localhost:3000/api/v1';
+const API_BASE = `${(process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '')}/api/v1`;
 const WS_BASE = 'ws://localhost:3003'; 
 
 async function runTests() {

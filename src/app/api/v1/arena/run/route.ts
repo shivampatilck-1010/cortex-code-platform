@@ -5,8 +5,10 @@ import { projectDb } from '@/lib/project/db';
 import { CHALLENGES } from '@/lib/challenges/challenges-data';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 import { TestCase } from '@/lib/execution/types';
+import { readJsonBody, RequestBodyError } from '@/lib/http/safe-json';
+import { ARENA_MAX_REQUEST_BYTES, validateArenaAutosaveFiles } from '@/lib/arena/request-validation';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,20 +17,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const contentLength = req.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > 2 * 1024 * 1024) {
-      return NextResponse.json({ error: 'Request payload too large (max 2MB)' }, { status: 413 });
-    }
-
-    const body = await req.json();
+    const body = await readJsonBody<any>(req, ARENA_MAX_REQUEST_BYTES);
     const { challengeId, language, files: clientFiles } = body;
 
-    // Validate sizes of client files
-    if (clientFiles && Array.isArray(clientFiles)) {
-      const totalSize = clientFiles.reduce((acc: number, f: any) => acc + (f.content?.length || 0), 0);
-      if (totalSize > 1024 * 1024) {
-        return NextResponse.json({ error: 'File content too large (max 1MB total)' }, { status: 413 });
-      }
+    const fileValidation = clientFiles === undefined ? null : validateArenaAutosaveFiles(clientFiles);
+    if (fileValidation && !fileValidation.valid) {
+      return NextResponse.json({ error: fileValidation.error }, { status: fileValidation.status });
     }
 
     if (!challengeId || !language) {
@@ -47,9 +41,9 @@ export async function POST(req: NextRequest) {
     }
 
     // If client sent updated files, autosave to workspace (persists code changes)
-    if (clientFiles && Array.isArray(clientFiles) && clientFiles.length > 0) {
+    if (fileValidation?.valid && fileValidation.files.length > 0) {
       const existingFiles = await projectDb.listFilesForProject(workspace.projectId);
-      for (const clientFile of clientFiles) {
+      for (const clientFile of fileValidation.files) {
         const existing = existingFiles.find(f => f.name === clientFile.name || f.id === clientFile.id);
         if (existing) {
           await projectDb.updateFile(existing.id, { content: clientFile.content, updatedAt: Date.now() });
@@ -124,6 +118,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
+    if (err instanceof RequestBodyError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err?.message?.includes('Authentication required')) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }

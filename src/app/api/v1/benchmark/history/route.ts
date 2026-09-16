@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { arenaDb } from '@/lib/arena/db';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 /**
  * GET /api/v1/benchmark/history?benchmarkId=<id>

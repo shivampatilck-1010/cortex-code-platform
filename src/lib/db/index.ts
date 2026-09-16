@@ -69,21 +69,30 @@ export async function getDbInstance(dbPath: string): Promise<DBInstance | null> 
   }
 
   try {
-    const customReq = typeof (globalThis as any).__webpack_require__ !== 'undefined' 
-      ? ((globalThis as any).__non_webpack_require__ || (typeof require !== "undefined" ? require : undefined)) 
-      : (typeof require !== 'undefined' ? require : createRequire(import.meta.url));
     let DatabaseSync: any;
-    try {
+    let fs: any;
+    let path: any;
+
+    if (typeof require !== 'undefined') {
+      // @ts-ignore
+      DatabaseSync = require('node:sqlite').DatabaseSync;
+      // @ts-ignore
+      fs = require('fs');
+      // @ts-ignore
+      path = require('path');
+    } else {
+      const customReq = createRequire(import.meta.url);
       DatabaseSync = customReq('node:sqlite').DatabaseSync;
-    } catch {
-      DatabaseSync = customReq('node:sqlite').DatabaseSync;
+      fs = customReq('fs');
+      path = customReq('path');
     }
-    const fs = customReq('fs');
-    const path = customReq('path');
+
     if (!fs.existsSync(path.dirname(dbPath))) {
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     }
     const db = new DatabaseSync(dbPath);
+    db.exec('PRAGMA journal_mode = WAL;');
+    db.exec('PRAGMA foreign_keys = ON;');
     return {
       exec: async (sql: string) => db.exec(sql),
       prepare: (sql: string) => {

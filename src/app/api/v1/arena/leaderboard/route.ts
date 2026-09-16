@@ -3,7 +3,7 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { arenaDb } from '@/lib/arena/db';
 import { CHALLENGES } from '@/lib/challenges/challenges-data';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 /**
  * GET /api/v1/arena/leaderboard?challengeId=<id>

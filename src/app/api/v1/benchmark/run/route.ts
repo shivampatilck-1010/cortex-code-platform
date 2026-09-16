@@ -4,7 +4,7 @@ import { arenaDb } from '@/lib/arena/db';
 import { projectDb, Project } from '@/lib/project/db';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 async function persistFiles(projectId: string, clientFiles: any[]) {
   if (!clientFiles || clientFiles.length === 0) return;

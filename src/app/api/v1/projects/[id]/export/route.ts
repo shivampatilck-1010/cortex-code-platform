@@ -3,7 +3,7 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { projectDb } from '@/lib/project/db';
 import { zipSync, strToU8 } from 'fflate';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {

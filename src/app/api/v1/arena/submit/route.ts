@@ -5,8 +5,10 @@ import { projectDb } from '@/lib/project/db';
 import { CHALLENGES } from '@/lib/challenges/challenges-data';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 import { TestCase } from '@/lib/execution/types';
+import { readJsonBody, RequestBodyError } from '@/lib/http/safe-json';
+import { ARENA_MAX_REQUEST_BYTES, validateArenaAutosaveFiles } from '@/lib/arena/request-validation';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,8 +17,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
+    const body = await readJsonBody<any>(req, ARENA_MAX_REQUEST_BYTES);
     const { challengeId, language, files: clientFiles } = body;
+
+    const fileValidation = clientFiles === undefined ? null : validateArenaAutosaveFiles(clientFiles);
+    if (fileValidation && !fileValidation.valid) {
+      return NextResponse.json({ error: fileValidation.error }, { status: fileValidation.status });
+    }
 
     if (!challengeId || !language) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -34,9 +41,9 @@ export async function POST(req: NextRequest) {
     }
 
     // If client sent updated files, autosave to workspace before evaluating
-    if (clientFiles && Array.isArray(clientFiles) && clientFiles.length > 0) {
+    if (fileValidation?.valid && fileValidation.files.length > 0) {
       const existingFiles = await projectDb.listFilesForProject(workspace.projectId);
-      for (const clientFile of clientFiles) {
+      for (const clientFile of fileValidation.files) {
         const existing = existingFiles.find(f => f.name === clientFile.name || f.id === clientFile.id);
         if (existing) {
           await projectDb.updateFile(existing.id, { content: clientFile.content, updatedAt: Date.now() });
@@ -159,6 +166,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
+    if (err instanceof RequestBodyError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err?.message?.includes('Authentication required')) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }

@@ -2,7 +2,7 @@ import fs from 'fs';
 import assert from 'assert';
 import path from 'path';
 
-const BASE_URL = 'http://localhost:3000/api/v1';
+const BASE_URL = `${(process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '')}/api/v1`;
 
 async function runTests() {
   console.log('--- CORTEX PHASE 1 FINAL VERIFICATION ---');

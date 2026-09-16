@@ -1,4 +1,3 @@
-import path from 'path';
 import { ProjectFile } from './types';
 import { EXECUTION_LIMITS } from './config';
 
@@ -14,6 +13,11 @@ export interface ProjectValidationResult {
   sanitizedFiles?: ProjectFile[];
 }
 
+function baseName(value: string): string {
+  const segments = value.split('/');
+  return segments[segments.length - 1] || '';
+}
+
 /**
  * Validates and normalizes an untrusted file path to ensure it remains strictly
  * within the workspace sandbox without any possibility of directory traversal.
@@ -21,6 +25,16 @@ export interface ProjectValidationResult {
 export function validateAndSanitizePath(rawPath: string, rootDir?: string): PathValidationResult {
   if (!rawPath || typeof rawPath !== 'string') {
     return { valid: false, error: 'Path must be a non-empty string' };
+  }
+
+  // API workspace paths historically use `/main.py` for a root-level file.
+  // Treat every other leading-slash/backslash form as an OS absolute path,
+  // rather than normalizing a dangerous path into an acceptable one.
+  if (rawPath.startsWith('\\')) {
+    return { valid: false, error: 'Absolute Windows or UNC paths are not allowed' };
+  }
+  if (rawPath.startsWith('/') && rawPath.slice(1).includes('/')) {
+    return { valid: false, error: 'Absolute Unix paths are not allowed' };
   }
 
   // 1. Check for null byte injection
@@ -54,22 +68,23 @@ export function validateAndSanitizePath(rawPath: string, rootDir?: string): Path
   }
 
   // 5. Reject dangerous filenames (.env, hidden files, node_modules, etc.)
-  const baseName = path.basename(normalized).toLowerCase();
-  if (baseName.startsWith('.env') || baseName === '.git' || baseName === 'node_modules') {
-    return { valid: false, error: `Access to "${baseName}" is prohibited` };
+  const filename = baseName(normalized).toLowerCase();
+  if (filename.startsWith('.env') || filename === '.git' || filename === 'node_modules') {
+    return { valid: false, error: `Access to "${filename}" is prohibited` };
   }
   for (const seg of segments) {
     const s = seg.toLowerCase();
-    if (s === '.git' || s === 'node_modules') {
+    if (s.startsWith('.env') || s === '.git' || s === 'node_modules') {
       return { valid: false, error: `Access to directory "${s}" is prohibited` };
     }
   }
 
   // 6. If a rootDir is provided, verify resolved path is inside rootDir
   if (rootDir) {
-    const resolvedRoot = path.resolve(rootDir);
-    const resolvedTarget = path.resolve(rootDir, normalized);
-    if (!resolvedTarget.startsWith(resolvedRoot) || resolvedTarget === resolvedRoot) {
+    // `normalized` has already rejected absolute and traversal forms above.
+    // Keep this explicit guard for callers using a filesystem root without
+    // importing Node's `path` module into Worker/edge bundles.
+    if (!rootDir.trim() || normalized === '') {
       return { valid: false, error: 'Resolved path escapes workspace boundary' };
     }
     return { valid: true, sanitizedPath: normalized };
@@ -106,7 +121,7 @@ export function validateProjectFiles(files: ProjectFile[]): ProjectValidationRes
     }
 
     const content = typeof file.content === 'string' ? file.content : '';
-    const fileBytes = Buffer.byteLength(content, 'utf-8');
+    const fileBytes = new TextEncoder().encode(content).byteLength;
 
     if (fileBytes > EXECUTION_LIMITS.maxFileSizeBytes) {
       return {
@@ -123,6 +138,13 @@ export function validateProjectFiles(files: ProjectFile[]): ProjectValidationRes
       };
     }
 
+    // Validate both independent persistence fields. A safe `path` must not
+    // allow a hostile `name` to be stored in the project database.
+    const nameCheck = validateAndSanitizePath(file.name);
+    if (!nameCheck.valid) {
+      return { valid: false, error: `Invalid file name "${file.name}": ${nameCheck.error}` };
+    }
+
     // Validate path
     const rawPath = file.path || file.name;
     const pathCheck = validateAndSanitizePath(rawPath);
@@ -132,7 +154,7 @@ export function validateProjectFiles(files: ProjectFile[]): ProjectValidationRes
 
     sanitizedFiles.push({
       ...file,
-      name: path.basename(pathCheck.sanitizedPath!),
+      name: baseName(pathCheck.sanitizedPath!),
       path: `/${pathCheck.sanitizedPath!}`,
       content,
     });

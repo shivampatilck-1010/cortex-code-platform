@@ -35,6 +35,17 @@ async function apiGet(path: string, session?: string | null) {
   });
 }
 
+async function apiPostRaw(path: string, body: string, session?: string | null) {
+  return await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session ? { 'Cookie': `cortex_session=${session}` } : {})
+    },
+    body,
+  });
+}
+
 async function register() {
   const username = `user_${uid()}`;
   const password = 'Password123!';
@@ -326,16 +337,43 @@ async function runTests() {
   // ============================================================
   console.log('\n--- SECURITY ---');
 
-  // 19. Path traversal in arena submit files
+  // 19. Every autosaved Arena path is rejected before persistence.
   {
-    const files = [{ id: 'evil', name: '../../../etc/passwd', path: '/../../../etc/passwd', content: 'evil' }];
-    const r = await apiPost('/api/v1/arena/submit', { challengeId: 'two-sum', language: 'python', files }, userA);
-    // Should either fail validation or safely execute without traversal
-    result('Security: path traversal in arena submit files', r.status !== 500 ? 'PASS' : 'NEEDS VERIFICATION',
-      `Status: ${r.status} (path traversal sanitized by fflate/cloud runner)`);
+    const rejectedPaths = [
+      '../../../../etc/passwd', '..\\..\\secret', '/etc/passwd',
+      'C:\\Windows\\System32\\drivers\\etc\\hosts', 'null\0byte.py',
+      '.git/config', 'node_modules/package', '.env',
+    ];
+    let allRejected = true;
+    for (const rawPath of rejectedPaths) {
+      const r = await apiPost('/api/v1/arena/run', {
+        challengeId: 'two-sum', language: 'python',
+        files: [{ id: `bad_${uid()}`, name: rawPath, path: rawPath, content: 'print(1)' }],
+      }, userA);
+      allRejected &&= r.status === 400;
+    }
+    const workspace = await apiPost('/api/v1/arena/workspace', { challengeId: 'two-sum', language: 'python' }, userA);
+    const workspaceDataAfterReject = await workspace.json();
+    const persistedMaliciousFile = (workspaceDataAfterReject.files || []).some((file: any) =>
+      rejectedPaths.includes(file.name) || rejectedPaths.includes(file.path));
+    result('Security: Arena rejects dangerous paths before persistence', allRejected && !persistedMaliciousFile ? 'PASS' : 'FAIL');
   }
 
-  // 20. Hidden test stdin not in arena run response
+  // 20. Canonical valid workspace paths remain usable.
+  {
+    const validPaths = ['src/utils/helper.py', 'main.py'];
+    let accepted = true;
+    for (const rawPath of validPaths) {
+      const r = await apiPost('/api/v1/arena/run', {
+        challengeId: 'two-sum', language: 'python',
+        files: [{ id: `valid_${uid()}`, name: rawPath, path: rawPath, content: 'print(1)' }],
+      }, userA);
+      accepted &&= r.status !== 400 && r.status !== 413 && r.status !== 500;
+    }
+    result('Security: Arena accepts valid nested and root paths', accepted ? 'PASS' : 'FAIL');
+  }
+
+  // 21. Hidden test stdin not in arena run response
   {
     const files = [{ id: 'sol', name: 'solution.py', path: '/solution.py', content: 'print("x")' }];
     const r = await apiPost('/api/v1/arena/run', { challengeId: 'two-sum', language: 'python', files }, userA);
@@ -347,20 +385,19 @@ async function runTests() {
       hasHiddenTests ? 'Hidden test cases returned in run results!' : '');
   }
 
-  // 21. Oversized payload
+  // 22. Bounded parsing converts oversized and malformed bodies into controlled responses.
   {
     const bigCode = 'a'.repeat(1.5 * 1024 * 1024); // 1.5MB of content
     const files = [{ id: 'sol', name: 'solution.py', path: '/solution.py', content: bigCode }];
     try {
       const r = await apiPost('/api/v1/arena/run', { challengeId: 'two-sum', language: 'python', files }, userA);
-      // Status 413 = explicitly rejected by our guard; 400 = bad request; 500 may happen if edge body size limit fires before handler
-      // In Cloudflare Workers the 100MB request limit may fire as a platform-level 400/413 rather than a handler 500
-      const acceptable = r.status === 413 || r.status === 400 || r.status === 500;
-      result('Security: oversized payload handled', acceptable ? 'NEEDS VERIFICATION' : 'FAIL',
-        `Status: ${r.status} (platform may enforce 100MB limit; handler enforces 1MB content limit)`);
+      result('Security: oversized payload returns 413', r.status === 413 ? 'PASS' : 'FAIL', `Status: ${r.status}`);
     } catch (e: any) {
-      result('Security: oversized payload handled', 'NEEDS VERIFICATION', `Network/size error: ${e.message}`);
+      result('Security: oversized payload returns 413', 'FAIL', `Network/size error: ${e.message}`);
     }
+
+    const malformed = await apiPostRaw('/api/v1/arena/run', '{"challengeId":', userA);
+    result('Security: malformed Arena JSON returns 400', malformed.status === 400 ? 'PASS' : 'FAIL', `Status: ${malformed.status}`);
   }
 
   // 22. Benchmark cross-user workspace IDOR

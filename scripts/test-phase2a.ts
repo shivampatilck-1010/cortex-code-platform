@@ -1,4 +1,4 @@
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const APP_URL = process.env.BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 async function logAuthAndRunTests() {
   console.log('--- STARTING CORTEX PHASE 2A TESTS ---');

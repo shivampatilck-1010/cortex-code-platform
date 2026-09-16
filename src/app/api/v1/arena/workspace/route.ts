@@ -3,6 +3,8 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { arenaDb } from '@/lib/arena/db';
 import { projectDb, Project, ProjectFile } from '@/lib/project/db';
 import { CHALLENGES } from '@/lib/challenges/challenges-data';
+import { readJsonBody, RequestBodyError } from '@/lib/http/safe-json';
+import { ARENA_MAX_REQUEST_BYTES } from '@/lib/arena/request-validation';
 
 
 export async function POST(req: NextRequest) {
@@ -12,7 +14,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { challengeId, language } = await req.json();
+    const { challengeId, language } = await readJsonBody<{ challengeId?: string; language?: string }>(req, ARENA_MAX_REQUEST_BYTES);
     if (!challengeId) {
       return NextResponse.json({ error: 'Missing challengeId' }, { status: 400 });
     }
@@ -82,6 +84,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ workspace, files, created, challenge: safeChallenge });
   } catch (err: any) {
+    if (err instanceof RequestBodyError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err?.message?.includes('Authentication required')) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
