@@ -25,16 +25,30 @@ export async function POST(req: NextRequest) {
 
     await classroomDb.createResetToken(fastHash, user.id, expiresAt);
 
-    if (process.env.NODE_ENV === 'development' || !process.env.EMAIL_PROVIDER) {
-      console.log('\n==================================================');
-      console.log('DEVELOPMENT ONLY: PASSWORD RESET TOKEN');
-      console.log(`User: ${user.email}`);
-      console.log(`Token: ${resetToken}`);
-      console.log('Use this token to reset the password manually.');
-      console.log('==================================================\n');
-    } else {
-      // In production, send via email provider
-      // throw new Error("Production email provider missing");
+    if (!process.env.RESEND_API_KEY) {
+      console.error('RESEND_API_KEY is missing');
+      return NextResponse.json({ error: 'Email configuration is missing on the server.' }, { status: 500 });
+    }
+
+    const resetUrl = new URL(req.url).origin + '/auth/reset-password?token=' + resetToken;
+    const emailReq = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'support@cortexcode.io',
+        to: user.email,
+        subject: 'Cortex Code Platform - Password Reset',
+        html: `<p>Hello ${user.name},</p><p>You requested a password reset. Click the link below to reset your password:</p><p><a href="${resetUrl}">Reset Password</a></p><p>This link expires in 1 hour.</p>`
+      })
+    });
+
+    if (!emailReq.ok) {
+      console.error('Failed to dispatch email via provider:', await emailReq.text());
+      // Fail safely without claiming delivery
+      return NextResponse.json({ error: 'Email provider rejected the request. Please try again later.' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message: 'If an account with that email exists, a password reset link has been sent.' });

@@ -3,8 +3,9 @@ import { projectDb } from '@/lib/project/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { githubRateLimiter } from '@/lib/execution/rate-limiter';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const ip = req.headers.get('x-forwarded-for') || 'unknown';
     const rateCheck = githubRateLimiter.checkRateLimit(ip);
     if (!rateCheck.allowed) return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const project = await projectDb.getProject(params.id);
+    const project = await projectDb.getProject(id);
     if (!project || project.ownerId !== user.id) {
       return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 403 });
     }
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const connection = await projectDb.getGitHubConnection(user.id);
     if (!connection) return NextResponse.json({ error: 'GitHub not connected' }, { status: 400 });
 
-    const link = await projectDb.getProjectGitHubLink(params.id);
+    const link = await projectDb.getProjectGitHubLink(id);
     if (!link) return NextResponse.json({ error: 'Repository not linked to project' }, { status: 400 });
 
     const body = await req.json();
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           }
           await projectDb.createFile({
             id: 'file_' + Date.now() + Math.random(),
-            projectId: params.id,
+            projectId: id,
             name: item.path.split('/').pop(),
             path: item.path,
             content,
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           if (item.path.includes('.git/') || item.path.includes('node_modules/')) continue;
           await projectDb.createFile({
             id: 'file_' + Date.now() + Math.random(),
-            projectId: params.id,
+            projectId: id,
             name: item.path.split('/').pop(),
             path: item.path,
             content: '',
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const baseCommitSha = refData.object.sha;
 
       // 2. Create Tree
-      const files = await projectDb.listFilesForProject(params.id);
+      const files = await projectDb.listFilesForProject(id);
       const tree = files.filter(f => !f.isFolder).map(f => ({
         path: f.path,
         mode: '100644',

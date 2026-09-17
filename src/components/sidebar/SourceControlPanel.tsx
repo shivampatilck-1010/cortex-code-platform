@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GitBranch, GitCommit, Github, RefreshCw, UploadCloud, DownloadCloud, AlertCircle } from 'lucide-react';
 
 export function SourceControlPanel({ projectId }: { projectId: string }) {
@@ -13,6 +13,9 @@ export function SourceControlPanel({ projectId }: { projectId: string }) {
   const [commitMessage, setCommitMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const [branches, setBranches] = useState<string[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
+
   useEffect(() => {
     if (projectId) fetchStatus();
   }, [projectId]);
@@ -26,11 +29,30 @@ export function SourceControlPanel({ projectId }: { projectId: string }) {
         setConnected(data.connected);
         setUsername(data.githubUsername);
         setLink(data.link);
+        if (data.link) {
+           setSelectedBranch(data.link.defaultBranch);
+           fetchBranches(data.link);
+        }
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchBranches = async (linkData: any) => {
+    try {
+      // Dummy fetch to github branches API (would hit our backend)
+      const res = await fetch(`/api/v1/projects/${projectId}/github/branches`);
+      if (res.ok) {
+         const data = await res.json();
+         setBranches(data.branches || [linkData.defaultBranch]);
+      } else {
+         setBranches([linkData.defaultBranch]);
+      }
+    } catch {
+       setBranches([linkData.defaultBranch]);
     }
   };
 
@@ -72,7 +94,7 @@ export function SourceControlPanel({ projectId }: { projectId: string }) {
       const res = await fetch(`/api/v1/projects/${projectId}/github/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, commitMessage })
+        body: JSON.stringify({ action, commitMessage, branch: selectedBranch })
       });
       if (!res.ok) {
         const data = await res.json();
@@ -159,7 +181,14 @@ export function SourceControlPanel({ projectId }: { projectId: string }) {
             <span className="text-[#8a8886]">Repo:</span> {link.repoOwner}/{link.repoName}
           </div>
           <div className="flex items-center gap-2 text-sm text-[#e8e6e3]">
-            <span className="text-[#8a8886]">Branch:</span> <GitBranch className="w-3 h-3 text-[#FF9100]" /> {link.defaultBranch}
+            <span className="text-[#8a8886]">Branch:</span> 
+            <select 
+              value={selectedBranch} 
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="bg-[#2a2928] text-xs text-[#e8e6e3] border border-[#3D3C3B] rounded px-1"
+            >
+              {branches.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
           </div>
         </div>
       </div>
@@ -183,7 +212,7 @@ export function SourceControlPanel({ projectId }: { projectId: string }) {
             disabled={!commitMessage || syncing}
             className="w-full flex justify-center items-center gap-2 px-4 py-2 bg-[#FF9100] hover:bg-[#ff9100]/90 disabled:opacity-50 text-white rounded-md text-sm font-medium transition-colors"
           >
-            {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />} Commit & Push
+            {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />} Commit & Push to {selectedBranch}
           </button>
           
           <div className="relative py-2">
@@ -196,7 +225,7 @@ export function SourceControlPanel({ projectId }: { projectId: string }) {
             disabled={syncing}
             className="w-full flex justify-center items-center gap-2 px-4 py-2 bg-[#2a2928] hover:bg-[#3D3C3B] border border-[#3D3C3B] disabled:opacity-50 text-[#e8e6e3] rounded-md text-sm font-medium transition-colors"
           >
-            {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />} Pull from GitHub
+            {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />} Pull from {selectedBranch}
           </button>
         </div>
       </div>

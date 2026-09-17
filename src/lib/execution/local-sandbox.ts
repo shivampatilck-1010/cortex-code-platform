@@ -360,10 +360,38 @@ function cleanup(dir: string) {
   } catch {}
 }
 
-/**
- * Sanitizes output to remove internal server paths or sensitive temporary folder names.
- */
 function sanitizeOutput(text: string, tmpDir: string): string {
-  if (!text || !tmpDir) return text || '';
-  return text.split(tmpDir).join('/workspace');
+  if (!text) return '';
+  let sanitized = text;
+
+  // 1. Replace the temporary sandbox directory
+  if (tmpDir) {
+    sanitized = sanitized.split(tmpDir).join('/workspace');
+    // Handle Windows paths if applicable
+    const windowsTmp = tmpDir.replace(/\//g, '\\');
+    sanitized = sanitized.split(windowsTmp).join('/workspace');
+  }
+
+  // 2. Replace the internal server working directory
+  const cwd = process.cwd();
+  if (cwd) {
+    sanitized = sanitized.split(cwd).join('/server');
+    const windowsCwd = cwd.replace(/\//g, '\\');
+    sanitized = sanitized.split(windowsCwd).join('/server');
+  }
+
+  // 3. Prevent exposure of user home directories
+  const homeDir = process.env.HOME || process.env.USERPROFILE;
+  if (homeDir) {
+    sanitized = sanitized.split(homeDir).join('~');
+    const windowsHome = homeDir.replace(/\//g, '\\');
+    sanitized = sanitized.split(windowsHome).join('~');
+  }
+
+  // 4. Clean up any leftover UUIDs or hashes that look like sandbox directories (e.g. cortex-sandbox-a1b2c3d4)
+  sanitized = sanitized.replace(/cortex-[a-f0-9-]{36}/g, 'cortex-sandbox-id');
+  sanitized = sanitized.replace(/\/(tmp|var\/folders|temp)\/cortex-[a-zA-Z0-9_-]+/g, '/workspace');
+  sanitized = sanitized.replace(/\\(tmp|var\\folders|temp)\\cortex-[a-zA-Z0-9_-]+/g, '\\workspace');
+
+  return sanitized;
 }

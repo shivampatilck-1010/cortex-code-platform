@@ -105,7 +105,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // AUTHORITATIVE: Load server files for execution
+    const queue = (typeof process !== 'undefined' && process.env && process.env.CORTEX_QUEUE) || 
+                  (typeof globalThis !== 'undefined' && (globalThis as any).env && (globalThis as any).env.CORTEX_QUEUE);
+
+    if (queue) {
+      const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2,6)}`;
+      await queue.send({
+        jobId,
+        userId: user.id,
+        benchmarkId,
+        runType,
+        langA,
+        langB,
+        workspaceAProjectId: workspace.workspaceAProjectId,
+        workspaceBProjectId: workspace.workspaceBProjectId
+      });
+      return NextResponse.json({ success: true, jobId, status: 'accepted' }, { status: 202 });
+    }
+
+    // Fallback if queue not bound (e.g. local dev without full workerd setup)
     const serverFilesA = runType === 'A' || runType === 'BOTH' 
       ? await projectDb.listFilesForProject(workspace.workspaceAProjectId)
       : [];
@@ -140,7 +158,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Persist benchmark run history for BOTH
     if (runType === 'BOTH' && resultA && resultB) {
       await arenaDb.createBenchmarkRun({
         id: `brun_${crypto.randomUUID()}`,

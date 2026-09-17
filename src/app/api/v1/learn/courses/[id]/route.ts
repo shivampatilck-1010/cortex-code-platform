@@ -3,9 +3,10 @@ import { learningDb } from '@/lib/learning/db';
 
 export const runtime = 'nodejs';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const courseId = params.id;
+    const { id } = await params;
+    const courseId = id;
     if (!courseId) {
       return NextResponse.json({ error: 'Missing course ID' }, { status: 400 });
     }

@@ -1,4 +1,4 @@
-﻿import * as Y from 'yjs';
+import * as Y from 'yjs';
 import {
   RealtimeMessage,
   ClassroomRealtimeEvent,
@@ -302,13 +302,19 @@ export class ClassroomRoomDO {
           actorName: sessionMeta.name,
           timestamp: Date.now(),
           payload: {
-            userId: sessionMeta.participantId,
-            userName: sessionMeta.name,
-            onlineCount: this.sessions.size,
+            reason: 'disconnected',
+            remainingParticipants: this.sessions.size,
           },
         };
+
         this.recordAndStoreEvent(leaveEvent);
         this.broadcastEvent(leaveEvent);
+        
+        if (this.sessions.size === 0) {
+          this.flushToD1(classroomId).catch(err => {
+            console.error('[DO Flush Error]', err);
+          });
+        }
       });
 
       server.addEventListener('error', () => {
@@ -688,6 +694,23 @@ export class ClassroomRoomDO {
         } catch {}
       }
     });
+  }
+
+  async flushToD1(classroomId: string) {
+    if (!this.env.DB) return;
+    try {
+      const db = this.env.DB;
+      const stateRaw = JSON.stringify({
+        latestTeacherCode: this.latestTeacherCode,
+        latestTeacherOutput: this.latestTeacherOutput,
+        recentEvents: this.eventLog
+      });
+      await db.prepare('UPDATE live_sessions SET state_json = ?, updated_at = ? WHERE classroom_id = ? AND status = ?')
+        .bind(stateRaw, Date.now(), classroomId, 'active')
+        .run();
+    } catch (e) {
+      console.error('[DO FlushToD1 Error]', e);
+    }
   }
 }
 

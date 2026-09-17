@@ -3,8 +3,9 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { projectDb } from '@/lib/project/db';
 import { githubRateLimiter } from '@/lib/execution/rate-limiter';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const ip = req.headers.get('x-forwarded-for') || 'unknown';
     const rateCheck = githubRateLimiter.checkRateLimit(ip);
     if (!rateCheck.allowed) return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
@@ -12,13 +13,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const project = await projectDb.getProject(params.id);
+    const project = await projectDb.getProject(id);
     if (!project || project.ownerId !== user.id) {
       return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 403 });
     }
 
     const connection = await projectDb.getGitHubConnection(user.id);
-    const link = await projectDb.getProjectGitHubLink(params.id);
+    const link = await projectDb.getProjectGitHubLink(id);
 
     return NextResponse.json({
       connected: !!connection,
@@ -30,8 +31,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const ip = req.headers.get('x-forwarded-for') || 'unknown';
     const rateCheck = githubRateLimiter.checkRateLimit(ip);
     if (!rateCheck.allowed) return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const project = await projectDb.getProject(params.id);
+    const project = await projectDb.getProject(id);
     if (!project || project.ownerId !== user.id) {
       return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 403 });
     }
@@ -55,15 +57,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'repoOwner and repoName required' }, { status: 400 });
     }
 
-    await projectDb.saveProjectGitHubLink(params.id, repoOwner, repoName, defaultBranch || 'main');
+    await projectDb.saveProjectGitHubLink(id, repoOwner, repoName, defaultBranch || 'main');
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const ip = req.headers.get('x-forwarded-for') || 'unknown';
     const rateCheck = githubRateLimiter.checkRateLimit(ip);
     if (!rateCheck.allowed) return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
@@ -71,12 +74,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const project = await projectDb.getProject(params.id);
+    const project = await projectDb.getProject(id);
     if (!project || project.ownerId !== user.id) {
       return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 403 });
     }
 
-    await projectDb.deleteProjectGitHubLink(params.id);
+    await projectDb.deleteProjectGitHubLink(id);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

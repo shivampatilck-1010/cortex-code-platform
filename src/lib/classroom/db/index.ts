@@ -319,7 +319,10 @@ class ClassroomDatabase {
         FOREIGN KEY(submission_id) REFERENCES submissions(id) ON DELETE CASCADE
       );
 
-      CREATE TABLE IF NOT EXISTS live_sessions (
+      CREATE TABLE IF NOT EXISTS platform_feedback (id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, email TEXT, severity TEXT NOT NULL, category TEXT, diagnostics_json TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL, user_id TEXT);
+
+      await this.db.exec(
+        CREATE TABLE IF NOT EXISTS live_sessions (
         id TEXT PRIMARY KEY,
         classroom_id TEXT NOT NULL,
         teacher_id TEXT NOT NULL,
@@ -407,7 +410,7 @@ class ClassroomDatabase {
     if (!(await this.getDb())) return user;
     const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO users (id, name, email, role, avatar, status, created_at, updated_at, cortex_id, password_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     await stmt.run(
       user.id, user.name, user.email, user.role, user.avatar || null, user.status, user.createdAt, user.updatedAt,
@@ -793,6 +796,7 @@ class ClassroomDatabase {
       content: r.content,
       pinned: Boolean(r.pinned),
       createdAt: r.created_at,
+      userId: r.user_id,
       updatedAt: r.updated_at,
       deletedAt: r.deleted_at || undefined,
     }));
@@ -1480,6 +1484,31 @@ class ClassroomDatabase {
     entries.sort((a, b) => b.points - a.points || b.solved - a.solved);
     entries.forEach((e, i) => (e.rank = i + 1));
     return entries;
+  }
+
+  async createPlatformFeedback(f: any): Promise<void> {
+    const db = await this.getDb();
+    if (!db) return;
+    await db.prepare('INSERT INTO platform_feedback (id, type, title, description, email, severity, category, diagnostics_json, status, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(f.id, f.type, f.title, f.description, f.email, f.severity, f.category, f.diagnostics ? JSON.stringify(f.diagnostics) : null, f.status, f.createdAt, f.userId);
+  }
+
+  async listPlatformFeedback(): Promise<any[]> {
+    const db = await this.getDb();
+    if (!db) return [];
+    const rows = await db.prepare('SELECT * FROM platform_feedback ORDER BY created_at DESC LIMIT 1000').all() as any[];
+    return rows.map(r => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      description: r.description,
+      email: r.email,
+      severity: r.severity,
+      category: r.category,
+      diagnostics: r.diagnostics_json ? JSON.parse(r.diagnostics_json) : undefined,
+      status: r.status,
+      createdAt: r.created_at
+    }));
   }
 }
 

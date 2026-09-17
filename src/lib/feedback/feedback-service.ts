@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import { classroomDb } from '@/lib/classroom/db';
 import nodemailer from 'nodemailer';
 
 export interface FeedbackDiagnostics {
@@ -28,7 +27,7 @@ export interface FeedbackRecord {
   severity: 'low' | 'medium' | 'high' | 'critical';
   diagnostics?: FeedbackDiagnostics;
   createdAt: string;
-  status: 'new' | 'investigating' | 'resolved';
+  status: 'new' | 'reviewed' | 'resolved';
   emailDelivery?: {
     attempted: boolean;
     sent: boolean;
@@ -38,51 +37,15 @@ export interface FeedbackRecord {
   };
 }
 
-import os from 'os';
-
-function ensureDbFile(): string {
-  const customPath = process.env.FEEDBACK_DB_PATH;
-  if (customPath) {
-    const dir = path.dirname(customPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(customPath)) fs.writeFileSync(customPath, JSON.stringify([], null, 2), 'utf-8');
-    return customPath;
-  }
-
-  const defaultDir = path.join(process.cwd(), 'data');
-  const defaultFile = path.join(defaultDir, 'feedback.json');
-
+export async function getAllFeedback(): Promise<FeedbackRecord[]> {
   try {
-    if (!fs.existsSync(defaultDir)) {
-      fs.mkdirSync(defaultDir, { recursive: true });
-    }
-    if (!fs.existsSync(defaultFile)) {
-      fs.writeFileSync(defaultFile, JSON.stringify([], null, 2), 'utf-8');
-    }
-    return defaultFile;
+    const records = await classroomDb.listPlatformFeedback();
+    return records as FeedbackRecord[];
   } catch (err) {
-    // Fallback to os.tmpdir() for serverless platforms with read-only filesystems (Vercel / AWS Lambda)
-    const tmpFile = path.join(os.tmpdir(), 'cortex-feedback.json');
-    try {
-      if (!fs.existsSync(tmpFile)) {
-        fs.writeFileSync(tmpFile, JSON.stringify([], null, 2), 'utf-8');
-      }
-    } catch {}
-    return tmpFile;
-  }
-}
-
-export function getAllFeedback(): FeedbackRecord[] {
-  const filePath = ensureDbFile();
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(raw) as FeedbackRecord[];
-  } catch (err) {
-    console.error('Error reading feedback database:', err);
+    console.error('Error reading feedback database from D1:', err);
     return [];
   }
 }
-
 
 function escapeHtml(str: string): string {
   return str
@@ -230,8 +193,6 @@ export async function sendEmailNotification(
 export async function saveFeedback(
   entry: Omit<FeedbackRecord, 'id' | 'createdAt' | 'status' | 'emailDelivery'>
 ): Promise<FeedbackRecord> {
-  ensureDbFile();
-
   const id = `FB-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
   const createdAt = new Date().toISOString();
 
@@ -257,15 +218,11 @@ export async function saveFeedback(
   };
 
   // Save to persistent database
-  const dbPath = ensureDbFile();
-  const all = getAllFeedback();
-  all.unshift(record); // newest first
   try {
-    fs.writeFileSync(dbPath, JSON.stringify(all, null, 2), 'utf-8');
+    await classroomDb.createPlatformFeedback(record);
   } catch (err) {
-    console.error('Failed to write feedback record to dbPath:', err);
+    console.error('Failed to write feedback record to D1:', err);
   }
 
   return record;
-
 }

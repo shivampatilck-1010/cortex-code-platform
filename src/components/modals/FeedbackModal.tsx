@@ -151,7 +151,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                   <span className="text-gray-400 flex items-center gap-1.5">
                     <Database className="w-3.5 h-3.5 text-blue-400" /> Database Status:
                   </span>
-                  <span className="text-emerald-400 font-medium">Saved (data/feedback.json)</span>
+                  <span className="text-emerald-400 font-medium">Saved successfully</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-gray-400 flex items-center gap-1.5">

@@ -23,11 +23,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (description.length > 10000) {
+      return NextResponse.json(
+        { error: 'Description is too long (max 10000 characters).' },
+        { status: 413 }
+      );
+    }
+
+    if (diagnostics && JSON.stringify(diagnostics).length > 20000) {
+       return NextResponse.json({ error: 'Diagnostics payload too large.' }, { status: 413 });
+    }
+
     const validTypes = ['bug', 'error', 'feature', 'general'] as const;
     const feedbackType = validTypes.includes(type) ? type : 'bug';
 
     const validSeverities = ['low', 'medium', 'high', 'critical'] as const;
     const feedbackSeverity = validSeverities.includes(severity) ? severity : 'medium';
+
+    // Optional user context
+    let userId: string | undefined = undefined;
+    try {
+      const user = await ClassroomAuth.getCurrentUser(req);
+      if (user && user.id) {
+        userId = user.id;
+      }
+    } catch (e) {
+      // ignore, anonymous feedback is allowed
+    }
 
     const record = await saveFeedback({
       type: feedbackType,
@@ -36,8 +58,9 @@ export async function POST(req: NextRequest) {
       email: typeof email === 'string' ? email.trim() : undefined,
       severity: feedbackSeverity,
       category,
+      userId,
       diagnostics: diagnostics as FeedbackDiagnostics,
-    });
+    } as any);
 
     return NextResponse.json({
       success: true,
@@ -64,7 +87,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: auth.error || 'Administrator privileges required.' }, { status });
     }
 
-    const all = getAllFeedback();
+    const all = await getAllFeedback();
     return NextResponse.json({
       success: true,
       count: all.length,

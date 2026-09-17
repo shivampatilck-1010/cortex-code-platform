@@ -1,5 +1,8 @@
 import { ClassroomRoomDO } from './lib/classroom/durable-object';
 import { ClassroomAuth, AuthenticatedClassroomUser } from './lib/classroom/auth';
+import { executeInCloudRunner } from './lib/execution/cloud-runner';
+import { arenaDb } from './lib/arena/db';
+import { projectDb } from './lib/project/db';
 // @ts-ignore
 import vinextHandler from 'vinext/server/fetch-handler';
 
@@ -13,6 +16,53 @@ export interface Env {
 }
 
 export default {
+  async queue(batch: any, env: Env): Promise<void> {
+    (globalThis as any).env = env;
+    for (const msg of batch.messages) {
+      const { jobId, userId, benchmarkId, runType, langA, langB, workspaceAProjectId, workspaceBProjectId } = msg.body;
+      try {
+        const serverFilesA = runType === 'A' || runType === 'BOTH' ? await projectDb.listFilesForProject(workspaceAProjectId) : [];
+        const serverFilesB = runType === 'B' || runType === 'BOTH' ? await projectDb.listFilesForProject(workspaceBProjectId) : [];
+
+        let resultA: any = null;
+        let resultB: any = null;
+
+        if (runType === 'A' || runType === 'BOTH') {
+          if (serverFilesA.length > 0) {
+            resultA = await executeInCloudRunner({ language: langA, files: serverFilesA, runTimeoutMs: 5000, memoryLimitMb: 256 });
+          }
+        }
+
+        if (runType === 'B' || runType === 'BOTH') {
+          if (serverFilesB.length > 0) {
+            resultB = await executeInCloudRunner({ language: langB, files: serverFilesB, runTimeoutMs: 5000, memoryLimitMb: 256 });
+          }
+        }
+
+        if (runType === 'BOTH' && resultA && resultB) {
+          await arenaDb.createBenchmarkRun({
+            id: `brun_${crypto.randomUUID()}`,
+            userId,
+            benchmarkId,
+            langA,
+            langB,
+            timeMsA: resultA.executionTimeMs || 0,
+            timeMsB: resultB.executionTimeMs || 0,
+            memoryMbA: resultA.memoryUsageMb || 0,
+            memoryMbB: resultB.memoryUsageMb || 0,
+            statusA: resultA.status || 'unknown',
+            statusB: resultB.status || 'unknown',
+            createdAt: Date.now()
+          });
+        }
+        msg.ack();
+      } catch (e) {
+        console.error('Queue job failed', e);
+        msg.retry();
+      }
+    }
+  },
+
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
     // Inject env globally so database wrappers can find D1 bindings
     (globalThis as any).env = env;
