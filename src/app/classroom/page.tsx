@@ -154,7 +154,31 @@ export default function ClassroomHubPage() {
   const [isCreateResourceModalOpen, setIsCreateResourceModalOpen] = useState(false);
 
   const [newResourceForm, setNewResourceForm] = React.useState({ name: '', type: 'link', url: '', description: '' });
-  const handleCreateResource = async (e: any) => { e.preventDefault(); setIsCreateResourceModalOpen(false); };
+  const handleCreateResource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClassroom) return;
+    try {
+      const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/resources`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          ...newResourceForm,
+          unit: 'General'
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.resource) {
+        setIsCreateResourceModalOpen(false);
+        setNewResourceForm({ name: '', type: 'link', url: '', description: '' });
+        showToast('Resource added successfully');
+        setResources(prev => [data.resource, ...prev]);
+      } else {
+        showToast(data.error || 'Failed to add resource');
+      }
+    } catch {
+      showToast('Error adding resource');
+    }
+  };
 
   const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
@@ -1038,7 +1062,7 @@ export default function ClassroomHubPage() {
   const isArchived = selectedClassroom?.status === 'archived';
 
   return (
-    <div className="min-h-screen w-screen bg-[#0d0e12] text-gray-200 flex flex-col font-sans select-none overflow-hidden">
+    <div className="h-screen w-screen bg-[#0d0e12] text-gray-200 flex flex-col font-sans select-none overflow-hidden">
 
       {/* Create Resource Modal */}
       {isCreateResourceModalOpen && (
@@ -1175,9 +1199,9 @@ export default function ClassroomHubPage() {
 
 
         {/* Main Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#0d0e12]">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0d0e12]">
           {selectedClassroom ? (
-            <main className="flex-1 flex flex-col min-w-0">
+            <main className="flex-1 flex flex-col min-w-0 min-h-0">
 
               {/* Top Navigation Tabs */}
               <div className="h-12 bg-[#13141a] border-b border-[#20222d] px-6 flex space-x-6 overflow-x-auto shrink-0 scrollbar-hide">
@@ -1745,6 +1769,17 @@ export default function ClassroomHubPage() {
                     Select an assignment to inspect test suite.
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* TAB 4: Arena (Placeholder) */}
+            {activeTab === 'arena' && (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center space-y-4">
+                <Terminal className="w-12 h-12 text-rose-500" />
+                <h3 className="text-lg font-bold text-white">Cortex Arena</h3>
+                <p className="text-xs max-w-md text-gray-500 leading-relaxed">
+                  The Arena is where coding battles and global challenges take place. Head over to the main Cortex Arena via the sidebar to compete globally.
+                </p>
               </div>
             )}
 

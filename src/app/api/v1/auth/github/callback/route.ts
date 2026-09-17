@@ -1,9 +1,16 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { projectDb } from '@/lib/project/db';
+import { githubRateLimiter } from '@/lib/execution/rate-limiter';
 
 export async function GET(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || 'unknown';
+    const rateCheck = githubRateLimiter.checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+    }
+
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -17,12 +24,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing code or state' }, { status: 400 });
     }
 
-    if (state !== user.id) {
-      return NextResponse.json({ error: 'Invalid state' }, { status: 400 });
+    const expectedState = req.cookies.get('github_oauth_state')?.value;
+
+    if (!state || !expectedState || state !== expectedState) {
+      return NextResponse.json({ error: 'Invalid state parameter (CSRF / Replay protection)' }, { status: 400 });
     }
 
-    const clientId = process.env.GITHUB_CLIENT_ID || 'mock_client_id';
-    const clientSecret = process.env.GITHUB_CLIENT_SECRET || 'mock_client_secret';
+    const env = (typeof globalThis !== 'undefined' ? (globalThis as any).env : null) || process.env || {};
+    const clientId = env.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID || 'mock_client_id';
+    const clientSecret = env.GITHUB_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET || 'mock_client_secret';
 
     let accessToken = 'mock_access_token';
     let githubUserId = 'mock_gh_uid';
@@ -65,7 +75,9 @@ export async function GET(req: NextRequest) {
     await projectDb.saveGitHubConnection(user.id, githubUserId, githubUsername, accessToken);
 
     // Redirect back to dashboard or close popup
-    return NextResponse.redirect(`${req.nextUrl.origin}/dashboard?github_connected=true`);
+    const response = NextResponse.redirect(`${req.nextUrl.origin}/dashboard?github_connected=true`);
+    response.cookies.delete('github_oauth_state');
+    return response;
   } catch (err: any) {
     console.error('GitHub callback error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

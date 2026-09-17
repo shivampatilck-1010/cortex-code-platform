@@ -1,9 +1,14 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
-import { ClassroomAuth } from '@/lib/classroom/auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { projectDb } from '@/lib/project/db';
+import { ClassroomAuth } from '@/lib/classroom/auth';
+import { githubRateLimiter } from '@/lib/execution/rate-limiter';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || 'unknown';
+    const rateCheck = githubRateLimiter.checkRateLimit(ip);
+    if (!rateCheck.allowed) return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+
     const user = await ClassroomAuth.authenticateRequest(req);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
