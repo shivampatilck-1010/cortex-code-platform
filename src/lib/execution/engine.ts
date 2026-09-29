@@ -9,7 +9,7 @@ export { parseDiagnostics };
  * Calls /api/v1/execute which delegates to the isolated sandbox worker on the backend.
  * Falls back gracefully if running in SSR / offline environment.
  */
-export async function executeInCloudSandbox(req: ExecutionRequest & { projectId?: string }): Promise<ExecutionResult> {
+export async function executeInCloudSandbox(req: ExecutionRequest): Promise<ExecutionResult> {
   const langConfig = getLanguageConfig(req.language);
   const startTime = Date.now();
 
@@ -23,8 +23,7 @@ export async function executeInCloudSandbox(req: ExecutionRequest & { projectId?
       body: JSON.stringify({
         language: req.language,
         version: req.version || langConfig.version,
-        projectId: req.projectId,
-        files: undefined,
+        files: req.files,
         stdin: req.stdin || '',
         args: req.args || [],
         entrypoint: req.entrypoint,

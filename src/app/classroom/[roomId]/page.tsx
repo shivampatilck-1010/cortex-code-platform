@@ -99,6 +99,8 @@ export default function ClassroomLivePage() {
   const collabClientRef = useRef<CollaborationClient | null>(null);
   const codeSaveTimersRef = useRef<{ [key: string]: any }>({});
   const roomRef = useRef<ClassroomRoom | null>(null);
+  // Debounce timers for user leave events — prevents flickering when users briefly disconnect
+  const leaveDebounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Session storage helpers strictly scoped to each browser tab so separate tabs/windows never clobber each other's identity or role
   const getTabSession = (key: string): string | null => {
@@ -588,20 +590,31 @@ export default function ClassroomLivePage() {
           });
         }
         showToast('🚀 Code Arena is now open! Entering arena...');
-        fetchRoomState(participantId);
         break;
       }
 
-      case 'join': {
-        const newP = event.payload?.participant;
+      case 'student.joined':
+        case 'join': {
+          const newP = event.payload?.participant || {
+            id: event.payload?.userId,
+            name: event.payload?.userName,
+            role: event.payload?.role,
+            isOnline: true
+          };
         if (newP && newP.id) {
+          // Cancel any pending leave debounce for this user (they just rejoined)
+          const existingTimer = leaveDebounceTimersRef.current.get(newP.id);
+          if (existingTimer) {
+            clearTimeout(existingTimer);
+            leaveDebounceTimersRef.current.delete(newP.id);
+          }
           setRoom((prev) => {
             if (!prev) return prev;
             const updated = {
               ...prev,
               participants: {
                 ...prev.participants,
-                [newP.id]: newP,
+                [newP.id]: { ...(prev.participants[newP.id] || {}), ...newP, isOnline: true },
               },
             };
             roomRef.current = updated;
@@ -609,28 +622,36 @@ export default function ClassroomLivePage() {
           });
           setSlotBUserId((prevB) => (!prevB && newP.id !== participantId ? newP.id : prevB));
         }
-        fetchRoomState(participantId);
         break;
       }
 
-      case 'leave': {
-        const leavingId = event.payload?.participantId || event.senderId;
-        if (leavingId) {
-          setRoom((prev) => {
-            if (!prev || !prev.participants[leavingId]) return prev;
-            const updated = {
-              ...prev,
-              participants: {
-                ...prev.participants,
-                [leavingId]: {
-                  ...prev.participants[leavingId],
-                  online: false,
+      case 'student.left':
+        case 'leave': {
+          const leavingId = event.payload?.userId || event.payload?.participantId || event.senderId || event.actorId;
+        if (leavingId && leavingId !== participantId) {
+          // Debounce the leave by 2 seconds — if user reconnects within 2s, cancel removal
+          // This prevents the "User goes Offline then Online" flicker
+          const existing = leaveDebounceTimersRef.current.get(leavingId);
+          if (existing) clearTimeout(existing);
+          const timer = setTimeout(() => {
+            leaveDebounceTimersRef.current.delete(leavingId);
+            setRoom((prev) => {
+              if (!prev || !prev.participants[leavingId]) return prev;
+              const updated = {
+                ...prev,
+                participants: {
+                  ...prev.participants,
+                  [leavingId]: {
+                    ...prev.participants[leavingId],
+                    isOnline: false,
+                  },
                 },
-              },
-            };
-            roomRef.current = updated;
-            return updated;
-          });
+              };
+              roomRef.current = updated;
+              return updated;
+            });
+          }, 2000);
+          leaveDebounceTimersRef.current.set(leavingId, timer);
         }
         break;
       }
@@ -740,7 +761,6 @@ export default function ClassroomLivePage() {
             else if (isLocked === false) showToast('🔓 Your workspace was unlocked by the teacher.');
           }
         }
-        fetchRoomState(participantId);
         break;
       }
 
@@ -783,7 +803,10 @@ export default function ClassroomLivePage() {
           // Dismiss any open incoming prompt from this partner immediately
           setIncomingCollabReq(null);
           const partnerId = request.fromId === participantId ? request.toId : request.fromId;
-          const partner = request.fromId === participantId ? request.toName : request.fromName;
+          // Use names from request payload, fall back to event senderName
+          const partner = request.fromId === participantId
+            ? (request.toName || event.senderName || 'participant')
+            : (request.fromName || event.senderName || 'participant');
           if (request.status === 'accepted') {
             setSlotAUserId(participantId);
             setSlotBUserId(partnerId);
@@ -795,20 +818,31 @@ export default function ClassroomLivePage() {
           if (activeWorkspaces.slotAUserId) setSlotAUserId(activeWorkspaces.slotAUserId);
           if (activeWorkspaces.slotBUserId) setSlotBUserId(activeWorkspaces.slotBUserId);
         }
-        fetchRoomState(participantId);
         break;
       }
 
-      case 'end_collaboration':
-        fetchRoomState(participantId);
-        showToast('Collaboration session ended.');
-        break;
+      case 'collaboration_ended':
+        case 'end_collaboration': {
+          const sessionId = event.payload?.sessionId || '';
+          setRoom(prev => {
+            if (!prev) return prev;
+            const newSessions = { ...prev.collaborationSessions };
+            delete newSessions[sessionId];
+            return { ...prev, collaborationSessions: newSessions };
+          });
+          setSlotBUserId(null);
+          showToast('Collaboration session ended.');
+          break;
+        }
 
-      case 'file_download_request':
-        if (event.payload?.ownerId === participantId) {
-          setIncomingDownloadReq(event.payload);
+      case 'file_download_request': {
+        // Sender wraps as: payload: { request } or payload: request (both handled)
+        const dlReq = event.payload?.request || event.payload;
+        if (dlReq?.ownerId === participantId) {
+          setIncomingDownloadReq(dlReq);
         }
         break;
+      }
 
       case 'file_download_response': {
         const { request, token, fileId } = event.payload || {};
@@ -859,19 +893,7 @@ export default function ClassroomLivePage() {
   // Actions with low-latency typing & debounced persistence
   const handleCodeChangeA = (code: string) => {
     if (!slotAUserId) return;
-    setRoom((prev) => {
-      if (!prev || !prev.participants[slotAUserId]) return prev;
-      return {
-        ...prev,
-        participants: {
-          ...prev.participants,
-          [slotAUserId]: {
-            ...prev.participants[slotAUserId],
-            activeCode: code,
-          },
-        },
-      };
-    });
+    // setRoom removed for performance; yjs handles sync directly
 
     const isAuthorizedA = slotAUserId === participantId || (
       room && Object.values(room.collaborationSessions || {}).some(
@@ -906,19 +928,7 @@ export default function ClassroomLivePage() {
 
   const handleCodeChangeB = (code: string) => {
     if (!slotBUserId) return;
-    setRoom((prev) => {
-      if (!prev || !prev.participants[slotBUserId]) return prev;
-      return {
-        ...prev,
-        participants: {
-          ...prev.participants,
-          [slotBUserId]: {
-            ...prev.participants[slotBUserId],
-            activeCode: code,
-          },
-        },
-      };
-    });
+    // setRoom removed for performance; yjs handles sync directly
 
     const isAuthorizedB = slotBUserId === participantId || (
       room && Object.values(room.collaborationSessions || {}).some(
@@ -1077,31 +1087,28 @@ export default function ClassroomLivePage() {
 
   const handleRequestCollaboration = async (targetUserId: string) => {
     try {
-      const res = await fetch(`/api/v1/classroom/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'request_collaboration',
-          participantId,
-          targetUserId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to request access');
-      }
       const targetUser = room?.participants[targetUserId];
-      showToast(`Access request sent to ${targetUser?.name || 'participant'}! Waiting for response...`);
-      if (data.request) {
-        collabClientRef.current?.sendRaw({
-          type: 'collaboration_request',
-          roomId,
-          clientId: participantId,
-          senderName: participantName,
-          payload: data.request,
-          timestamp: Date.now(),
-        });
-      }
+      const targetName = targetUser && targetUser.name ? targetUser.name : 'participant';
+      const request = {
+        id: 'collab_req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        fromId: participantId,
+        fromName: participantName,
+        toId: targetUserId,
+        toName: targetName,
+        status: 'pending',
+        requestedAt: Date.now(),
+      };
+      
+      showToast('Access request sent to ' + targetName + '! Waiting for response...');
+      
+      collabClientRef.current?.sendRaw({
+        type: 'collaboration_request',
+        roomId,
+        clientId: participantId,
+        senderName: participantName,
+        payload: request,
+        timestamp: Date.now(),
+      });
       collabClientRef.current?.triggerImmediateSync();
     } catch (err: any) {
       showToast(`⚠️ ${err?.message || 'Failed to send request'}`);
@@ -1200,56 +1207,72 @@ export default function ClassroomLivePage() {
   };
 
   const handleEndCollaboration = async (sessionId: string) => {
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'end_collaboration',
-        participantId,
-        sessionId,
-      }),
+    collabClientRef.current?.sendRaw({
+      type: 'collaboration_ended',
+      roomId,
+      clientId: participantId,
+      senderName: participantName,
+      payload: { sessionId },
+      timestamp: Date.now(),
     });
-    collabClientRef.current?.triggerImmediateSync();
-    fetchRoomState(participantId);
+    
+    setRoom(prev => {
+      if (!prev) return prev;
+      const newSessions = { ...prev.collaborationSessions };
+      delete newSessions[sessionId];
+      return { ...prev, collaborationSessions: newSessions };
+    });
+    setSlotBUserId(null);
   };
 
   const handleRequestFileDownload = async (ownerId: string, fileId: string) => {
     try {
-      const res = await fetch(`/api/v1/classroom/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'request_download',
-          participantId,
-          ownerId,
-          fileId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to request download');
-      }
       const owner = room?.participants[ownerId];
-      showToast(`Download permission requested from ${owner?.name || 'owner'}! Waiting for response...`);
-      collabClientRef.current?.triggerImmediateSync();
+      if (!owner) throw new Error('Owner not found');
+      
+      const request = {
+        id: 'dl_req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        requesterId: participantId,
+        ownerId,
+        fileId,
+        status: 'pending',
+        requestedAt: Date.now(),
+      };
+      
+      const ownerName = owner.name || 'owner';
+      showToast('Download permission requested from ' + ownerName + '! Waiting for response...');
+      
+      collabClientRef.current?.sendRaw({
+        type: 'file_download_request',
+        roomId,
+        clientId: participantId,
+        senderName: participantName,
+        payload: { request },
+        timestamp: Date.now(),
+      });
     } catch (err: any) {
-      showToast(`⚠️ ${err?.message || 'Failed to request download'}`);
+      showToast(`Error: ${err?.message || 'Failed to request download'}`);
     }
   };
 
   const handleRespondDownload = async (requestId: string, decision: FileDownloadDecision) => {
+    const req = incomingDownloadReq;
     setIncomingDownloadReq(null);
-    await fetch(`/api/v1/classroom/${roomId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'respond_download',
-        participantId,
-        requestId,
-        decision,
-      }),
+    if (!req) return;
+    
+    collabClientRef.current?.sendRaw({
+      type: 'file_download_response',
+      roomId,
+      clientId: participantId,
+      senderName: participantName,
+      payload: {
+        request: {
+          ...req,
+          status: decision
+        }
+      },
+      timestamp: Date.now(),
     });
-    collabClientRef.current?.triggerImmediateSync();
   };
 
   const handleAdminAction = async (adminAction: any) => {
