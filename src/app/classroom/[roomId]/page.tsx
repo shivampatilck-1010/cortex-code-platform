@@ -845,15 +845,18 @@ export default function ClassroomLivePage() {
       }
 
       case 'file_download_response': {
-        const { request, token, fileId } = event.payload || {};
-        if (request?.requesterId === participantId) {
-          if (request.status === 'allow_once' || request.status === 'allow_session') {
-            showToast(`✅ Download approved by ${request.ownerName}!`);
+        const req = event.payload?.request || event.payload;
+        const token = req?.token || event.payload?.token;
+        const fileId = req?.fileId || event.payload?.fileId;
+        
+        if (req?.requesterId === participantId) {
+          if (req.status === 'allow_once' || req.status === 'allow_session') {
+            showToast(`✅ Download approved by ${req.ownerName || 'owner'}!`);
             if (token && fileId) {
               window.open(`/api/v1/classroom/${roomId}/file-download?fileId=${fileId}&token=${token}&requesterId=${participantId}`);
             }
-          } else if (request.status === 'denied') {
-            showToast(`❌ Download request was denied by ${request.ownerName}.`);
+          } else if (req.status === 'denied') {
+            showToast(`❌ Download request was denied by ${req.ownerName || 'owner'}.`);
           }
         }
         fetchRoomState(participantId);
@@ -1230,25 +1233,18 @@ export default function ClassroomLivePage() {
       const owner = room?.participants[ownerId];
       if (!owner) throw new Error('Owner not found');
       
-      const request = {
-        id: 'dl_req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-        requesterId: participantId,
-        ownerId,
-        fileId,
-        status: 'pending',
-        requestedAt: Date.now(),
-      };
-      
       const ownerName = owner.name || 'owner';
       showToast('Download permission requested from ' + ownerName + '! Waiting for response...');
       
-      collabClientRef.current?.sendRaw({
-        type: 'file_download_request',
-        roomId,
-        clientId: participantId,
-        senderName: participantName,
-        payload: { request },
-        timestamp: Date.now(),
+      await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request_download',
+          participantId,
+          ownerId,
+          fileId,
+        }),
       });
     } catch (err: any) {
       showToast(`Error: ${err?.message || 'Failed to request download'}`);
@@ -1259,20 +1255,20 @@ export default function ClassroomLivePage() {
     const req = incomingDownloadReq;
     setIncomingDownloadReq(null);
     if (!req) return;
-    
-    collabClientRef.current?.sendRaw({
-      type: 'file_download_response',
-      roomId,
-      clientId: participantId,
-      senderName: participantName,
-      payload: {
-        request: {
-          ...req,
-          status: decision
-        }
-      },
-      timestamp: Date.now(),
-    });
+    try {
+      await fetch(`/api/v1/classroom/${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'respond_download',
+          participantId,
+          requestId,
+          decision,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to respond to download', e);
+    }
   };
 
   const handleAdminAction = async (adminAction: any) => {

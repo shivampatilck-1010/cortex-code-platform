@@ -479,7 +479,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
         const cursorDisposable = editor.onDidChangeCursorPosition((e: any) => {
           if (canEdit && collabClient) {
             const now = Date.now();
-            if (now - lastCursorTime > 25) {
+            if (now - lastCursorTime > 150) {
               lastCursorTime = now;
               collabClient.sendCursor(docId, e.position.lineNumber, e.position.column);
             }
@@ -521,28 +521,20 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   const monacoLang = getLanguageConfig(lang).monacoLang;
 
   // 1. Keep editor content live in sync with remote user code updates
+  //    IMPORTANT: When Yjs CRDT is active, we ONLY update via CRDT (doc_update events).
+  //    Calling setValue() or ytext.transact() here while CRDT is also active causes
+  //    content duplication and garbage text (double-apply of remote deltas).
   useEffect(() => {
     if (!editorRef.current || !user) return;
     if (!canEdit || !isSelf) {
       const incomingCode = user.activeCode ?? '';
       const currentEditorCode = editorRef.current.getValue();
-      if (incomingCode !== currentEditorCode && incomingCode !== localEmittedCodeRef.current) {
+
+      // Only intervene when there is NO Yjs binding active.
+      // If collabClient & docId exist, Yjs handles sync — do NOT touch editor/ytext here.
+      const hasYjsBinding = !!bindingRef.current;
+      if (!hasYjsBinding && incomingCode !== currentEditorCode && incomingCode !== localEmittedCodeRef.current) {
         localEmittedCodeRef.current = incomingCode;
-
-        // If Yjs binding exists, update ytext with remote transaction
-        if (collabClient && docId) {
-          try {
-            const { ytext } = collabClient.getOrCreateDoc(docId, incomingCode);
-            if (ytext.toString() !== incomingCode) {
-              ytext.doc?.transact(() => {
-                ytext.delete(0, ytext.length);
-                ytext.insert(0, incomingCode);
-              }, 'remote');
-            }
-          } catch {}
-        }
-
-        // Ensure Monaco model value matches
         const model = editorRef.current.getModel();
         if (model && model.getValue() !== incomingCode) {
           editorRef.current.setValue(incomingCode);
@@ -551,18 +543,6 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
     }
   }, [user?.activeCode, canEdit, isSelf, docId, collabClient]);
 
-  // 2. Synchronize Monaco syntax language when remote participant switches language
-  useEffect(() => {
-    if (editorRef.current && monacoLang) {
-      const model = editorRef.current.getModel();
-      if (model && typeof window !== 'undefined') {
-        const monaco = (window as any).monaco;
-        if (monaco?.editor?.setModelLanguage) {
-          monaco.editor.setModelLanguage(model, monacoLang);
-        }
-      }
-    }
-  }, [monacoLang]);
 
   if (!user) {
     return (
@@ -711,10 +691,29 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
         {hasAccess ? (
           <Editor
             height="100%"
+            path={currentKey}
             language={monacoLang}
             defaultValue={user.activeCode}
-            theme="vs-dark"
-            onMount={(editor) => {
+            theme="cortex-dark"
+            loading={<div className="flex h-full w-full items-center justify-center bg-[#0b0c0e] text-gray-500 font-mono text-xs">Loading Editor...</div>}
+            beforeMount={(monaco) => {
+              monaco.editor.defineTheme('cortex-dark', {
+                base: 'vs-dark',
+                inherit: true,
+                rules: [
+                  { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
+                  { token: 'keyword', foreground: 'ff9100' },
+                  { token: 'string', foreground: 'ce9178' },
+                  { token: 'number', foreground: 'b5cea8' },
+                  { token: 'type', foreground: '4ec9b0' },
+                ],
+                colors: {
+                  'editor.background': '#0b0c0e',
+                  'editor.foreground': '#e6edf3',
+                },
+              });
+            }}
+            onMount={(editor, monaco) => {
               editorRef.current = editor;
               onEditorReady?.(editor);
               setupYjsBinding(editor);
