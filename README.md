@@ -1,298 +1,306 @@
 <div align="center">
 
-  <!-- Animated Header Banner -->
-  <img src="assets/cortex-header.svg" alt="Cortex Code Beyond Limits" width="100%" />
+  <img src="public/brand/cortex-logo-transparent.png" alt="Cortex Platform Emblem" width="180" />
 
-  <br/><br/>
-
-  <!-- Official Brand Emblem -->
-  <a href="https://github.com/shivampatilck-1010/cortex-code-platform">
-    <img src="public/brand/cortex-logo-transparent.png" alt="Cortex Official Brand Logo" width="280" />
-  </a>
-
-  <br/><br/>
-
-  <!-- Status & Technology Badges -->
-  <a href="https://workers.cloudflare.com"><img src="https://img.shields.io/badge/Cloudflare-Workers%20%7C%20Edge%20SSR-F38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
-  <a href="https://developers.cloudflare.com/d1/"><img src="https://img.shields.io/badge/Cloudflare-D1%20SQL%20Engine-F38020?style=for-the-badge&logo=sqlite&logoColor=white" alt="Cloudflare D1" /></a>
-  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5.x%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
-  <a href="https://microsoft.github.io/monaco-editor"><img src="https://img.shields.io/badge/Monaco-VS%20Code%20Editor-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="Monaco" /></a>
-  <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/Windows-C%23%20%7C%20.NET%204.8-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 4.8" /></a>
-  <a href="https://developer.microsoft.com/en-us/microsoft-edge/webview2/"><img src="https://img.shields.io/badge/Runtime-WebView2%20Evergreen-0078D7?style=for-the-badge&logo=microsoft-edge&logoColor=white" alt="WebView2" /></a>
-  <a href="https://ai.google.dev"><img src="https://img.shields.io/badge/Google%20Gemini-2.5%20Flash%20AI-FF9100?style=for-the-badge&logo=google&logoColor=white" alt="Gemini 2.5 Flash" /></a>
-  <img src="https://img.shields.io/badge/Security-Level%202%20Lockdown-critical?style=for-the-badge&logo=guard&logoColor=white" alt="Level 2 Lockdown" />
-  <img src="https://img.shields.io/badge/Runtimes-16%20Sandboxes-10B981?style=for-the-badge&logo=codeforces&logoColor=white" alt="16 Runtimes" />
-
-  <br/><br/>
-
-  <p align="center">
-    <b>Cortex</b> is an enterprise-grade cloud development ecosystem, virtual computer science laboratory, and high-security examination platform. Engineered with a zero-trust architecture, Cortex integrates an authentic Monaco-powered multi-language cloud IDE, real-time collaborative classrooms, and the <b>Cortex Lockdown</b> native Windows kiosk client to administer tamper-resistant technical assessments.
-  </p>
-
-  <p align="center">
-    <a href="#platform-architecture"><strong>Architecture</strong></a> &bull;
-    <a href="#cortex-lockdown-browser"><strong>Lockdown Browser</strong></a> &bull;
-    <a href="#core-capabilities"><strong>Key Features</strong></a> &bull;
-    <a href="#visual-showcase"><strong>Visual Showcase</strong></a> &bull;
-    <a href="#repository-structure"><strong>Repository Layout</strong></a> &bull;
-    <a href="#live-demonstration--staging"><strong>Live Staging</strong></a> &bull;
-    <a href="#verification--checksums"><strong>Checksums</strong></a>
-  </p>
+  # CORTEX UNIVERSAL CODE PLATFORM
+  ### High-Integrity Cloud Development Ecosystem & Zero-Trust Examination Suite
+  *Code Beyond Limits &bull; Compile &bull; Create &bull; Collaborate &bull; Deploy*
 
 </div>
 
 ---
 
-## EXECUTIVE SUMMARY
+## 1. PLATFORM OVERVIEW
 
-The Cortex platform unifies academic computer science instruction, technical evaluation, and professional software engineering into a singular distributed system:
+The **Cortex Universal Code Platform** is a distributed, enterprise-grade cloud operating environment designed for computer science education, real-time software engineering collaboration, and tamper-resistant academic examinations.
 
-- **COMPILE:** 16 pre-configured language runtimes running inside isolated sandboxes with sub-second execution latency.
-- **CREATE:** Full-featured Monaco code editor with nested virtual workspaces, live AST diagnostics, and step-debugging.
-- **COLLABORATE:** Interactive virtual classrooms with synchronized code editing, shared whiteboards, audio/video conferencing, and assignment submission pipelines.
-- **DEPLOY:** High-security examination platform with automated code grading, 10-second auto-save state machines, and the native **Cortex Lockdown** Windows browser.
+The platform bridges three traditionally decoupled systems into a singular high-performance architecture:
+1. **Universal Cloud IDE:** A web-native development environment powered by Monaco Editor with 16 sandboxed language runtimes, visual step-debugging, and Gemini 2.5 Flash AI code repair.
+2. **Collaborative Classroom Labs:** Real-time multi-tenant virtual classrooms supporting live collaborative code synchronization, interactive whiteboards, audio/video conferencing, and assignment pipelines.
+3. **Cortex Lockdown Browser:** A hardened, native Windows kiosk application (C# / .NET 4.8 + Microsoft Edge WebView2) enforcing low-level OS anti-cheat policies, screen capture protection, and 10-second transactional auto-save assessment state machines.
 
 ---
 
-## PLATFORM ARCHITECTURE
+## 2. SYSTEM ARCHITECTURE & TOPOLOGY
 
-Cortex utilizes an edge-first distributed architecture running on Cloudflare Workers, Cloudflare D1 distributed SQL, and native Win32 security APIs.
+Cortex is architected as an edge-first distributed system deployed on Cloudflare global edge infrastructure, with native client enforcement at the Windows operating system boundary.
 
 ```mermaid
 flowchart TD
-    subgraph Clients["CLIENT ENVIRONMENT"]
-        WebBrowser["Standard Modern Browser (Chrome / Firefox / Edge)"]
-        LockdownClient["Cortex Lockdown Windows Native Client (C# / Win32)"]
+    subgraph ClientBoundary["1. CLIENT RUNTIME ENVIRONMENT"]
+        WebStudent["Web Browser (Chrome / Firefox / Edge) - Standard Access"]
+        LockdownClient["Cortex Lockdown Windows Native Kiosk (C# / Win32)"]
     end
 
-    subgraph SecurityLayer["LOCKDOWN SECURITY SUBSYSTEM"]
-        DisplayAffinity["Win32 SetWindowDisplayAffinity (Capture Blocking)"]
-        KeyboardHook["WH_KEYBOARD_LL Hook (Hotkeys Intercepted)"]
-        Watchdog["ProcessWatchdog Daemon (Process Blacklist Polling)"]
-        WebView2["Microsoft Edge WebView2 (Sandboxed DOM Container)"]
+    subgraph SecuritySubsystem["2. NATIVE LOCKDOWN SUBSYSTEM (CortexLockdown.exe)"]
+        KioskHost["Borderless TopMost Full-Screen Form (Screen.PrimaryScreen.Bounds)"]
+        DisplayAffinity["Win32 SetWindowDisplayAffinity (WDA_EXCLUDEFROMCAPTURE)"]
+        KeyboardHook["Low-Level Keyboard Hook (WH_KEYBOARD_LL Scan Code Intercept)"]
+        WatchdogDaemon["ProcessWatchdog Daemon (1,500ms Active Process Blacklist Poll)"]
+        IPCBridge["Bidirectional JSON IPC Bridge (PostWebMessageAsJson)"]
+        WebView2Runtime["Microsoft Edge WebView2 Evergreen Sandboxed Container"]
     end
 
-    subgraph EdgePlatform["CLOUDFLARE EDGE PLATFORM"]
-        EdgeWorker["Cloudflare Workers SSR & API Gateway"]
-        AuthBridge["Session Validator & Permission Guard"]
-        DurableObjects["WebSocket Collaboration & Realtime Sync Engine"]
+    subgraph EdgeGateway["3. CLOUDFLARE EDGE PLATFORM & ROUTING"]
+        WorkerRouter["Cloudflare Workers Edge SSR & API Gateway"]
+        AuthService["Session Verifier & Role-Based Authorization Guard"]
+        DurableObjectsSync["Cloudflare Durable Objects (Real-Time WebSocket Sync)"]
+        GradingIsolates["Cloudflare Worker Execution Isolates (Automated Test Runners)"]
+        AIService["Google Gemini 2.5 Flash AI Code Diagnosis Engine"]
     end
 
-    subgraph StorageLayer["PERSISTENCE & ISOLATES"]
-        D1Database["Cloudflare D1 SQL Database (Users, Exams, Answers)"]
-        R2Storage["Cloudflare R2 Object Storage (Artifacts & Bundles)"]
-        WorkerIsolates["Automated Code Grading Isolates (Docker / Worker Sandboxes)"]
-        GeminiEngine["Google Gemini 2.5 Flash AI Assistant"]
+    subgraph DataPersistence["4. DISTRIBUTED DATA & STORAGE LAYER"]
+        D1SQL["Cloudflare D1 Relational SQL Database (Users, Exams, Integrity Events)"]
+        R2Buckets["Cloudflare R2 Object Storage (Artifacts, Bundles, Static Assets)"]
+        LocalIndexedDB["Client-Side Encrypted IndexedDB Buffer (Offline Fault Recovery)"]
     end
 
-    WebBrowser -->|HTTPS / TLS 1.3| EdgeWorker
-    LockdownClient --> SecurityLayer
-    SecurityLayer -->|cortex:// Launch & Secure WSS| EdgeWorker
-    EdgeWorker --> AuthBridge
-    AuthBridge --> DurableObjects
-    AuthBridge --> D1Database
-    EdgeWorker --> R2Storage
-    EdgeWorker --> WorkerIsolates
-    EdgeWorker --> GeminiEngine
+    LockdownClient --> KioskHost
+    KioskHost --> DisplayAffinity
+    KioskHost --> KeyboardHook
+    KioskHost --> WatchdogDaemon
+    KioskHost --> WebView2Runtime
+    WebView2Runtime <===> IPCBridge
+    WebView2Runtime <===> LocalIndexedDB
+
+    WebStudent -->|HTTPS / TLS 1.3| WorkerRouter
+    WebView2Runtime -->|cortex:// Launch & Secure WSS| WorkerRouter
+    WorkerRouter --> AuthService
+    AuthService --> DurableObjectsSync
+    AuthService --> D1SQL
+    WorkerRouter --> R2Buckets
+    WorkerRouter --> GradingIsolates
+    WorkerRouter --> AIService
 ```
 
 ---
 
-## CORTEX LOCKDOWN BROWSER
+## 3. CORTEX LOCKDOWN NATIVE WINDOWS ENGINE
 
-The **Cortex Lockdown Browser** is a native Windows application built with C# and .NET Framework 4.8 that wraps the Microsoft Edge WebView2 Evergreen runtime into an enforced, full-screen secure kiosk.
+The **Cortex Lockdown Browser** (`apps/cortex-lockdown-windows`) provides OS-level containment for high-stakes examinations, preventing unauthorized external assistance, screen broadcasting, and multi-tasking.
 
 ```mermaid
 flowchart LR
-    subgraph Win32Host["WINDOWS NATIVE CONTAINER (CortexLockdown.exe)"]
-        KioskForm["TopMost Borderless Kiosk Form"]
-        KeyHook["Low-Level Keyboard Hook (WH_KEYBOARD_LL)"]
-        ProcDog["Process Watchdog (1,500ms Scan Interval)"]
-        Affinity["Display Affinity (WDA_EXCLUDEFROMCAPTURE)"]
-        IPCBdg["Bidirectional IPC Bridge (PostWebMessageAsJson)"]
+    subgraph OSBoundary["WINDOWS OS HOOKS & KERNEL APIS"]
+        WinHook["SetWindowsHookEx (WH_KEYBOARD_LL)"]
+        WinAffinity["SetWindowDisplayAffinity"]
+        ProcEnum["Process32First / Process32Next"]
+        RegHandler["HKCU Classes cortex:// Protocol"]
     end
 
-    subgraph WebViewContainer["EMBEDDED WEBVIEW2 ENGINE"]
-        DOMWorkspace["Secure Exam DOM Workspace"]
-        MonacoSandbox["Monaco Code Editor & Unit Test Runner"]
-        AutoSaver["10-Second Auto-Save & Local Cache Buffer"]
+    subgraph HostContainer["CORTEX LOCKDOWN NATIVE WRAPPER"]
+        KioskForm["MainWindow (TopMost, No Border)"]
+        HookManager["KeyboardHook Security Manager"]
+        AffinityGuard["DisplayAffinity Enforcement"]
+        Watchdog["ProcessWatchdog Thread (1.5s)"]
+        Telemetry["TelemetryDispatcher (WSS)"]
     end
 
-    subgraph InterceptedThreats["SUPPRESSED SYSTEM EVENTS"]
-        WinKey["Win Key / Task Switcher (Alt+Tab / Alt+Esc)"]
-        TaskMgr["Task Manager (Ctrl+Shift+Esc / Ctrl+Esc)"]
-        Recorders["OBS / Discord / Teams / AnyDesk / SnippingTool"]
-        PrintScrn["PrintScreen / Screen Grabbers"]
+    subgraph BlockedVectors["SUPPRESSED CHEATING VECTORS"]
+        Hotkeys["WinKey, Alt+Tab, Alt+Esc, Ctrl+Esc, Ctrl+Shift+Esc, Alt+F4"]
+        Recorders["OBS, Discord, Teams, Zoom, Snagit, SnippingTool, AnyDesk"]
+        Grabs["PrintScreen, Win+Shift+S (Returns Black Surface)"]
+        VMs["VMware, VirtualBox, QEMU (WMI Detection)"]
     end
 
-    KeyHook -.->|Intercept & Block| WinKey
-    KeyHook -.->|Intercept & Block| TaskMgr
-    ProcDog -.->|Terminate or Telemetry Flag| Recorders
-    Affinity -.->|Returns Black Frame Surface| PrintScrn
+    WinHook --> HookManager
+    WinAffinity --> AffinityGuard
+    ProcEnum --> Watchdog
+    RegHandler --> KioskForm
 
-    KioskForm --> WebViewContainer
-    IPCBdg <===> DOMWorkspace
+    HookManager -.->|Intercept & Drop| Hotkeys
+    AffinityGuard -.->|Blank Frame Injection| Grabs
+    Watchdog -.->|Process Violation Alert| Recorders
+    KioskForm -.->|Alert & Flag| VMs
 ```
 
-### Security & Anti-Cheat Specifications
+### 3.1 Win32 Containment Mechanics
 
-1. **Full-Screen Kiosk Containment:**
-   - Window properties: `FormBorderStyle.None`, `WindowState = FormWindowState.Normal`, `TopMost = true`.
-   - Bounded exactly to `Screen.PrimaryScreen.Bounds`, completely occluding the Windows Taskbar and Start button.
-   - Suppressed in Windows Taskbar (`ShowInTaskbar = false`).
-
-2. **Screen Capture & Broadcast Blocking:**
-   - Win32 API invocation: `SetWindowDisplayAffinity(hwnd, WDA_MONITOR | WDA_EXCLUDEFROMCAPTURE)`.
-   - Prevents OBS Studio, Discord screen sharing, Microsoft Teams, Zoom, Snagit, and Windows Snipping Tool (`Win + Shift + S`) from capturing examination content. External capture drivers receive an empty black rectangle.
-
-3. **Low-Level Keyboard Interception (`WH_KEYBOARD_LL`):**
-   - Intercepts and drops system keyboard scan codes: `VK_LWIN`, `VK_RWIN`, `Alt + Tab`, `Alt + Esc`, `Ctrl + Esc`, `Ctrl + Shift + Esc`, `Alt + Space`, and `VK_SNAPSHOT` (PrintScreen).
-   - System clipboard is flushed upon launch via `Clipboard.Clear()`.
-   - **Proctor Emergency Supervisor Hotkey:** `Ctrl + Alt + F10` allows authorized invigilators to bypass the kiosk during emergencies.
-
-4. **Background Process Watchdog:**
-   - Background daemon thread scans active processes every 1,500ms against a comprehensive blacklist:
-     - *Screen capture & streaming:* `obs64`, `obs32`, `camtasia`, `snagit`, `bandicam`, `action`, `geforceexperience`, `snippingtool`, `screenclippinghost`.
-     - *Remote assistance:* `teamviewer`, `anydesk`, `vncviewer`, `logmein`, `parsec`, `ammyy`, `ultraviewer`, `tightvnc`.
-     - *Secondary browsers & messaging:* `chrome`, `firefox`, `msedge`, `brave`, `opera`, `discord`, `telegram`, `whatsapp`, `slack`, `teams`, `zoom`.
-     - *Debuggers & reverse engineering:* `wireshark`, `fiddler`, `charles`, `cheatengine`, `x64dbg`, `ida64`, `processhacker`, `procexp`, `taskmgr`.
-
-5. **Custom Protocol Association:**
-   - Registered under `HKCU\Software\Classes\cortex` (`cortex://launch?examId=...&grant=...`).
-   - Zero administrative elevation (UAC) required; fully deployed within `%LocalAppData%\CortexLockdown`.
+- **Full-Screen Kiosk Bounds:** `FormBorderStyle = FormBorderStyle.None`, `TopMost = true`, `WindowState = FormWindowState.Normal`. Coordinates are initialized to `Screen.PrimaryScreen.Bounds`, occluding the Windows Taskbar and Start button.
+- **Taskbar Suppression:** `ShowInTaskbar = false`. System shell interactions are fully disabled.
+- **Display Capture Blocking:** Calls Win32 API `SetWindowDisplayAffinity(hwnd, WDA_MONITOR | WDA_EXCLUDEFROMCAPTURE)`. Graphics capture subsystems (OBS Studio, Discord screen sharing, Teams, Zoom, Snagit, Snipping Tool) receive a completely black rectangular surface.
+- **Global Low-Level Keyboard Hook (`WH_KEYBOARD_LL`):**
+  - Intercepts raw hardware scan codes before shell dispatch.
+  - Suppresses: `VK_LWIN`, `VK_RWIN`, `Alt + Tab`, `Alt + Esc`, `Ctrl + Esc`, `Ctrl + Shift + Esc`, `Alt + Space`, and `VK_SNAPSHOT` (PrintScreen).
+  - Clears system clipboard on launch via `Clipboard.Clear()`.
+  - **Proctor Emergency Supervisor Override:** Hotkey combination `Ctrl + Alt + F10` allows authorized invigilators to cleanly terminate the kiosk in emergency situations.
+- **Background Process Watchdog:** A background daemon thread scans running processes every 1,500ms against a 40+ entry blacklist (capture tools, remote access software, secondary browsers, decompilers, debuggers). Infractions trigger immediate telemetry dispatch to the central proctor dashboard.
+- **Custom URI Protocol:** Registered under `HKEY_CURRENT_USER\Software\Classes\cortex` (`cortex://launch?examId=...&grant=...`). Requires zero administrative privileges (UAC), deploying entirely within `%LocalAppData%\CortexLockdown`.
 
 ---
 
-## EXAMINATION LIFECYCLE & AUTO-SAVE STATE MACHINE
+## 4. EXAMINATION PLATFORM & AUTO-SAVE STATE MACHINE
+
+The examination platform supports complex computer science assessments with real-time state synchronization, fault tolerance, and automated test grading.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Student
-    participant Portal as Cortex Staging Platform
+    actor Student as Student Candidate
     participant Kiosk as Cortex Lockdown Kiosk
-    participant Storage as D1 Database Engine
-    participant Isolates as Grading Sandbox
+    participant Cache as Encrypted IndexedDB Cache
+    participant Gateway as Cloudflare Edge Worker
+    participant DB as Cloudflare D1 Database
+    participant Runner as Grading Sandbox Isolate
     actor Proctor as Faculty Proctor Dashboard
 
-    Student->>Portal: Authenticate & Select Exam (CSE276)
-    Student->>Portal: Click "Start Exam in Cortex Lockdown"
-    Portal-->>Kiosk: Launch via cortex:// Protocol with Signed Grant Token
-    Kiosk->>Kiosk: Enforce Kiosk Bounds, Display Affinity & Keyboard Hooks
-    Kiosk->>Kiosk: Start Background Process Watchdog
-    Kiosk->>Portal: Validate Grant Token over TLS 1.3
-    Portal-->>Kiosk: Deliver Examination Structure (MCQ, Sandbox, Theory)
-    
-    loop Every 10 Seconds (Auto-Save State Machine)
-        Kiosk->>Storage: Encrypted Snapshot Sync (IndexedDB + Remote D1 Flush)
-        Kiosk->>Proctor: Telemetry Heartbeat (Focus Status, Violation Counters)
+    Student->>Gateway: Authenticate & Select Exam (CSE276)
+    Gateway-->>Student: Generate Signed One-Time Launch Token
+    Student->>Kiosk: Launch via cortex:// Protocol
+    Kiosk->>Kiosk: Lock Bounds, Apply DisplayAffinity & Arm Keyboard Hook
+    Kiosk->>Kiosk: Start Background ProcessWatchdog Thread
+    Kiosk->>Gateway: Validate Launch Token & Exchange Credentials
+    Gateway-->>Kiosk: Return Exam Payload (Questions, Sections, Test Suites)
+
+    loop Every 10 Seconds (Transactional Auto-Save State Machine)
+        Kiosk->>Cache: Write AES-GCM Encrypted Response State to Local Storage
+        Kiosk->>Gateway: POST /api/v1/exams/:id/sync (Delta Payload)
+        Gateway->>DB: Atomic Upsert to exam_question_responses
+        Gateway->>Proctor: Stream Heartbeat (Focus Status, Violation Telemetry)
     end
 
-    alt Background Prohibited Process Detected
-        Kiosk->>Proctor: Stream High-Severity Security Violation Alert
-        Kiosk->>Student: Display On-Screen Warning Dialog
+    opt Network Disconnection Occurs
+        Kiosk->>Cache: Buffer Unsynchronized Answers in Encrypted Offline Store
+        Note over Kiosk,Cache: Zero Data Loss Guarantee
+        Kiosk->>Gateway: Re-establish Connection & Replay Buffered Sync Log
     end
 
-    Student->>Kiosk: Submit Completed Examination
-    Kiosk->>Isolates: Dispatch Programming Sandbox Solutions
-    Isolates-->>Storage: Record Automated Unit Test Pass/Fail Scores
-    Storage-->>Proctor: Update Live Gradebook & Proctor Dashboard
-    Kiosk->>Kiosk: Gracefully Teardown Win32 Hooks & Terminate Kiosk
+    Student->>Kiosk: Click "Submit Final Examination"
+    Kiosk->>Gateway: Finalize Submission & Lock Session
+    Gateway->>Runner: Dispatch Monaco Programming Sandbox Solutions
+    Runner-->>Gateway: Output Pass/Fail Vector for Public & Hidden Test Cases
+    Gateway->>DB: Calculate Auto-Score & Update exam_sessions
+    Gateway->>Proctor: Display Instant Results on Proctoring Dashboard
+    Kiosk->>Kiosk: Teardown Win32 Hooks, Restore OS State & Terminate
+```
+
+### 4.1 Assessment Question Modalities
+
+| Question Type | Technical Evaluation Engine | Scoring & Verification Model |
+| :--- | :--- | :--- |
+| **MCQ (Single-Choice)** | Deterministic Option Evaluation | Instantaneous automated scoring against correct option key. |
+| **MCQ (Multi-Select)** | Combinatorial Match Verification | Strict matching or configurable partial credit weighting. |
+| **Numerical Calculation** | Floating-Point Tolerance Comparator | Precision input evaluated within `± tolerance` boundary (e.g., `±0.05`). |
+| **Monaco Code Sandbox** | Cloudflare Worker Isolate Sandbox | Live code editor with syntax analysis, public test runs, and hidden grading tests. |
+| **Descriptive Theory** | Structured Text Submission | Rich-text essay evaluation with teacher feedback and rubric annotations. |
+
+---
+
+## 5. RELATIONAL DATABASE ARCHITECTURE (CLOUDFLARE D1)
+
+The platform persistence layer runs on Cloudflare D1 distributed SQLite, enforcing relational integrity through structured foreign keys and transaction isolation.
+
+```
++---------------------------------------------------------------------------------------------------+
+|                                  CLOUDFLARE D1 RELATIONAL SCHEMA                                   |
++---------------------------------------------------------------------------------------------------+
+|  classrooms                     exams                             exam_questions                  |
+|  -----------------------------  --------------------------------  ------------------------------  |
+|  id (PK, TEXT)                  id (PK, TEXT)                     id (PK, TEXT)                   |
+|  name (TEXT)                    classroom_id (FK -> classrooms)   exam_id (FK -> exams)           |
+|  description (TEXT)             title (TEXT)                      section_id (FK -> exam_sections)|
+|  invite_code (TEXT, UNIQUE)     duration_minutes (INTEGER)        question_type (TEXT)            |
+|  created_by (FK -> users)       total_marks (INTEGER)             prompt_text (TEXT)              |
+|  created_at (INTEGER)           passing_marks (INTEGER)           options_json (TEXT)             |
+|                                 security_level (TEXT)             correct_answer_json (TEXT)      |
+|  classroom_members              status (TEXT)                     test_cases_json (TEXT)          |
+|  -----------------------------  start_time (INTEGER)              initial_code (TEXT)             |
+|  classroom_id (FK -> classrooms)end_time (INTEGER)                language (TEXT)                 |
+|  user_id (FK -> users)          created_at (INTEGER)              points (REAL)                   |
+|  role ('teacher'|'student'|'ta')                                  numerical_tolerance (REAL)      |
+|                                 exam_sessions                                                     |
+|  exam_sections                  --------------------------------  exam_question_responses         |
+|  -----------------------------  id (PK, TEXT)                     ------------------------------  |
+|  id (PK, TEXT)                  exam_id (FK -> exams)             id (PK, TEXT)                   |
+|  exam_id (FK -> exams)          user_id (FK -> users)             session_id (FK -> exam_sessions)|
+|  title (TEXT)                   status (TEXT)                     question_id (FK -> questions)   |
+|  sort_order (INTEGER)           started_at (INTEGER)              response_json (TEXT)            |
+|  section_marks (INTEGER)        expires_at (INTEGER)              earned_points (REAL)            |
+|                                 submitted_at (INTEGER)            grading_status (TEXT)           |
+|  exam_integrity_events          auto_score (REAL)                 updated_at (INTEGER)            |
+|  -----------------------------  final_score (REAL)                                                |
+|  id (PK, TEXT)                                                                                    |
+|  session_id (FK -> sessions)                                                                      |
+|  event_type (TEXT)                                                                                |
+|  timestamp (INTEGER)                                                                              |
+|  details_json (TEXT)                                                                              |
++---------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## CORE CAPABILITIES
+## 6. ANTI-CHEAT MITIGATION MATRIX
 
-### 1. Universal Cloud IDE Workspace
-- **Powered by Monaco:** VS Code editing experience with IntelliSense, bracket matching, syntax diagnostics, code folding, and minimap.
-- **Virtual File Tree:** Hierarchical file system supporting directories, inline renames, file creation, and project ZIP exports.
-- **Integrated Terminal:** Cloud shell synchronized with the workspace virtual file system.
-- **Dual Compiler Benchmark Arena:** Side-by-side performance benchmarking comparing language runtime execution latency (ms) and memory footprints.
-
-### 2. Multi-Language Execution Sandboxes
-Supports 16 pre-configured runtimes with sub-second execution:
-
-| Language | Compiler / Runtime | Standard | Execution Sandboxing |
-| :--- | :--- | :--- | :--- |
-| **Python** | Python 3.12 | CPython 3.12 | Worker Isolate / Subprocess Sandbox |
-| **C++** | GCC 13 / 16 | C++20 Standard | POSIX Secure Isolate (`-O2 -Wall`) |
-| **C** | GCC 13 | C17 Standard | POSIX Secure Isolate |
-| **Java** | OpenJDK 21 | Java 21 LTS | Sandboxed JVM with memory boundaries |
-| **TypeScript** | Node.js 20 / Bun | ES2023 / Strict | V8 Isolate Sandboxing |
-| **JavaScript** | Node.js 20 / Bun | ES2023 | V8 Isolate Sandboxing |
-| **Rust** | Rustc 1.75 | Rust 2021 Edition | Cargo Native Execution |
-| **Go** | Go 1.22 | Go 1.22 Standard | Native Compiled Binary |
-| **C#** | .NET 8 SDK | C# 12 | Isolated CLR Runtime |
-| **PHP** | PHP 8.3 | Zend Engine | FastCGI / CLI Runner |
-| **Ruby** | Ruby 3.3 | YJIT Enabled | Ruby Virtual Machine |
-| **Kotlin** | Kotlin 1.9 | JVM Backend | JVM Isolate |
-| **Swift** | Swift 5.9 | Linux Swift 5.9 | Native Binary |
-| **Dart** | Dart 3.2 | Dart Native | Dart VM |
-| **R** | R 4.3 | GNU R | Sandboxed Math Environment |
-| **SQLite** | SQLite 3.44 | SQL Standard | In-Memory / Ephemeral D1 Database |
-
-### 3. Google Gemini 2.5 Flash AI Assistant
-- **Sub-Second Code Diagnostics:** Code analysis powered by `gemini-2.5-flash` with zero-latency token streaming.
-- **Targeted Line Repairs:** Injects targeted diagnostic comments directly adjacent to syntax and logical errors.
-- **AST Heuristic Offline Fallback:** Built-in offline rules engine that diagnoses syntax errors (unmatched brackets, missing semicolons, indentation errors) without cloud dependencies.
-
-### 4. Collaborative Classrooms & Assessment Suite
-- **Classroom Management:** Role-based access control for Faculty, Teaching Assistants, and Enrolled Students.
-- **Live Collaborative Coding:** Real-time multi-cursor editor synchronization powered by WebSocket Durable Objects.
-- **Interactive Whiteboard & Audio Stage:** Real-time canvas for architectural diagrams and lecture delivery.
-- **5-Part Assessment Modalities:** Single-choice MCQ, Multi-choice MCQ, Numerical precision calculation, Monaco code sandboxes with automated test verification, and descriptive theory essays.
+| Attack Vector | Threat Level | Technical Mechanism in Cortex Lockdown |
+| :--- | :--- | :--- |
+| **OBS / Discord / Teams Screen Streaming** | High | Win32 `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` renders all captured video frames as black pixels. |
+| **PrintScreen / Windows Snipping Tool** | Medium | `WH_KEYBOARD_LL` low-level hook intercepts `VK_SNAPSHOT` (`0x2C`) and `Win + Shift + S`; flushes clipboard. |
+| **Alt+Tab / Task Switcher Escape** | High | Low-level keyboard hook suppresses `Alt + Tab`, `Alt + Esc`, `Ctrl + Esc`, and `WinKey`. |
+| **Task Manager Kill / Multitasking** | Critical | Keyboard hook suppresses `Ctrl + Shift + Esc`; `ProcessWatchdog` flags `taskmgr.exe` execution. |
+| **Remote Assistance (AnyDesk, TeamViewer)** | Critical | `ProcessWatchdog` scans running processes every 1,500ms; terminates or alerts proctors immediately. |
+| **Virtual Machine Guest Execution** | Medium | `EnvironmentInspector` inspects BIOS and Motherboard WMI queries (`VMware`, `VirtualBox`, `QEMU`). |
+| **Developer Tools / DOM Inspection** | High | WebView2 CoreWebView2Settings disables DevTools (`AreDevToolsEnabled = false`) and right-click menus. |
+| **Browser Accelerator Keys (Reload / Print)**| Medium | WebView2 disables accelerators (`AreBrowserAcceleratorKeysEnabled = false`); drops `F5`, `Ctrl+R`, `Ctrl+P`. |
+| **Network Loss / Premature Exit** | Medium | Client buffers responses in local AES-GCM encrypted IndexedDB store; synchronizes on reconnect. |
+| **Unauthorized Exam Window Exit** | High | Window close event is blocked; exit is granted strictly via exam submission or proctor hotkey `Ctrl+Alt+F10`. |
 
 ---
 
-## VISUAL SHOWCASE
+## 7. UNIVERSAL CLOUD IDE CAPABILITIES
 
-<div align="center">
-  <table>
-    <tr>
-      <td width="50%">
-        <h4 align="center">Universal Cloud IDE Workspace</h4>
-        <a href="assets/cortex_live_ide.png"><img src="assets/cortex_live_ide.png" alt="Cortex Cloud IDE" width="100%" style="border-radius: 8px; border: 1px solid #1f2024;" /></a>
-        <p align="center"><em>Authentic Monaco editor, virtual file hierarchy, language runtimes, and diagnostics dock.</em></p>
-      </td>
-      <td width="50%">
-        <h4 align="center">Competitive Programming Arena</h4>
-        <a href="assets/cortex_challenges_preview.png"><img src="assets/cortex_challenges_preview.png" alt="Competitive Challenges" width="100%" style="border-radius: 8px; border: 1px solid #1f2024;" /></a>
-        <p align="center"><em>Algorithmic problem sets, test case validation runners, memory constraints, and evaluation metrics.</em></p>
-      </td>
-    </tr>
-    <tr>
-      <td width="50%">
-        <h4 align="center">Side-by-Side Benchmark Engine</h4>
-        <a href="assets/cortex_compare_preview.png"><img src="assets/cortex_compare_preview.png" alt="Compiler Comparison" width="100%" style="border-radius: 8px; border: 1px solid #1f2024;" /></a>
-        <p align="center"><em>Dual-compiler comparative analysis measuring execution latency (ms) and memory utilization.</em></p>
-      </td>
-      <td width="50%">
-        <h4 align="center">Interactive Educational Tracks</h4>
-        <a href="assets/cortex_learn_preview.png"><img src="assets/cortex_learn_preview.png" alt="Educational Tracks" width="100%" style="border-radius: 8px; border: 1px solid #1f2024;" /></a>
-        <p align="center"><em>Structured instructional modules in C++20, Python 3.12, and Rust with automated code checks.</em></p>
-      </td>
-    </tr>
-  </table>
-</div>
+The built-in cloud development environment delivers a workstation-class programming experience entirely within the browser.
+
+### 7.1 Polyglot Compiler Sandboxes (16 Runtimes)
+
+```
+[System Runtimes]
+  - Python 3.12 (CPython / Isolation Runner)
+  - C++20 (GCC 13/16 with -O2 optimization)
+  - C17 (GCC 13 Standard Toolchain)
+  - Java 21 LTS (OpenJDK / Sandboxed JVM)
+  - Rust 1.75 (Rustc 2021 Edition / Cargo)
+  - Go 1.22 (Native Compiled Go Binary)
+  - C# (.NET 8 SDK / CLR Runtime)
+  - Swift 5.9 (Linux Swift Toolchain)
+  - Kotlin 1.9 (JVM Target Sandbox)
+
+[Web & Scripting Runtimes]
+  - TypeScript 5.x (Strict Type Checking / Bun / Node 20)
+  - JavaScript (V8 Engine / ES2023 Standard)
+  - PHP 8.3 (Zend Engine / CLI Sandboxing)
+  - Ruby 3.3 (YJIT Enabled Virtual Machine)
+  - Dart 3.2 (Dart Native VM)
+
+[Scientific & Data Runtimes]
+  - R 4.3 (GNU R Computing Environment)
+  - SQLite 3.44 (Relational In-Memory Database Sandbox)
+```
+
+### 7.2 Developer Tooling Integration
+
+- **Monaco Code Editor:** IntelliSense autocomplete, bracket pair colorization, semantic indentation, multi-cursor editing, minimap, and diagnostics gutter.
+- **Visual Step Debugger:** Code parser extracts variable state (primitives, arrays, objects, maps) up to the execution line; supports Step Over (F10), Step Into (F11), and Resume (F5).
+- **Google Gemini 2.5 Flash AI:** Sub-second code repair with zero-latency streaming. Injects line-by-line targeted commentary and provides AST heuristic rule checks when offline.
 
 ---
 
-## REPOSITORY STRUCTURE
+## 8. REPOSITORY STRUCTURE & ORGANIZATION
+
+All scripts, documentation, and legacy artifacts have been structured into dedicated directories:
 
 ```
 cortex-code-platform/
 ├── apps/
 │   └── cortex-lockdown-windows/         # Native C# / .NET 4.8 Windows Lockdown Kiosk
 │       ├── bin/                         # Compiled client binaries and installer assets
-│       ├── installer/                   # Inno Setup and standalone C# bootstrap scripts
+│       ├── installer/                   # Standalone C# setup scripts and manifests
 │       └── src/                         # Application logic, Win32 hooks, UI, and Watchdog
 │           ├── Security/                # KeyboardHook, DisplayAffinity, ProcessWatchdog
 │           └── UI/                      # MainWindow borderless full-screen kiosk form
 ├── artifacts/
 │   ├── frames_160709/                   # Verification and test evidence video frames
 │   └── legacy-dumps/                    # Archived build logs, query dumps, and debug data
-├── assets/                              # Brand vectors, animated SVG banners, screenshots
+├── assets/                              # Brand vectors, headers, and media assets
 ├── config/                              # Platform environment configurations
 ├── data/                                # Reference data structures and problem registries
 ├── docs/
@@ -301,7 +309,7 @@ cortex-code-platform/
 │   │   ├── CORTEX_LOCKDOWN_REQUIREMENTS.md5         # MD5 verification checksum file
 │   │   └── CHECKSUMS.txt                            # SHA-256 and MD5 hash index
 │   └── classroom-architecture-audit.md  # Comprehensive classroom design specifications
-├── migrations/                          # D1 SQL database migration scripts
+├── migrations/                          # D1 SQL database migration scripts (0001 - 0009)
 ├── public/
 │   ├── brand/                           # High-resolution logos, emblems, and icons
 │   └── downloads/                       # Direct distribution packages (EXE, ZIP, MD)
@@ -324,18 +332,18 @@ cortex-code-platform/
 
 ---
 
-## LIVE DEMONSTRATION & STAGING
+## 9. LIVE STAGING & DEMONSTRATION
 
-### Staging Access Points
+### Active Staging Environment
 
-- **Primary Web Platform:**  
+- **Staging Web Platform:**  
   [`https://cortex-code-platform-staging.cortexbuild1.workers.dev`](https://cortex-code-platform-staging.cortexbuild1.workers.dev)
 - **Lockdown Workspace Route:**  
   [`https://cortex-code-platform-staging.cortexbuild1.workers.dev/lockdown/workspace`](https://cortex-code-platform-staging.cortexbuild1.workers.dev/lockdown/workspace)
 
 ### Verified Test Credentials
 
-| Role | Email Address | Password | Enrolled Course |
+| Role | Email Address | Password | Course Assignment |
 | :--- | :--- | :--- | :--- |
 | **Faculty / Proctor** | `prof.sharma@cortex.internal` | `Password@Demo2026` | CSE276: Advanced Systems Programming |
 | **Student Candidate** | `student1@cortex.internal` | `Password@Demo2026` | CSE276: Advanced Systems Programming |
@@ -345,57 +353,15 @@ cortex-code-platform/
 - **Exam Identifier:** `EXAM_CSE276_ACTIVE_MIDTERM`
 - **Title:** Midterm Exam: Multithreading, Memory Models & Lock-Free Structures
 - **Duration:** 60 Minutes | Total Score: 100 Points
-- **Question Composition:** Single-Choice MCQ, Multi-Select MCQ, Numerical Calculation, Live Monaco Coding Sandbox with Automated Unit Tests, and Descriptive Theory.
+- **Question Composition:** Single MCQ, Multi-Select MCQ, Numerical Calculation, Live Monaco Coding Sandbox with Automated Unit Tests, and Descriptive Theory.
 
 ---
 
-## LOCAL DEVELOPMENT & SETUP
+## 10. VERIFICATION CHECKSUMS
 
-### Prerequisites
-- Node.js 20.x LTS or Bun 1.1+
-- Windows 10/11 x64 (for building the native Lockdown client)
-- Microsoft .NET Framework 4.8 Developer Pack or MSBuild Tools
+Integrity hashes for all release packages and specification documents:
 
-### 1. Web Platform Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/shivampatilck-1010/cortex-code-platform.git
-cd cortex-code-platform
-
-# Install project dependencies
-npm install
-
-# Start local development server
-npm run dev
-```
-
-### 2. Building the Cortex Lockdown Windows Client
-
-```powershell
-# Compile the native C# kiosk executable
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe `
-    /target:winexe `
-    /out:bin\CortexLockdown.exe `
-    /win32manifest:apps\cortex-lockdown-windows\src\app.manifest `
-    /reference:System.Windows.Forms.dll `
-    /reference:System.Drawing.dll `
-    /reference:System.Management.dll `
-    /recurse:apps\cortex-lockdown-windows\src\*.cs
-
-# Register the cortex:// protocol for testing
-reg.exe add "HKCU\Software\Classes\cortex" /ve /t REG_SZ /d "URL:Cortex Lockdown Protocol" /f
-reg.exe add "HKCU\Software\Classes\cortex" /v "URL Protocol" /t REG_SZ /d "" /f
-reg.exe add "HKCU\Software\Classes\cortex\shell\open\command" /ve /t REG_SZ /d "`"C:\Users\$env:USERNAME\AppData\Local\CortexLockdown\CortexLockdown.exe`" --url=`"%1`"" /f
-```
-
----
-
-## VERIFICATION & CHECKSUMS
-
-All released binaries, installer bundles, and specifications provide cryptographic checksums for institutional integrity auditing:
-
-| File Name | File Size | MD5 Checksum | SHA-256 Checksum |
+| Artifact Name | Size | MD5 Checksum | SHA-256 Checksum |
 | :--- | :--- | :--- | :--- |
 | `CortexLockdown-Setup.exe` | 60,928 bytes | `7e2fc03f20c7950f7e607f2acb789a4a` | `726e4618990c614df6af947f72167244bd51c37f21396d0889a3f0cd62fcf0c6` |
 | `CortexLockdown.exe` | 35,840 bytes | `df9f291b945f1e2c951b90df8f44516e` | `82518b2d6966e3fb358892a040f148e52aa5ecdf8cab92e0d93a2a22f3afc895` |
@@ -404,15 +370,45 @@ All released binaries, installer bundles, and specifications provide cryptograph
 
 ---
 
-## GOVERNANCE & COMPLIANCE
+## 11. LOCAL BUILD & DEVELOPMENT
 
-1. **Zero-Emoji Policy:** Codebases, documentation, automated diagnostics, and commit records maintain clean corporate and academic typographic formatting without emojis.
-2. **Zero Budget Incurred (₹0):** All platform capabilities run on open-source frameworks, standard Win32 interfaces, and Cloudflare/Google developer tiers without subscription overhead.
-3. **Institutional Data Security:** Student responses are encrypted during transit via TLS 1.3 and persisted to Cloudflare D1 with strict row-level authorization.
+```bash
+# 1. Clone repository
+git clone https://github.com/shivampatilck-1010/cortex-code-platform.git
+cd cortex-code-platform
+
+# 2. Install dependencies
+npm install
+
+# 3. Start local development environment
+npm run dev
+```
+
+### Compiling the Windows Lockdown Client
+
+```powershell
+# Compile the native C# kiosk client via .NET Framework 4.8 MSBuild
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe `
+    /target:winexe `
+    /out:bin\CortexLockdown.exe `
+    /win32manifest:apps\cortex-lockdown-windows\src\app.manifest `
+    /reference:System.Windows.Forms.dll `
+    /reference:System.Drawing.dll `
+    /reference:System.Management.dll `
+    /recurse:apps\cortex-lockdown-windows\src\*.cs
+```
+
+---
+
+## 12. COMPLIANCE & GOVERNANCE
+
+1. **Zero-Emoji Enforcement:** All source code, manifests, documentation, and commit messages maintain strict academic and enterprise formatting with zero emojis.
+2. **Zero Budget Guarantee (₹0):** Built entirely with open standards, native Win32 APIs, Microsoft WebView2 runtime, and free Cloudflare/Google developer tiers without recurring licensing costs.
+3. **Data Protection & Privacy:** Student responses are encrypted during transit via TLS 1.3 and persisted with row-level security in Cloudflare D1.
 
 ---
 
 ## LICENSE
 
 Copyright 2026 Cortex Universal Code Platform. All rights reserved.  
-Distributed under the MIT License. See `LICENSE` for terms of use.
+Distributed under the MIT License. See `LICENSE` for details.
