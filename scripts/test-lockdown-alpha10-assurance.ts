@@ -723,9 +723,13 @@ async function runAlpha10TestSuite() {
   console.log('\n--- Section 7: Privacy, Proctor Governance & Antivirus Security ---');
 
   // TEST 7.1: Zero Recommendations to Disable Antivirus
+  const resolveDoc = (name: string) => {
+    const reportPath = path.join(REPO_ROOT, 'reports', 'lockdown', name);
+    return fs.existsSync(reportPath) ? reportPath : path.join(REPO_ROOT, name);
+  };
   const releaseDocs = [
-    path.join(REPO_ROOT, 'CORTEX_LOCKDOWN_ALPHA8_RELEASE_MANIFEST.md'),
-    path.join(REPO_ROOT, 'CORTEX_LOCKDOWN_ALPHA9_RELEASE_READINESS.md'),
+    resolveDoc('CORTEX_LOCKDOWN_ALPHA8_RELEASE_MANIFEST.md'),
+    resolveDoc('CORTEX_LOCKDOWN_ALPHA9_RELEASE_READINESS.md'),
   ];
 
   let avScanPass = true;

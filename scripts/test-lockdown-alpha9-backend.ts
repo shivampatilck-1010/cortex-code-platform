@@ -669,7 +669,8 @@ async function runAlpha9TestSuite() {
   console.log('\n--- Section 7: Privacy, Proctor Governance & Antivirus Security ---');
 
   // TEST 7.1: Zero Recommendations to Disable Antivirus
-  const manifestPath = path.join(REPO_ROOT, 'CORTEX_LOCKDOWN_ALPHA8_RELEASE_MANIFEST.md');
+  const reportManifest = path.join(REPO_ROOT, 'reports', 'lockdown', 'CORTEX_LOCKDOWN_ALPHA8_RELEASE_MANIFEST.md');
+  const manifestPath = fs.existsSync(reportManifest) ? reportManifest : path.join(REPO_ROOT, 'CORTEX_LOCKDOWN_ALPHA8_RELEASE_MANIFEST.md');
   const manifestContent = fs.existsSync(manifestPath) ? fs.readFileSync(manifestPath, 'utf8') : '';
   const hasDisableAvRecommendation = /disable\s+(your\s+)?(antivirus|defender)/i.test(manifestContent);
 
