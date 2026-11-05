@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { ClassroomRole } from '@/lib/classroom/types';
+import { requestBrowserFullscreen } from '@/lib/classroom/useClassroomFullscreen';
 
 interface ClassroomLobbyModalProps {
   isOpen: boolean;
@@ -105,6 +106,9 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
     setIsLoading(true);
     setError(null);
     try {
+      try {
+        await requestBrowserFullscreen();
+      } catch {}
       await onJoinRoom(roomId.trim(), userName.trim(), selectedRole);
     } catch (err: any) {
       setError(err?.message || 'Failed to join classroom');
@@ -126,14 +130,14 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
               <h2 className="font-heading font-bold text-base text-gray-100">
                 {defaultRoomId ? 'Classroom Invitation' : 'Cortex Classroom'}
               </h2>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-[#737373]">
                 {defaultRoomId ? `You are invited to join ${defaultRoomId}` : 'Collaborative Coding & Workspace Arena'}
               </p>
             </div>
           </div>
 
           {onClose && (
-            <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-white">
+            <button onClick={onClose} className="p-1 rounded text-[#737373] hover:text-white">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -148,7 +152,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
               className={`flex-1 py-3 text-center transition ${
                 activeTab === 'join'
                   ? 'text-[#ff9100] border-b-2 border-[#ff9100] bg-[#14151b]'
-                  : 'text-gray-400 hover:text-gray-200'
+                  : 'text-[#737373] hover:text-[#E5E5E5]'
               }`}
             >
               Join Classroom
@@ -159,7 +163,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
               className={`flex-1 py-3 text-center transition flex items-center justify-center space-x-1.5 ${
                 activeTab === 'create'
                   ? 'text-amber-400 border-b-2 border-amber-400 bg-[#14151b]'
-                  : 'text-gray-400 hover:text-gray-200'
+                  : 'text-[#737373] hover:text-[#E5E5E5]'
               }`}
             >
               <Crown className="w-3.5 h-3.5 text-amber-400" />
@@ -186,13 +190,13 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                 <h3 className="text-sm font-heading font-bold text-gray-100">
                   Classroom Created Successfully!
                 </h3>
-                <p className="text-xs text-gray-400">Share the invite link or Room ID with your students.</p>
+                <p className="text-xs text-[#737373]">Share the invite link or Room ID with your students.</p>
               </div>
 
               {/* Room ID & Link Cards */}
               <div className="space-y-2.5 bg-[#171920] p-4 rounded-xl border border-[#262834]">
                 <div>
-                  <span className="text-[11px] text-gray-400 font-semibold block uppercase">Room ID:</span>
+                  <span className="text-[11px] text-[#737373] font-semibold block uppercase">Room ID:</span>
                   <div className="flex items-center justify-between mt-1">
                     <span className="font-mono font-bold text-base text-[#ff9100] tracking-wider">
                       {createdInfo.roomId}
@@ -203,7 +207,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                         setCopiedId(true);
                         setTimeout(() => setCopiedId(false), 1500);
                       }}
-                      className="px-2.5 py-1 rounded bg-[#22242f] hover:bg-[#2c2f3d] text-xs text-gray-200 transition flex items-center space-x-1"
+                      className="px-2.5 py-1 rounded bg-[#22242f] hover:bg-[#2c2f3d] text-xs text-[#E5E5E5] transition flex items-center space-x-1"
                     >
                       {copiedId ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedId ? 'Copied' : 'Copy ID'}</span>
@@ -212,9 +216,9 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                 </div>
 
                 <div className="pt-2 border-t border-[#242633]">
-                  <span className="text-[11px] text-gray-400 font-semibold block uppercase">Invite Link:</span>
+                  <span className="text-[11px] text-[#737373] font-semibold block uppercase">Invite Link:</span>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="font-mono text-xs text-gray-300 truncate mr-2">
+                    <span className="font-mono text-xs text-[#A3A3A3] truncate mr-2">
                       {createdInfo.inviteUrl}
                     </span>
                     <button
@@ -231,10 +235,10 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-[#242633] flex justify-between items-center text-xs text-gray-400">
+                <div className="pt-2 border-t border-[#242633] flex justify-between items-center text-xs text-[#737373]">
                   <button
                     onClick={() => setShowQR(!showQR)}
-                    className="flex items-center space-x-1 hover:text-gray-200 transition"
+                    className="flex items-center space-x-1 hover:text-[#E5E5E5] transition"
                   >
                     <QrCode className="w-3.5 h-3.5 text-cyan-400" />
                     <span>{showQR ? 'Hide QR Code' : 'Show QR Code'}</span>
@@ -265,6 +269,9 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
               <div className="flex justify-end">
                 <button
                   onClick={async () => {
+                    try {
+                      await requestBrowserFullscreen();
+                    } catch {}
                     if (createdInfo) {
                       try {
                         await fetch(`/api/v1/classroom/${createdInfo.roomId}`, {
@@ -285,7 +292,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                   }}
                   className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-heading font-bold text-xs transition shadow-md"
                 >
-                  Enter Classroom Arena →
+                  Enter Classroom Arena -&gt;
                 </button>
               </div>
             </div>
@@ -295,7 +302,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
               {defaultRoomId ? (
                 <div className="p-3 bg-[#161722] border border-[#27293a] rounded-xl space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    <span className="text-[11px] font-semibold text-[#737373] uppercase tracking-wider">
                       Invited Room:
                     </span>
                     <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded-full font-bold">
@@ -313,7 +320,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                         setCopiedId(true);
                         setTimeout(() => setCopiedId(false), 1500);
                       }}
-                      className="px-2 py-0.5 rounded bg-[#212330] hover:bg-[#2c3042] text-[11px] text-gray-300 transition flex items-center space-x-1"
+                      className="px-2 py-0.5 rounded bg-[#212330] hover:bg-[#2c3042] text-[11px] text-[#A3A3A3] transition flex items-center space-x-1"
                     >
                       {copiedId ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                       <span>{copiedId ? 'Copied' : 'Copy'}</span>
@@ -322,7 +329,7 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-300 block">Classroom Room ID</label>
+                  <label className="text-xs font-semibold text-[#A3A3A3] block">Classroom Room ID</label>
                   <input
                     type="text"
                     placeholder="e.g. CORTEX-7K92"
@@ -334,76 +341,64 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
                 </div>
               )}
 
-              {/* Role Selection */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-300 block">Select Your Role</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRole('user')}
-                    className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
-                      selectedRole === 'user'
-                        ? 'bg-[#ff9100]/10 border-[#ff9100] text-gray-100 shadow-sm'
-                        : 'bg-[#15161d] border-[#252735] text-gray-400 hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-1.5 font-semibold text-xs text-white">
-                      <Users className={`w-3.5 h-3.5 ${selectedRole === 'user' ? 'text-[#ff9100]' : 'text-gray-400'}`} />
-                      <span>Student</span>
+              {/* Role & Login resolution */}
+              {defaultRoomId ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-[#151620] border border-[#27293a] rounded-xl flex items-center justify-between gap-3">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+                        <Crown className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-semibold text-gray-200 block truncate">Teacher or Enrolled Member?</span>
+                        <span className="text-[11px] text-[#737373] block truncate">Sign in to automatically apply your account role.</span>
+                      </div>
                     </div>
-                    <span className="text-[10.5px] text-gray-400 mt-1 leading-snug">
-                      Collaborate, code, and participate in challenges.
-                    </span>
-                  </button>
+                    <a
+                      href={`/login?redirect=${encodeURIComponent(`/classroom/${roomId}`)}`}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold transition flex-shrink-0"
+                    >
+                      Sign In →
+                    </a>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRole('admin')}
-                    className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
-                      selectedRole === 'admin'
-                        ? 'bg-amber-500/10 border-amber-400 text-gray-100 shadow-sm'
-                        : 'bg-[#15161d] border-[#252735] text-gray-400 hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-1.5 font-semibold text-xs text-white">
-                      <Crown className={`w-3.5 h-3.5 ${selectedRole === 'admin' ? 'text-amber-400' : 'text-gray-400'}`} />
-                      <span>Teacher / Host</span>
-                    </div>
-                    <span className="text-[10.5px] text-gray-400 mt-1 leading-snug">
-                      Lead session, monitor arenas, and manage participants.
-                    </span>
-                  </button>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-[#A3A3A3] block">Or Continue as Guest Student</label>
+                    <input
+                      type="text"
+                      placeholder="Enter your name (e.g. Shivam)"
+                      value={userName}
+                      onChange={(e) => setUserName(e.target.value)}
+                      autoFocus
+                      className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs text-[#E5E5E5] placeholder-gray-600 focus:outline-none focus:border-[#ff9100]"
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-300 block">Your Display Name</label>
-                <input
-                  type="text"
-                  placeholder={selectedRole === 'admin' ? 'e.g. Professor Sharma' : 'e.g. Shivam'}
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  autoFocus
-                  className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#ff9100]"
-                  required
-                />
-              </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[#A3A3A3] block">Your Display Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Shivam"
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    autoFocus
+                    className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs text-[#E5E5E5] placeholder-gray-600 focus:outline-none focus:border-[#ff9100]"
+                    required
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"
                 disabled={isLoading || !roomId.trim() || !userName.trim()}
-                className={`w-full py-2.5 rounded-lg font-heading font-bold text-xs transition shadow-md disabled:opacity-50 flex items-center justify-center space-x-1.5 text-black ${
-                  selectedRole === 'admin'
-                    ? 'bg-gradient-to-r from-amber-500 to-[#ff9100] hover:from-amber-400 hover:to-[#ffa229]'
-                    : 'bg-[#ff9100] hover:bg-[#e08000]'
-                }`}
+                className="w-full py-2.5 rounded-lg font-heading font-bold text-xs transition shadow-md disabled:opacity-50 flex items-center justify-center space-x-1.5 text-black bg-[#ff9100] hover:bg-[#e08000]"
               >
                 <span>
                   {isLoading
                     ? 'Connecting to Classroom...'
-                    : selectedRole === 'admin'
-                    ? 'Join as Teacher & Launch Arena'
-                    : 'Join Classroom'}
+                    : 'Join Classroom as Student'}
                 </span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
@@ -412,16 +407,16 @@ export const ClassroomLobbyModal: React.FC<ClassroomLobbyModalProps> = ({
             /* Create Form */
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-300 block">Your Name (Admin)</label>
+                <label className="text-xs font-semibold text-[#A3A3A3] block">Your Name (Admin)</label>
                 <input
                   type="text"
                   placeholder="e.g. Dr. Sharma"
                   value={adminName}
                   onChange={(e) => setAdminName(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-400"
+                  className="w-full px-3 py-2 bg-[#171920] border border-[#2b2d39] rounded-lg text-xs text-[#E5E5E5] placeholder-gray-600 focus:outline-none focus:border-amber-400"
                   required
                 />
-                <span className="text-[11px] text-gray-400">
+                <span className="text-[11px] text-[#737373]">
                   You will have full classroom management access and workspace monitoring privileges.
                 </span>
               </div>

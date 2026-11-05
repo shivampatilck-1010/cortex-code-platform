@@ -1,62 +1,77 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cortex-code-platform",
-  "compatibility_date": "2026-09-05",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
-  "main": "src/worker.ts",
-  "assets": {
-    "directory": "dist/client",
-    "not_found_handling": "none",
-    "binding": "ASSETS"
-  },
-  "cache": {
-    "enabled": true
-  },
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "CLASSROOM_ROOM_DO",
-        "class_name": "ClassroomRoomDO"
-      }
-    ]
-  },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["ClassroomRoomDO"]
-    }
-  ],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "cortex-db",
-      "database_id": "f756374b-0e9b-4112-b502-b703788dd86f"
-    }
-  ],
-  "version_metadata": {
-    "binding": "CF_VERSION_METADATA"
-  },
-  "r2_buckets": [
-    {
-      "binding": "ASSETS_BUCKET",
-      "bucket_name": "cortex-assets"
-    }
-  ],
-  "queues": {
-    "producers": [
-      {
-        "queue": "cortex-queue",
-        "binding": "CORTEX_QUEUE"
-      }
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "cortex-code-platform",
+    "compatibility_date": "2026-09-05",
+    "compatibility_flags": [
+        "nodejs_compat"
     ],
-    "consumers": [
-      {
-        "queue": "cortex-queue",
-        "max_batch_size": 1,
-        "max_batch_timeout": 1
-      }
-    ]
-  }
+    "main": "src/worker.ts",
+    "assets": {
+        "directory": "dist/client",
+        "not_found_handling": "none",
+        "binding": "ASSETS"
+    },
+    "cache": {
+        "enabled": true
+    },
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "CLASSROOM_ROOM_DO",
+                "class_name": "ClassroomRoomDO"
+            }
+        ]
+    },
+    "migrations": [
+        {
+            "tag": "v1",
+            "new_sqlite_classes": [
+                "ClassroomRoomDO"
+            ]
+        }
+    ],
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "cortex-db",
+            "database_id": "f756374b-0e9b-4112-b502-b703788dd86f"
+        }
+    ],
+    "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+    },
+    "env": {
+        "staging": {
+            "name": "cortex-code-platform-staging",
+            "vars": {
+                "APP_ENV": "staging"
+            },
+            "d1_databases": [
+                {
+                    "binding": "DB",
+                    "database_name": "cortex-staging-db",
+                    "database_id": "e6375738-d9b2-4c5a-a3e5-3a34e892f49d"
+                }
+            ],
+            "durable_objects": {
+                "bindings": [
+                    {
+                        "name": "CLASSROOM_ROOM_DO",
+                        "class_name": "ClassroomRoomDO"
+                    }
+                ]
+            },
+            "migrations": [
+                {
+                    "tag": "v1",
+                    "new_sqlite_classes": [
+                        "ClassroomRoomDO"
+                    ]
+                }
+            ],
+            "version_metadata": {
+                "binding": "CF_VERSION_METADATA"
+            }
+        }
+    }
 }

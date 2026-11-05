@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Folder, FolderGit2,
   Terminal as TermIcon, 
   CheckSquare, 
   Sparkles, 
@@ -18,8 +17,9 @@ import {
 import confetti from 'canvas-confetti';
 import { Navbar } from '@/components/layout/Navbar';
 import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
+import { CodeVisualizationWorkspace } from '@/components/visualization/CodeVisualizationWorkspace';
+import { TraceSession } from '@/lib/visualization/types';
 import { FileExplorer } from '@/components/sidebar/FileExplorer';
-import { SourceControlPanel } from '@/components/sidebar/SourceControlPanel';
 import { OutputPanel } from '@/components/panels/OutputPanel';
 import { TerminalPanel } from '@/components/panels/TerminalPanel';
 import { TestCasesPanel } from '@/components/panels/TestCasesPanel';
@@ -234,6 +234,11 @@ export default function CloudIDEPage() {
   const [activeBottomTab, setActiveBottomTab] = useState<'output' | 'terminal' | 'tests' | 'ai' | 'debug' | 'preview'>('output');
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
 
+  // 4. Visualization & Layout State
+  const [editorLayoutMode, setEditorLayoutMode] = useState<'code' | 'visualize' | 'split'>('code');
+  const [traceSession, setTraceSession] = useState<TraceSession | null>(null);
+  const [isTracing, setIsTracing] = useState<boolean>(false);
+
   // 4. Debugger State
   const [isDebugging, setIsDebugging] = useState(false);
   const [breakpoints, setBreakpoints] = useState<number[]>([6]);
@@ -287,7 +292,6 @@ export default function CloudIDEPage() {
 
   // 7. Resizable Panels & Fullscreen State
   const [sidebarWidth, setSidebarWidth] = useState(240);
-  const [activeSidebarTab, setActiveSidebarTab] = useState<'files'|'git'>('files');
   const [dockHeight, setDockHeight] = useState(280);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingDock, setIsResizingDock] = useState(false);
@@ -306,7 +310,8 @@ export default function CloudIDEPage() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizingSidebar) {
-        const newWidth = Math.min(Math.max(e.clientX, 150), 600);
+        const maxWidth = typeof window !== 'undefined' ? Math.min(600, Math.floor(window.innerWidth * 0.45)) : 500;
+        const newWidth = Math.min(Math.max(e.clientX, 160), maxWidth);
         setSidebarWidth(newWidth);
       }
       if (isResizingDock) {
@@ -337,6 +342,16 @@ export default function CloudIDEPage() {
       document.body.style.userSelect = '';
     };
   }, [isResizingSidebar, isResizingDock]);
+
+  // Trigger Monaco layout recalculation on layout mode or dock/sidebar dimension change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [editorLayoutMode, sidebarWidth, isBottomCollapsed]);
 
   // Fullscreen Keyboard Listeners (F11 / Esc)
   useEffect(() => {
@@ -404,39 +419,64 @@ export default function CloudIDEPage() {
     }
   };
 
-  // Language Change Handler
+  // Language Change Handler: Preserves user code without silent incompatible renaming
   const handleLanguageChange = (newLang: LanguageConfig) => {
+    const oldLang = currentLang;
+    if (newLang.id === oldLang.id) return;
+
     setCurrentLang(newLang);
+
+    let targetFileId = activeFileId;
+
     setFiles((prevFiles) => {
-      const mainIdx = prevFiles.findIndex(
-        (f) => f.id === 'main' || f.name.startsWith('main.') || f.name.startsWith('index.') || f.name.startsWith('Main.')
+      const currentActive = prevFiles.find((f) => f.id === activeFileId) || prevFiles[0];
+
+      // Check if current active file has untouched starter code
+      const isUntouchedStarter = currentActive && (
+        currentActive.content === oldLang.starterCode ||
+        currentActive.content.trim() === ''
       );
-      if (mainIdx !== -1) {
-        return prevFiles.map((f, idx) =>
-          idx === mainIdx
-            ? {
-                ...f,
-                id: 'main',
-                name: newLang.defaultFileName,
-                path: `/${newLang.defaultFileName}`,
-                content: newLang.starterCode,
-              }
-            : f
-        );
-      } else {
-        return [
-          {
-            id: 'main',
+
+      // Check if a file for the new language already exists in the project
+      const existingNewFile = prevFiles.find(
+        (f) => !f.isFolder && (f.name === newLang.defaultFileName || f.name.endsWith(newLang.fileExtension))
+      );
+
+      if (isUntouchedStarter && !existingNewFile) {
+        // Safe to transition the untouched starter file to the new language template
+        targetFileId = currentActive.id;
+        return prevFiles.map((f) => {
+          if (f.id !== currentActive.id) return f;
+          return {
+            ...f,
             name: newLang.defaultFileName,
             path: `/${newLang.defaultFileName}`,
             content: newLang.starterCode,
-          },
-          ...prevFiles,
-        ];
+          };
+        });
+      } else if (existingNewFile) {
+        // A file for the new language already exists; preserve all files and switch active file to it
+        targetFileId = existingNewFile.id;
+        return prevFiles;
+      } else {
+        // The user authored custom code in the previous language.
+        // PRESERVE the previous file completely (do not rename or overwrite it).
+        // Create a new dedicated file for the new language with its starter code.
+        const newFileId = `file_${newLang.id}_${Date.now()}`;
+        targetFileId = newFileId;
+        const newFile: ProjectFile = {
+          id: newFileId,
+          name: newLang.defaultFileName,
+          path: `/${newLang.defaultFileName}`,
+          content: newLang.starterCode,
+        };
+        return [...prevFiles, newFile];
       }
     });
-    setActiveFileId('main');
+
+    setActiveFileId(targetFileId);
     setExecutionResult(null);
+    setTraceSession(null);
     if (newLang.id === 'html' || newLang.id === 'css') {
       setActiveBottomTab('preview');
       setIsBottomCollapsed(false);
@@ -682,16 +722,56 @@ export default function CloudIDEPage() {
   };
 
   // Keyboard Shortcuts Listener (Ctrl+Enter, Ctrl+S)
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        handleRun();
+        handleRunRef.current();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [files, activeFile, currentLang, customStdin]);
+  }, []);
+
+  // Live Code Visualization Handler
+  const handleRunTrace = async () => {
+    if (isTracing) return;
+    setIsTracing(true);
+    if (editorLayoutMode === 'code') {
+      setEditorLayoutMode('split');
+    }
+    try {
+      const activeContent = activeFile?.content || '';
+      const currentFiles = files.map((f) =>
+        f.id === activeFileId ? { ...f, content: activeContent } : f
+      );
+      const res = await fetch('/api/v1/visualize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: currentLang.id,
+          files: currentFiles,
+          entrypoint: activeFile?.name,
+          stdin: customStdin,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.session) {
+          setTraceSession(data.session);
+        }
+      }
+    } catch (err) {
+      console.error('Visualization error:', err);
+    } finally {
+      setIsTracing(false);
+    }
+  };
 
   // Visual Debugger Controls
   const handleStartDebug = () => {
@@ -736,6 +816,10 @@ export default function CloudIDEPage() {
         isRunning={isRunning}
         onDebug={handleStartDebug}
         isDebugging={isDebugging}
+        onVisualize={handleRunTrace}
+        isVisualizing={isTracing}
+        layoutMode={editorLayoutMode}
+        onLayoutModeChange={setEditorLayoutMode}
         autoFixEnabled={aiSettings.autoFixErrors}
         onToggleAutoFix={() =>
           setAiSettings((s) => ({ ...s, autoFixErrors: !s.autoFixErrors }))
@@ -746,23 +830,14 @@ export default function CloudIDEPage() {
 
       {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
       <div className="flex-1 flex overflow-hidden bg-[#0b0c0e]">
-        {/* Left Sidebar: File Explorer (Resizable width & custom #3d3c3b background) */}
-        {/* Activity Bar */}
-        <div className="w-12 bg-[#1C1B1A] border-r border-[#3D3C3B] flex flex-col items-center py-2 gap-4 flex-shrink-0 z-10">
-          <button onClick={() => setActiveSidebarTab('files')} className={`p-2 rounded-md transition-colors ${activeSidebarTab === 'files' ? 'bg-[#3D3C3B] text-white' : 'text-[#8a8886] hover:text-white'}`}>
-            <Folder className="w-5 h-5" />
-          </button>
-          <button onClick={() => setActiveSidebarTab('git')} className={`p-2 rounded-md transition-colors ${activeSidebarTab === 'git' ? 'bg-[#3D3C3B] text-white' : 'text-[#8a8886] hover:text-white'}`}>
-            <FolderGit2 className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Left Sidebar: dynamic content */}
-        <div style={{ width: `${sidebarWidth - 48}px`, minWidth: `${sidebarWidth - 48}px` }} className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0">
-          {activeSidebarTab === 'files' ? (
-            <FileExplorer
-          width={undefined}
-          files={files}
+        {/* Left Sidebar: File Explorer (Resizable width) */}
+        <div 
+          style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px`, maxWidth: `${sidebarWidth}px` }} 
+          className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0"
+        >
+          <FileExplorer
+            width={sidebarWidth}
+            files={files}
           activeFileId={activeFileId}
           onSelectFile={setActiveFileId}
           currentLanguage={currentLang}
@@ -869,9 +944,6 @@ export default function CloudIDEPage() {
           }}
           isDarkMode={true}
         />
-          ) : (
-            <SourceControlPanel projectId={projectId!} />
-          )}
         </div>
 
         {/* Horizontal Resize Splitter */}
@@ -883,59 +955,75 @@ export default function CloudIDEPage() {
 
         {/* Center & Bottom Area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[#0b0c0e]">
-          {/* Center Pane: Monaco Editor (Fullscreen mode & local dark/light theme switch) */}
-          <div className="flex-1 overflow-hidden relative">
-            <MonacoCodeEditor
-              files={files}
-              activeFileId={activeFileId}
-              onSelectFile={setActiveFileId}
-              onCloseFile={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
-              onNewFile={() => {
-                const nonFolders = files.filter((f) => !f.isFolder);
-                const fileName = `file_${nonFolders.length + 1}${currentLang.fileExtension}`;
-                const newF: ProjectFile = {
-                  id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                  name: fileName,
-                  path: `/${fileName}`,
-                  content: getStarterContentForFile(fileName, currentLang),
-                };
-                setFiles((prev) => [...prev, newF]);
-                setActiveFileId(newF.id);
-              }}
-              onContentChange={handleContentChange}
-              language={getMonacoLangForFile(activeFile?.name || '', currentLang.monacoLang)}
-              theme={theme}
-              fontSize={fontSize}
-              breakpoints={breakpoints}
-              onToggleBreakpoint={(line) => {
-                setBreakpoints((prev) =>
-                  prev.includes(line) ? prev.filter((l) => l !== line) : [...prev, line]
-                );
-              }}
-              activeLine={activeDebugLine}
-              diagnostics={executionResult?.diagnostics}
-              onCursorChange={(l, c) => {
-                if (collabBrokerRef.current) {
-                  collabBrokerRef.current.updateCursor(activeFileId, l, c);
-                }
-              }}
-              isDarkMode={isDarkMode}
-              onToggleDarkMode={handleToggleDarkMode}
-              isFullscreen={isFullscreen}
-              onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
-              quickFixResult={fixResult}
-              isQuickFixOpen={isQuickFixOpen}
-              onCloseQuickFix={() => setIsQuickFixOpen(false)}
-              onApplyExplanationComment={handleApplyExplanationComment}
-              onApplyLiveFix={handleApplyLiveFix}
-              aiProvider={aiSettings.provider === 'gemini' || Boolean(aiSettings.apiKey) ? 'gemini' : 'offline'}
-              apiKey={aiSettings.apiKey || ''}
-              onSaveApiKey={handleSaveApiKey}
-              isAnalyzingFix={isAnalyzingFix}
-              onReanalyzeWithKey={handleReanalyzeWithKey}
-              enableInlineSuggestions={enableInlineSuggestions}
-              onToggleInlineSuggestions={handleToggleInlineSuggestions}
-            />
+          {/* Center Pane: Multi-Layout (Code, Visualize, Split View) */}
+          <div className="flex-1 flex overflow-hidden relative">
+            <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? 'w-1/2 border-r border-[#1f2024]' : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
+                <MonacoCodeEditor
+                  files={files}
+                  activeFileId={activeFileId}
+                  onSelectFile={setActiveFileId}
+                  onCloseFile={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
+                  onNewFile={() => {
+                    const nonFolders = files.filter((f) => !f.isFolder);
+                    const fileName = `file_${nonFolders.length + 1}${currentLang.fileExtension}`;
+                    const newF: ProjectFile = {
+                      id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                      name: fileName,
+                      path: `/${fileName}`,
+                      content: getStarterContentForFile(fileName, currentLang),
+                    };
+                    setFiles((prev) => [...prev, newF]);
+                    setActiveFileId(newF.id);
+                  }}
+                  onContentChange={handleContentChange}
+                  language={getMonacoLangForFile(activeFile?.name || '', currentLang.monacoLang)}
+                  theme={theme}
+                  fontSize={fontSize}
+                  breakpoints={breakpoints}
+                  onToggleBreakpoint={(line) => {
+                    setBreakpoints((prev) =>
+                      prev.includes(line) ? prev.filter((l) => l !== line) : [...prev, line]
+                    );
+                  }}
+                  activeLine={activeDebugLine}
+                  diagnostics={executionResult?.diagnostics}
+                  onCursorChange={(l, c) => {
+                    if (collabBrokerRef.current) {
+                      collabBrokerRef.current.updateCursor(activeFileId, l, c);
+                    }
+                  }}
+                  isDarkMode={isDarkMode}
+                  onToggleDarkMode={handleToggleDarkMode}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+                  quickFixResult={fixResult}
+                  isQuickFixOpen={isQuickFixOpen}
+                  onCloseQuickFix={() => setIsQuickFixOpen(false)}
+                  onApplyExplanationComment={handleApplyExplanationComment}
+                  onApplyLiveFix={handleApplyLiveFix}
+                  aiProvider={aiSettings.provider === 'gemini' || Boolean(aiSettings.apiKey) ? 'gemini' : 'offline'}
+                  apiKey={aiSettings.apiKey || ''}
+                  onSaveApiKey={handleSaveApiKey}
+                  isAnalyzingFix={isAnalyzingFix}
+                  onReanalyzeWithKey={handleReanalyzeWithKey}
+                  enableInlineSuggestions={enableInlineSuggestions}
+                  onToggleInlineSuggestions={handleToggleInlineSuggestions}
+                />
+            </div>
+
+            {(editorLayoutMode === 'visualize' || editorLayoutMode === 'split') && (
+              <div className={`${editorLayoutMode === 'split' ? 'w-1/2' : 'w-full'} h-full overflow-hidden relative`}>
+                <CodeVisualizationWorkspace
+                  traceSession={traceSession}
+                  isLoading={isTracing}
+                  language={currentLang.id}
+                  sourceCode={activeFile?.content || ''}
+                  onRunTrace={handleRunTrace}
+                  onStepChange={(line) => setActiveDebugLine(line)}
+                  showSourcePane={editorLayoutMode === 'visualize'}
+                />
+              </div>
+            )}
           </div>
 
           {/* Vertical Resize Splitter */}

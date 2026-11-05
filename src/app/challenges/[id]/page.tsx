@@ -275,11 +275,12 @@ export default function ChallengeSolverPage() {
         {/* Right Code Editor & Test Case Evaluation */}
         <div className="w-1/2 flex flex-col overflow-hidden bg-[#1e1e1e]">
           {/* Editor Container */}
-          <div className="flex-1 overflow-hidden relative">
+          <div className="flex-1 overflow-hidden relative select-text" style={{ userSelect: 'text' }}>
             <Editor
+              key={language}
               height="100%"
               language={language === 'python' ? 'python' : language === 'cpp' ? 'cpp' : 'javascript'}
-              value={code}
+              defaultValue={code}
               theme="vs-dark"
               onChange={(val) => setCode(val || '')}
               options={{
@@ -288,6 +289,18 @@ export default function ChallengeSolverPage() {
                 lineNumbersMinChars: 3,
                 automaticLayout: true,
                 scrollBeyondLastLine: false,
+                selectOnLineNumbers: true,
+                dragAndDrop: true,
+                contextmenu: true,
+                multiCursorModifier: 'alt',
+                copyWithSyntaxHighlighting: true,
+                emptySelectionClipboard: false,
+                selectionHighlight: true,
+                autoClosingBrackets: 'always',
+                autoClosingQuotes: 'always',
+                autoSurround: 'languageDefined',
+                formatOnPaste: false,
+                formatOnType: false,
               }}
             />
           </div>

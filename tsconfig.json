@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "ES2022",
     "lib": [
       "dom",
       "dom.iterable",
       "esnext"
     ],
+    "downlevelIteration": true,
     "allowJs": true,
     "skipLibCheck": true,
     "strict": false,
@@ -25,6 +26,15 @@
       }
     ],
     "paths": {
+      "@/types/*": [
+        "./src/components/live-class/types/*"
+      ],
+      "@/context/*": [
+        "./src/components/live-class/context/*"
+      ],
+      "@/services/*": [
+        "./src/components/live-class/services/*"
+      ],
       "@/*": [
         "./src/*"
       ]

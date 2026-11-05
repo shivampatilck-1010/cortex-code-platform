@@ -35,15 +35,15 @@ export default function StudentSubmissionsPage() {
   if (error) return <div className="p-8 text-red-400">Error: {error}</div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-gray-200 p-8">
+    <div className="min-h-screen bg-[#0a0a0f] text-[#E5E5E5] p-8">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center space-x-4 mb-8">
           <button onClick={() => router.push(`/classroom/${roomId}/assignments/${asgId}/solve`)} className="p-2 bg-[#13141a] rounded hover:bg-[#1f212a] transition">
-            <ArrowLeft className="w-5 h-5 text-gray-400" />
+            <ArrowLeft className="w-5 h-5 text-[#737373]" />
           </button>
           <div>
             <h1 className="text-2xl font-bold text-white">Your Submissions</h1>
-            <p className="text-sm text-gray-400">History and teacher feedback</p>
+            <p className="text-sm text-[#737373]">History and teacher feedback</p>
           </div>
         </div>
 
@@ -80,11 +80,11 @@ export default function StudentSubmissionsPage() {
                   
                   {isGraded && sub.feedback && sub.feedback.content && (
                     <div className="p-4 bg-[#181922] border-b border-[#272a38]">
-                      <h4 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center space-x-2">
+                      <h4 className="text-xs font-bold text-[#737373] uppercase mb-2 flex items-center space-x-2">
                         <MessageSquare className="w-3.5 h-3.5" />
                         <span>Teacher Feedback ({sub.feedback.authorName})</span>
                       </h4>
-                      <p className="text-sm text-gray-300 whitespace-pre-wrap">{sub.feedback.content}</p>
+                      <p className="text-sm text-[#A3A3A3] whitespace-pre-wrap">{sub.feedback.content}</p>
                     </div>
                   )}
 
@@ -93,7 +93,7 @@ export default function StudentSubmissionsPage() {
                       <summary className="text-xs text-[#ff9100] cursor-pointer hover:underline outline-none">
                         View Submitted Code
                       </summary>
-                      <div className="mt-3 p-3 bg-[#0a0a0f] border border-[#272a38] rounded font-mono text-[11px] text-gray-400 whitespace-pre-wrap overflow-x-auto">
+                      <div className="mt-3 p-3 bg-[#0a0a0f] border border-[#272a38] rounded font-mono text-[11px] text-[#737373] whitespace-pre-wrap overflow-x-auto">
                         {sub.code}
                       </div>
                     </details>

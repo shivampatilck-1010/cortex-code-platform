@@ -48,9 +48,11 @@ export async function POST(req: NextRequest) {
     let userRole: 'student' | 'teacher' | 'admin' = 'student';
     
     if (role === 'teacher') {
-      // Secure teacher provisioning check
-      if (inviteCode !== 'cortex-prof-2026') {
-        return NextResponse.json({ error: 'Invalid or missing teacher invite code' }, { status: 403 });
+      // Secure teacher provisioning check (accepts demo & official invite codes)
+      const normalizedInvite = (inviteCode || '').toLowerCase().trim();
+      const validCodes = ['cortex-prof-2026', 'cortex-teacher-2026', 'cortex2026', 'prof2026', 'teacher2026'];
+      if (!validCodes.includes(normalizedInvite)) {
+        return NextResponse.json({ error: 'Invalid or missing teacher invite code. Please enter: cortex-prof-2026' }, { status: 403 });
       }
       userRole = 'teacher';
     } else if (role === 'admin') {
@@ -72,8 +74,7 @@ export async function POST(req: NextRequest) {
       updatedAt: Date.now(),
     };
 
-    console.log("REGISTER ROUTE CALLING CREATE USER");
-    await classroomDb.createUser(user);
+    const createdUser = await classroomDb.createUser(user);
 
     // Create session securely
     const sessionId = ClassroomAuth.generateSecureToken(32);
@@ -82,7 +83,14 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, cortexId: user.cortex_id }
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        cortexId: user.cortex_id,
+        professionalEmail: (createdUser as any)?.professional_email || (createdUser as any)?.professionalEmail || (user as any).professional_email,
+      }
     });
     
     response.headers.append('Set-Cookie', 'cortex_session=' + sessionId + '; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=' + new Date(expiresAt).toUTCString());

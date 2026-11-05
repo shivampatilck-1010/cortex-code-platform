@@ -218,7 +218,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           className={`flex-1 py-1 px-2 text-xs font-semibold rounded flex items-center justify-center space-x-1.5 transition ${
             mobileTab === 'A'
               ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 shadow-sm'
-              : 'text-gray-400 hover:bg-[#181920]'
+              : 'text-[#737373] hover:bg-[#181920]'
           }`}
         >
           <span className="w-2 h-2 rounded-full bg-cyan-400" />
@@ -229,7 +229,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           className={`flex-1 py-1 px-2 text-xs font-semibold rounded flex items-center justify-center space-x-1.5 transition ${
             mobileTab === 'B'
               ? 'bg-purple-950/80 text-purple-300 border border-purple-700/60 shadow-sm'
-              : 'text-gray-400 hover:bg-[#181920]'
+              : 'text-[#737373] hover:bg-[#181920]'
           }`}
         >
           <span className="w-2 h-2 rounded-full bg-purple-400" />
@@ -303,7 +303,7 @@ export const TwoWorkspaceContainer: React.FC<TwoWorkspaceContainerProps> = ({
           </div>
 
           {/* Quick Percent Tooltip on hover/drag */}
-          <div className="absolute top-2 z-30 px-1.5 py-0.5 rounded bg-[#101116] border border-[#2b2d38] text-[10px] font-mono text-gray-300 opacity-0 group-hover:opacity-100 transition shadow pointer-events-none whitespace-nowrap">
+          <div className="absolute top-2 z-30 px-1.5 py-0.5 rounded bg-[#101116] border border-[#2b2d38] text-[10px] font-mono text-[#A3A3A3] opacity-0 group-hover:opacity-100 transition shadow pointer-events-none whitespace-nowrap">
             {Math.round(splitPercent)}% : {Math.round(100 - splitPercent)}%
           </div>
         </div>
@@ -534,6 +534,11 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
       // If collabClient & docId exist, Yjs handles sync — do NOT touch editor/ytext here.
       const hasYjsBinding = !!bindingRef.current;
       if (!hasYjsBinding && incomingCode !== currentEditorCode && incomingCode !== localEmittedCodeRef.current) {
+        // CRITICAL GUARD: Never replace non-empty editor content with empty/shorter code
+        // from server poll. Cold edge isolates return empty activeCode which clobbers live content.
+        if (!incomingCode && currentEditorCode) {
+          return; // Keep existing editor content
+        }
         localEmittedCodeRef.current = incomingCode;
         const model = editorRef.current.getModel();
         if (model && model.getValue() !== incomingCode) {
@@ -547,11 +552,11 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
   if (!user) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-500 bg-[#0c0d10] space-y-3">
-        <div className="w-12 h-12 rounded-full bg-[#16171d] border border-[#232530] flex items-center justify-center text-gray-400">
+        <div className="w-12 h-12 rounded-full bg-[#16171d] border border-[#232530] flex items-center justify-center text-[#737373]">
           <Users className="w-6 h-6" />
         </div>
         <div>
-          <h4 className="text-sm font-heading font-semibold text-gray-300">{slotLabel} is Empty</h4>
+          <h4 className="text-sm font-heading font-semibold text-[#A3A3A3]">{slotLabel} is Empty</h4>
           <p className="text-xs text-gray-500 mt-1 max-w-xs">
             Select a participant from the user list on the left to mount their workspace into {slotLabel}.
           </p>
@@ -606,7 +611,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
             value={lang}
             disabled={!canEdit}
             onChange={(e) => onLanguageChange && onLanguageChange(e.target.value)}
-            className="bg-[#181920] text-gray-300 text-[11px] font-mono border border-[#2b2d38] rounded px-2 py-0.5 focus:outline-none focus:border-[#ff9100] disabled:opacity-60"
+            className="bg-[#181920] text-[#A3A3A3] text-[11px] font-mono border border-[#2b2d38] rounded px-2 py-0.5 focus:outline-none focus:border-[#ff9100] disabled:opacity-60"
           >
             {SUPPORTED_LANGUAGES.map((l) => (
               <option key={l.id} value={l.id}>{l.name}</option>
@@ -620,7 +625,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
               className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition border ${
                 isFullscreen
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
-                  : 'bg-[#181920] hover:bg-[#252834] text-gray-400 hover:text-white border-[#2b2d38]'
+                  : 'bg-[#181920] hover:bg-[#252834] text-[#737373] hover:text-white border-[#2b2d38]'
               }`}
               title={isFullscreen ? 'Restore side-by-side split view' : `Expand ${slotLabel} to Full Screen`}
             >
@@ -642,7 +647,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
           {user.files && user.files.length > 0 && (
             <button
               onClick={() => onDownloadFile && onDownloadFile(user.id, user.files[0].id)}
-              className="p-1 rounded bg-[#181920] hover:bg-[#22242e] text-gray-300 border border-[#2b2d38] transition"
+              className="p-1 rounded bg-[#181920] hover:bg-[#22242e] text-[#A3A3A3] border border-[#2b2d38] transition"
               title={`Download ${user.files[0].name}`}
             >
               <Download className="w-3.5 h-3.5" />
@@ -687,7 +692,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
       )}
 
       {/* 3. Editor Area or Private Workspace Shield */}
-      <div className="flex-1 min-h-0 relative">
+      <div className="flex-1 min-h-0 relative select-text" style={{ userSelect: 'text' }}>
         {hasAccess ? (
           <Editor
             height="100%"
@@ -750,7 +755,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
               <Lock className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-sm font-heading font-semibold text-gray-200">
+              <h4 className="text-sm font-heading font-semibold text-[#E5E5E5]">
                 {user.name}&apos;s Workspace is Private
               </h4>
               <p className="text-xs text-gray-500 mt-1 max-w-xs">
@@ -760,7 +765,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
             {onRequestViewAccess && !isSelf && (
               <button
                 onClick={() => onRequestViewAccess(user.id)}
-                className="px-3.5 py-1.5 rounded bg-[#20222b] hover:bg-[#ff9100]/20 hover:text-[#ff9100] text-gray-200 border border-[#2e313d] text-xs font-semibold transition"
+                className="px-3.5 py-1.5 rounded bg-[#20222b] hover:bg-[#ff9100]/20 hover:text-[#ff9100] text-[#E5E5E5] border border-[#2e313d] text-xs font-semibold transition"
               >
                 Request Access
               </button>
@@ -771,10 +776,10 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
 
       {/* 4. Terminal Output Dock */}
       <div className="h-44 sm:h-48 border-t border-[#1f2026] bg-[#090a0d] flex flex-col">
-        <div className="h-6 px-3 bg-[#0f1014] border-b border-[#1a1b22] flex items-center justify-between text-[11px] text-gray-400">
+        <div className="h-6 px-3 bg-[#0f1014] border-b border-[#1a1b22] flex items-center justify-between text-[11px] text-[#737373]">
           <div className="flex items-center space-x-2">
-            <Terminal className="w-3.5 h-3.5 text-gray-400" />
-            <span className="font-heading font-semibold text-gray-300">
+            <Terminal className="w-3.5 h-3.5 text-[#737373]" />
+            <span className="font-heading font-semibold text-[#A3A3A3]">
               {user.name}&apos;s Output {result ? `(exit ${result.exitCode})` : ''}
             </span>
             {result && (
@@ -796,7 +801,7 @@ const WorkspaceColumn: React.FC<WorkspaceColumnProps> = ({
           )}
         </div>
 
-        <div className="flex-1 p-3 font-mono text-xs overflow-y-auto select-text text-gray-300">
+        <div className="flex-1 p-3 font-mono text-xs overflow-y-auto select-text text-[#A3A3A3]">
           {isRunning ? (
             <span className="text-gray-500 italic animate-pulse">Running code in isolated cloud sandbox...</span>
           ) : result ? (

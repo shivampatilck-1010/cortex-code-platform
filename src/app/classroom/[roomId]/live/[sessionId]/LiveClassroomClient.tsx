@@ -1,350 +1,240 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React from 'react';
+import { ClassroomProvider, useClassroom } from '@/components/live-class/context/ClassroomContext';
+import { FollowTeacherProvider } from '@/components/live-class/context/FollowTeacherContext';
+import { ClassroomHeader } from '@/components/live-class/classroom/ClassroomHeader';
+import { ModuleNavigation } from '@/components/live-class/classroom/ModuleNavigation';
+import { FollowTeacherBanner } from '@/components/live-class/classroom/FollowTeacherBanner';
+import { MeetingBottomBar } from '@/components/live-class/classroom/MeetingBottomBar';
+import { DeviceSettingsModal } from '@/components/live-class/classroom/DeviceSettingsModal';
+import { ChatSidebar } from '@/components/live-class/sidebars/ChatSidebar';
+import { ParticipantsSidebar } from '@/components/live-class/sidebars/ParticipantsSidebar';
+import { WhiteboardModule } from '@/components/live-class/modules/whiteboard/WhiteboardModule';
+import { CodeStudioModule } from '@/components/live-class/modules/codestudio/CodeStudioModule';
+import { MeetingStageModule } from '@/components/live-class/modules/meeting/MeetingStageModule';
+import { PresentationModule } from '@/components/live-class/modules/presentation/PresentationModule';
+import { AssignmentsModule } from '@/components/live-class/modules/assignments/AssignmentsModule';
+import { ResourcesModule } from '@/components/live-class/modules/resources/ResourcesModule';
 import { useRouter } from 'next/navigation';
-import { ClassroomRealtimeClient, ConnectionState } from '@/lib/classroom/realtime-client';
-import { ClassroomRealtimeEvent } from '@/lib/classroom/protocol';
-import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
-import { Play, Terminal, Users, Code, Video, ArrowLeft, StopCircle, RefreshCw, Lock, Unlock } from 'lucide-react';
-import { ExecutionResult } from '@/lib/execution/types';
-import * as Y from 'yjs';
-import { MonacoBinding } from 'y-monaco';
+import { ShieldAlert, LogIn, ArrowLeft, Loader2, VideoOff, Mic, Video } from 'lucide-react';
 
-export default function LiveClassroomClient({ roomId, sessionId }: { roomId: string, sessionId: string }) {
+interface LiveClassroomClientProps {
+  roomId: string;
+  sessionId: string;
+}
+
+const ClassroomShell: React.FC<{ roomId: string; sessionId: string }> = ({ roomId }) => {
   const router = useRouter();
-  
-  // Realtime state
-  const [connectionState, setConnectionState] = useState<ConnectionState>('CONNECTING');
-  const realtimeClientRef = useRef<ClassroomRealtimeClient | null>(null);
-  
-  // User auth state
-  const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [currentUserName, setCurrentUserName] = useState<string>('');
-  const [currentUserRole, setCurrentUserRole] = useState<string>('student');
+  const {
+    authStatus,
+    authErrorMessage,
+    userRole,
+    activeModule,
+    setActiveModule,
+    toastMessage,
+    pendingMediaRequest,
+    respondToMediaRequest,
+  } = useClassroom();
 
-  // Teacher broadcasting state
-  const [teacherOutput, setTeacherOutput] = useState<ExecutionResult | null>(null);
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
+  if (authStatus === 'loading') {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#0B0C0E] text-white">
+        <div className="flex flex-col items-center space-y-4 max-w-sm text-center">
+          <div className="w-12 h-12 rounded-xl bg-[#111216] border border-[#282A36] flex items-center justify-center text-[#FF9100] shadow-lg animate-pulse">
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold tracking-wide">Connecting to Live Classroom</h2>
+            <p className="text-xs text-[#71717A]">Verifying authorization and establishing encrypted signaling channel...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  // Presence state
-  const [studentsOnline, setStudentsOnline] = useState<string[]>([]);
+  if (authStatus === 'unauthorized') {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#0B0C0E] text-white p-4">
+        <div className="bg-[#111216] border border-[#282A36] rounded-2xl p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-[#FF9100]/10 border border-[#FF9100]/25 text-[#FF9100] flex items-center justify-center mx-auto">
+            <LogIn className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Authentication Required</h2>
+            <p className="text-xs text-[#A1A1AA]">Please log in to your Cortex account to join this live interactive classroom.</p>
+          </div>
+          <div className="flex flex-col space-y-2.5 pt-2">
+            <button
+              onClick={() => router.push('/login')}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#FF9100] hover:bg-[#E08000] text-black font-semibold text-xs transition"
+            >
+              Log In to Cortex
+            </button>
+            <button
+              onClick={() => router.push(`/classroom/${roomId}`)}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#15161C] hover:bg-[#1D1F27] border border-[#282A36] text-white font-medium text-xs transition"
+            >
+              Back to Classroom
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  // CRDT Yjs state
-  const ydocRef = useRef<Y.Doc | null>(null);
-  const bindingRef = useRef<MonacoBinding | null>(null);
-  const editorRef = useRef<any>(null);
-  const modelRef = useRef<any>(null);
+  if (authStatus === 'forbidden') {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#0B0C0E] text-white p-4">
+        <div className="bg-[#111216] border border-[#EF4444]/30 rounded-2xl p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/25 text-[#EF4444] flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Access Denied</h2>
+            <p className="text-xs text-[#A1A1AA]">{authErrorMessage || 'You do not have permission to join this live classroom.'}</p>
+          </div>
+          <div className="pt-2">
+            <button
+              onClick={() => router.push(`/classroom/${roomId}`)}
+              className="inline-flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-[#15161C] hover:bg-[#1D1F27] border border-[#282A36] text-white font-medium text-xs transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to Classroom Dashboard</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    // Local auth fetch (Server-derived fallback handled via secure API, but UI needs it)
-    const storedUser = localStorage.getItem('cortex_user');
-    if (storedUser) {
-      const u = JSON.parse(storedUser);
-      setCurrentUserId(u.id);
-      setCurrentUserName(u.name);
-      setCurrentUserRole(u.role || 'student');
-    }
-  }, []);
-
-  const isTeacher = currentUserRole === 'teacher' || currentUserRole === 'admin';
-
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    if (realtimeClientRef.current) {
-      realtimeClientRef.current.disconnect();
-    }
-
-    const ydoc = new Y.Doc();
-    ydocRef.current = ydoc;
-
-    const client = new ClassroomRealtimeClient({
-      classroomId: roomId,
-      userId: currentUserId,
-      userName: currentUserName,
-      role: currentUserRole,
-      autoConnect: false,
-      onStateChange: (state) => setConnectionState(state),
-    });
-    realtimeClientRef.current = client;
-
-    // Observe local Yjs updates and send them to server
-    ydoc.on('update', (update, origin) => {
-      // Don't send updates that originated from the server
-      if (origin !== client) {
-        if (!isTeacher && isLocked) return; 
-
-        // Convert Uint8Array to base64 for transmission
-        let binary = '';
-        const len = update.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(update[i]);
-        }
-        const b64 = btoa(binary);
-
-        client.sendEvent('doc_update', { update: b64, documentId: 'main' });
-      }
-    });
-
-    client.on('doc_update', (evt) => {
-      if (evt.payload?.update) {
-        const b64 = evt.payload.update;
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        Y.applyUpdate(ydoc, bytes, client);
-      }
-    });
-
-    client.on('teacher.output.created', (evt) => {
-      setTeacherOutput(evt.payload?.output);
-    });
-
-    client.on('session.ended', (evt) => {
-      alert('Live session ended by teacher.');
-      router.push(`/classroom/${roomId}`);
-    });
-    
-    client.on('session.locked', () => setIsLocked(true));
-    client.on('session.unlocked', () => setIsLocked(false));
-
-    client.on('student.removed', (evt) => {
-       if (evt.payload?.userId === currentUserId || evt.actorId === currentUserId) {
-          alert('You have been removed from this live session.');
-          router.push(`/classroom/${roomId}`);
-       }
-    });
-
-    client.on('student.presence.updated', (evt) => {
-        setStudentsOnline(prev => {
-            const arr = [...prev];
-            if (evt.payload.status === 'online') {
-                if (!arr.includes(evt.actorName)) arr.push(evt.actorName);
-            } else {
-                return arr.filter(n => n !== evt.actorName);
-            }
-            return arr;
-        });
-    });
-    
-    client.on('auth_ok', () => {
-        // On connect/reconnect, sync Yjs state
-        const vector = Y.encodeStateVector(ydoc);
-        let binary = '';
-        for (let i = 0; i < vector.byteLength; i++) {
-          binary += String.fromCharCode(vector[i]);
-        }
-        client.sendEvent('doc_sync_step1', { vector: btoa(binary), documentId: 'main' });
-    });
-
-    client.on('doc_sync_step2', (evt) => {
-        if (evt.payload?.update) {
-            const b64 = evt.payload.update;
-            const binary = atob(b64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
-            }
-            Y.applyUpdate(ydoc, bytes, client);
-        }
-    });
-
-    client.connect();
-
-    return () => {
-      client.disconnect();
-      if (bindingRef.current) bindingRef.current.destroy();
-      ydoc.destroy();
-    };
-  }, [roomId, currentUserId, currentUserName, currentUserRole, isTeacher, isLocked, router]);
-
-  const handleEditorMount = useCallback((editor: any, monaco: any) => {
-    editorRef.current = editor;
-    const model = editor.getModel();
-    modelRef.current = model;
-    
-    if (ydocRef.current && model && !bindingRef.current) {
-        const type = ydocRef.current.getText('monaco');
-        // @ts-ignore
-        bindingRef.current = new MonacoBinding(type, model, new Set([editor]), realtimeClientRef.current);
-    }
-  }, []);
-
-  const executeTeacherCode = async () => {
-    setIsExecuting(true);
-    setTeacherOutput(null);
-    try {
-      const code = modelRef.current?.getValue() || '';
-      const res = await fetch('/api/v1/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          files: [{ name: 'main.cpp', content: code }],
-          language: 'cpp',
-          version: '10.2.0',
-          projectId: roomId
-        })
-      });
-      const data = await res.json();
-      setTeacherOutput(data);
-      if (realtimeClientRef.current) {
-        realtimeClientRef.current.sendEvent('teacher.output.created', { output: data });
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
-  const endSession = async () => {
-    if (!isTeacher) return;
-    try {
-        await fetch(`/api/v1/classrooms/${roomId}/session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'end' })
-        });
-        router.push(`/classroom/${roomId}`);
-    } catch (e) {
-        console.error("Failed to end session", e);
-    }
-  };
-
-  const toggleLock = () => {
-      if (!isTeacher) return;
-      const newLocked = !isLocked;
-      setIsLocked(newLocked);
-      if (realtimeClientRef.current) {
-          realtimeClientRef.current.sendEvent(newLocked ? 'session.locked' : 'session.unlocked', {});
-      }
-  };
+  if (authStatus === 'not_found') {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#0B0C0E] text-white p-4">
+        <div className="bg-[#111216] border border-[#282A36] rounded-2xl p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-[#71717A]/10 border border-[#71717A]/25 text-[#71717A] flex items-center justify-center mx-auto">
+            <VideoOff className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Classroom Not Found</h2>
+            <p className="text-xs text-[#A1A1AA]">The requested classroom session does not exist or has already concluded.</p>
+          </div>
+          <div className="pt-2">
+            <button
+              onClick={() => router.push('/classroom')}
+              className="inline-flex items-center space-x-2 py-2.5 px-5 rounded-xl bg-[#FF9100] hover:bg-[#E08000] text-black font-semibold text-xs transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Classrooms</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-screen bg-[#0a0a0f] text-gray-300 font-sans">
-      {/* Sidebar */}
-      <div className="w-64 border-r border-[#1e1e24] bg-[#0d0d12] flex flex-col shrink-0">
-        <div className="p-4 border-b border-[#1e1e24] flex items-center justify-between">
-          <button onClick={() => router.push(`/classroom/${roomId}`)} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium">
-             <ArrowLeft className="w-4 h-4" /> Exit
-          </button>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${connectionState === 'CONNECTED' ? 'bg-emerald-500' : connectionState === 'CONNECTING' || connectionState === 'RECONNECTING' ? 'bg-amber-500' : 'bg-red-500'}`}></span>
-            <span className="text-xs text-gray-500 uppercase font-semibold">{connectionState}</span>
-          </div>
-        </div>
+    <FollowTeacherProvider
+      userRole={userRole}
+      activeModule={activeModule}
+      onModuleChange={setActiveModule}
+    >
+      <div className="cortex-classroom-immersive-container flex flex-col h-screen w-screen overflow-hidden bg-[#0B0C0E] text-[#F5F5F5] font-sans antialiased">
+        {/* Header */}
+        <ClassroomHeader />
 
-        <div className="p-4 border-b border-[#1e1e24]">
-          <div className="flex items-center gap-2 mb-2">
-            <Video className="w-5 h-5 text-red-500" />
-            <h2 className="text-white font-semibold">Live Session</h2>
-          </div>
-          <p className="text-xs text-gray-400 mb-4">You are in a live collaborative workspace.</p>
+        {/* Persistent Module Navigation Bar */}
+        <ModuleNavigation />
 
-          {isTeacher && (
-            <div className="flex flex-col gap-2">
-                <button
-                onClick={endSession}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded text-sm font-medium transition bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
-                >
-                <StopCircle className="w-4 h-4" /> End Live Session
-                </button>
-                <button
-                onClick={toggleLock}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded text-sm font-medium transition bg-[#1e1e24] text-gray-300 border border-[#2b2d35] hover:bg-[#2b2d35]"
-                >
-                {isLocked ? <><Lock className="w-4 h-4" /> Unlock Editing</> : <><Unlock className="w-4 h-4" /> Lock Editing</>}
-                </button>
+        {/* Follow Teacher / Independent Mode Status Banner */}
+        <FollowTeacherBanner />
+
+        {/* Primary Learning Canvas Stage and Sidebars */}
+        <main className="flex-1 flex overflow-hidden relative" role="main">
+          <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+            <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'code' ? 'flex' : 'hidden'}`}>
+              <CodeStudioModule />
             </div>
-          )}
-          {!isTeacher && isLocked && (
-              <div className="mt-2 text-amber-500 text-xs flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Editing is locked by teacher
-              </div>
-          )}
-        </div>
-
-        <div className="p-4 flex-1 overflow-y-auto">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Users className="w-4 h-4" /> Participants ({studentsOnline.length + 1})
-          </h3>
-          <ul className="space-y-2">
-            <li className="flex items-center gap-2 text-sm text-[#ff9100]">
-               <span className="w-2 h-2 rounded-full bg-[#ff9100]"></span>
-               {isTeacher ? 'Teacher (You)' : currentUserName + ' (You)'}
-            </li>
-            {studentsOnline.map((student, i) => (
-              <li key={i} className="flex items-center gap-2 text-sm text-gray-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                {student}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="h-14 border-b border-[#1e1e24] bg-[#0d0d12] flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-300">
-              <Code className="w-4 h-4 text-[#ff9100]" />
-              main.cpp
+            <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'whiteboard' ? 'flex' : 'hidden'}`}>
+              <WhiteboardModule />
+            </div>
+            <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'meeting' ? 'flex' : 'hidden'}`}>
+              <MeetingStageModule />
+            </div>
+            <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'presentation' ? 'flex' : 'hidden'}`}>
+              <PresentationModule />
+            </div>
+            <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'assignments' ? 'flex' : 'hidden'}`}>
+              <AssignmentsModule />
+            </div>
+            <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'resources' ? 'flex' : 'hidden'}`}>
+              <ResourcesModule />
             </div>
           </div>
-          
-          <div className="flex items-center gap-3">
-             <button
-                onClick={executeTeacherCode}
-                disabled={isExecuting}
-                className="flex items-center gap-2 px-4 py-1.5 bg-[#ff9100] text-black font-semibold rounded text-sm hover:bg-[#ffaa33] transition disabled:opacity-50"
-              >
-                {isExecuting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                Run Code
-              </button>
-          </div>
-        </div>
 
-        <div className="flex-1 flex flex-col min-h-0">
-           <div className="flex-1 relative">
-                <MonacoCodeEditor 
-                    files={[{ id: 'main', name: 'main.cpp', path: '/main.cpp', content: '' }]}
-                    activeFileId="main"
-                    onSelectFile={() => {}}
-                    onCloseFile={() => {}}
-                    onNewFile={() => {}}
-                    onContentChange={() => {}}
-                    language="cpp"
-                    theme="vs-dark"
-                    readOnly={!isTeacher && isLocked}
-                    breakpoints={[]}
-                    onToggleBreakpoint={() => {}}
-                    onEditorMount={handleEditorMount}
-                />
-           </div>
-           
-           <div className="h-1/3 border-t border-[#1e1e24] bg-[#0a0a0f] flex flex-col shrink-0 min-h-0">
-              <div className="flex items-center px-4 py-2 border-b border-[#1e1e24] bg-[#0d0d12]">
-                <Terminal className="w-4 h-4 mr-2 text-gray-500" />
-                <span className="text-xs font-semibold text-gray-400 uppercase">Live Output</span>
+          {/* Integrated Sidebars */}
+          <ChatSidebar />
+          <ParticipantsSidebar />
+        </main>
+
+        {/* Persistent Meeting Controls Bar */}
+        <MeetingBottomBar />
+
+        {/* Hardware Devices & Audio/Video Modal */}
+        <DeviceSettingsModal />
+
+        {/* Explicit Student AV Consent Dialog */}
+        {pendingMediaRequest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-[#111216] border border-[#282A36] rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+              <div className="w-12 h-12 rounded-xl bg-[#FF9100]/10 border border-[#FF9100]/30 text-[#FF9100] flex items-center justify-center">
+                {pendingMediaRequest.type === 'unmute' ? <Mic className="w-6 h-6" /> : <Video className="w-6 h-6" />}
               </div>
-              <div className="flex-1 overflow-auto p-4 font-mono text-sm">
-                {teacherOutput ? (
-                  teacherOutput.status === 'success' ? (
-                    <div className="text-emerald-400 whitespace-pre-wrap">{teacherOutput.stdout}</div>
-                  ) : (
-                    <div className="text-red-400 whitespace-pre-wrap">{teacherOutput.stderr}</div>
-                  )
-                ) : (
-                  <div className="text-gray-600 italic">No output yet. Run the code to see results.</div>
-                )}
+              <div>
+                <h3 className="text-sm font-semibold text-white">
+                  {pendingMediaRequest.type === 'unmute' ? 'Instructor Requested Unmute' : 'Instructor Requested Camera'}
+                </h3>
+                <p className="text-xs text-[#A1A1AA] mt-1">
+                  The instructor is asking you to turn on your {pendingMediaRequest.type === 'unmute' ? 'microphone' : 'camera'}. Would you like to share your {pendingMediaRequest.type === 'unmute' ? 'audio' : 'video'}?
+                </p>
               </div>
-           </div>
-        </div>
+              <div className="flex items-center space-x-2 pt-2">
+                <button
+                  onClick={() => respondToMediaRequest(pendingMediaRequest.type, false)}
+                  className="flex-1 py-2 px-3 rounded-lg bg-[#1D1F27] hover:bg-[#282A36] border border-[#282A36] text-white text-xs font-medium transition"
+                >
+                  Decline
+                </button>
+                <button
+                  onClick={() => respondToMediaRequest(pendingMediaRequest.type, true)}
+                  className="flex-1 py-2 px-3 rounded-lg bg-[#FF9100] hover:bg-[#E08000] text-black text-xs font-semibold shadow-md transition"
+                >
+                  Allow & Turn On
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Global Toast Notification System */}
+        {toastMessage && (
+          <div
+            role="alert"
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-[#1D1F27] border border-[#282A36] text-white px-4 py-2.5 rounded-xl text-xs shadow-2xl flex items-center space-x-2.5 transition-all"
+          >
+            <span className="w-2 h-2 rounded-full bg-[#FF9100] animate-pulse" />
+            <span className="font-medium">{toastMessage}</span>
+          </div>
+        )}
       </div>
-    </div>
+    </FollowTeacherProvider>
+  );
+};
+
+export default function LiveClassroomClient({ roomId, sessionId }: LiveClassroomClientProps) {
+  return (
+    <ClassroomProvider classroomId={roomId} sessionId={sessionId}>
+      <ClassroomShell roomId={roomId} sessionId={sessionId} />
+    </ClassroomProvider>
   );
 }

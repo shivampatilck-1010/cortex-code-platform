@@ -16,10 +16,12 @@ import {
   SlidersHorizontal,
   X,
   Play,
-  Clock,
   Sparkles,
-  Crown
+  Crown,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
+import { useClassroomFullscreen } from '@/lib/classroom/useClassroomFullscreen';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { ClassroomRoom, ClassroomParticipant, ClassroomRole, CollaborationRequest, FileDownloadRequest, FileDownloadDecision, CollaborationDecision, ChatMessage } from '@/lib/classroom/types';
 import { CollaborationClient } from '@/lib/classroom/collab-sync';
@@ -37,6 +39,12 @@ export default function ClassroomLivePage() {
   const router = useRouter();
   const rawRoomId = (params?.roomId as string) || '';
   const roomId = rawRoomId.toUpperCase().trim();
+
+  // Classroom Immersive & Fullscreen Management
+  const { isImmersive, isFullscreen, toggleFullscreen, exitFullscreen } = useClassroomFullscreen({
+    roomId,
+    autoImmersive: true,
+  });
 
   // Participant session state
   const [participantId, setParticipantId] = useState<string>('');
@@ -122,7 +130,7 @@ export default function ClassroomLivePage() {
     setIsMounted(true);
   }, []);
 
-  // 1. Restore participant from sessionStorage or prompt to join
+  // 1. Restore participant from authenticated login ID, sessionStorage, or fallback profile
   useEffect(() => {
     if (typeof window === 'undefined' || !roomId) return;
 
@@ -133,20 +141,111 @@ export default function ClassroomLivePage() {
       localStorage.removeItem(`cortex_role_${roomId}`);
     } catch {}
 
-    const savedId = getTabSession('participant');
-    const savedName = getTabSession('name');
-    const savedRole = (getTabSession('role') as ClassroomRole) || 'user';
+    const resolveParticipant = async () => {
+      // Step A: Active tab session check
+      const savedId = getTabSession('participant');
+      const savedName = getTabSession('name');
+      const savedRole = (getTabSession('role') as ClassroomRole) || 'user';
 
-    if (savedId && savedName) {
-      setParticipantId(savedId);
-      setParticipantName(savedName);
-      setParticipantRole(savedRole);
-      fetchRoomState(savedId, savedName, savedRole);
-    } else {
+      if (savedId && savedName) {
+        setParticipantId(savedId);
+        setParticipantName(savedName);
+        setParticipantRole(savedRole);
+        fetchRoomState(savedId, savedName, savedRole);
+        return;
+      }
+
+      // Step B: Authenticated account check via login session (/api/v1/auth/me)
+      try {
+        const authRes = await fetch('/api/v1/auth/me');
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          if (authData.success && authData.user) {
+            const user = authData.user;
+            const userRole: ClassroomRole = (user.role === 'teacher' || user.role === 'admin') ? 'admin' : 'user';
+            const userId = user.id;
+            const userName = user.name || user.email?.split('@')[0] || 'User';
+
+            // Server-side registration of the authenticated participant
+            try {
+              await fetch('/api/v1/classroom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: 'join',
+                  roomId,
+                  name: userName,
+                  role: userRole,
+                  existingId: userId,
+                }),
+              });
+            } catch (joinErr) {
+              console.warn('Auto-join server notice:', joinErr);
+            }
+
+            setTabSession('participant', userId);
+            setTabSession('name', userName);
+            setTabSession('role', userRole);
+
+            setParticipantId(userId);
+            setParticipantName(userName);
+            setParticipantRole(userRole);
+            setIsJoinNeeded(false);
+
+            fetchRoomState(userId, userName, userRole);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not verify auth session', err);
+      }
+
+      // Step C: Fallback to stored user profile from localStorage
+      try {
+        const rawUser = localStorage.getItem('cortex_user') || localStorage.getItem('cortex_user_profile');
+        if (rawUser) {
+          const u = JSON.parse(rawUser);
+          if (u && (u.name || u.id)) {
+            const uId = u.id || `usr_${Date.now()}`;
+            const uName = u.name || 'User';
+            const uRole: ClassroomRole = (u.role === 'teacher' || u.role === 'admin') ? 'admin' : 'user';
+
+            try {
+              await fetch('/api/v1/classroom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: 'join',
+                  roomId,
+                  name: uName,
+                  role: uRole,
+                  existingId: uId,
+                }),
+              });
+            } catch {}
+
+            setTabSession('participant', uId);
+            setTabSession('name', uName);
+            setTabSession('role', uRole);
+
+            setParticipantId(uId);
+            setParticipantName(uName);
+            setParticipantRole(uRole);
+            setIsJoinNeeded(false);
+
+            fetchRoomState(uId, uName, uRole);
+            return;
+          }
+        }
+      } catch {}
+
+      // Step D: Truly unauthenticated guest without any login or profile
       setIsJoinNeeded(true);
       setIsLoading(false);
       fetchRoomState();
-    }
+    };
+
+    resolveParticipant();
   }, [roomId]);
 
   const activeSessionPartnerIdsRef = useRef<Set<string>>(new Set());
@@ -204,7 +303,9 @@ export default function ClassroomLivePage() {
       if (pp.role !== np.role) return true;
       if (pp.currentLanguage !== np.currentLanguage) return true;
       if (pp.activeFileName !== np.activeFileName) return true;
-      if (pp.activeCode !== np.activeCode) return true;
+      // activeCode comparison REMOVED — Yjs CRDT manages editor content, not HTTP state poll
+      // Comparing activeCode caused flickering: cold edge isolates return empty/stale code
+      // which triggered re-renders that clobbered the live editor content
       if (pp.isLocked !== np.isLocked) return true;
       if (pp.canRun !== np.canRun) return true;
     }
@@ -235,8 +336,22 @@ export default function ClassroomLivePage() {
       });
       const mergedChat = Array.from(existingMap.values()).sort((a, b) => a.timestamp - b.timestamp);
 
+      // CRITICAL: Protect participant activeCode from server overwrites.
+      // Cold edge isolates return empty activeCode which clobbers live editor content.
+      // Rule: NEVER replace non-empty local code with empty/shorter server code.
+      const protectedParticipants = { ...newRoom.participants };
+      if (prev?.participants) {
+        for (const [pid, serverP] of Object.entries(protectedParticipants)) {
+          const localP = prev.participants[pid];
+          if (localP && localP.activeCode && (!serverP.activeCode || serverP.activeCode.length < localP.activeCode.length)) {
+            protectedParticipants[pid] = { ...serverP, activeCode: localP.activeCode };
+          }
+        }
+      }
+
       const resolvedRoom: ClassroomRoom = {
         ...newRoom,
+        participants: protectedParticipants,
         chatMessages: mergedChat,
       };
 
@@ -296,8 +411,17 @@ export default function ClassroomLivePage() {
         return newRoom.activeWorkspaces.slotBUserId;
       }
 
-      // Otherwise auto-mount another participant into Slot B who is NOT Slot A
+            // Otherwise auto-mount another participant into Slot B who is NOT Slot A
       if (newRoom.participants) {
+        // Priority 1: For students, auto-mount Teacher/Admin into Slot B so students always see teacher workspace
+        const isStudent = participantRole !== 'admin' && newRoom.participants[myId]?.role !== 'admin';
+        if (isStudent) {
+          const teacher = Object.values(newRoom.participants).find(
+            (p) => p && p.id && p.id !== activeA && (p.role === 'admin' || p.id === newRoom.admin?.id)
+          );
+          if (teacher) return teacher.id;
+        }
+
         const otherUser = Object.values(newRoom.participants).find(
           (p) => p && p.id && p.id !== activeA && p.name !== 'Classroom Host'
         );
@@ -409,7 +533,8 @@ export default function ClassroomLivePage() {
           lastActive: Date.now(),
           status: existingLocal?.status || 'idle',
           online: true,
-          activeCode: existingLocal?.activeCode || '',
+          // activeCode intentionally omitted from gossip — Yjs CRDT handles code sync.
+          // Sending stale code here caused edge isolates to overwrite live content.
           currentLanguage: existingLocal?.currentLanguage || 'python',
           activeFileName: existingLocal?.activeFileName || 'main.py',
           canRun: existingLocal?.canRun ?? true,
@@ -524,10 +649,8 @@ export default function ClassroomLivePage() {
     // Realtime transport delivers ordinary changes. This is only a low-cost
     // reconciliation safety net for a missed edge event.
     const syncTimer = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        fetchRoomState(participantId, participantName, participantRole);
-      }
-    }, 5000);
+      fetchRoomState(participantId, participantName, participantRole);
+    }, 4000);
 
     // Instant catch-up whenever user returns to tab, focuses window, or reconnects online
     const handleImmediateWakeSync = () => {
@@ -830,7 +953,7 @@ export default function ClassroomLivePage() {
             delete newSessions[sessionId];
             return { ...prev, collaborationSessions: newSessions };
           });
-          setSlotBUserId(null);
+          setSlotBUserId(undefined);
           showToast('Collaboration session ended.');
           break;
         }
@@ -1211,7 +1334,7 @@ export default function ClassroomLivePage() {
 
   const handleEndCollaboration = async (sessionId: string) => {
     collabClientRef.current?.sendRaw({
-      type: 'collaboration_ended',
+      type: 'end_collaboration',
       roomId,
       clientId: participantId,
       senderName: participantName,
@@ -1225,7 +1348,7 @@ export default function ClassroomLivePage() {
       delete newSessions[sessionId];
       return { ...prev, collaborationSessions: newSessions };
     });
-    setSlotBUserId(null);
+    setSlotBUserId(undefined);
   };
 
   const handleRequestFileDownload = async (ownerId: string, fileId: string) => {
@@ -1351,7 +1474,10 @@ export default function ClassroomLivePage() {
     fetchRoomState(participantId);
   };
 
-  const handleLeaveClassroom = () => {
+  const handleLeaveClassroom = async () => {
+    try {
+      await exitFullscreen();
+    } catch {}
     removeTabSession('participant');
     removeTabSession('name');
     removeTabSession('role');
@@ -1368,13 +1494,6 @@ export default function ClassroomLivePage() {
   const onlineParticipantsCount = validParticipants.filter((p) => p.online).length;
   const totalParticipantsCount = validParticipants.length;
 
-  // The authoritative waiting room state: students wait only when the room is NOT active and admin has not entered the arena
-  const isWaitingForAdmin =
-    participantRole !== 'admin' &&
-    room !== null &&
-    room.state !== 'active' &&
-    !room.admin?.enteredArena;
-
   const totalChatMessages = room?.chatMessages?.length || 0;
   const unreadChatCount = !isChatOpen && totalChatMessages > lastReadChatCount
     ? totalChatMessages - lastReadChatCount
@@ -1382,7 +1501,7 @@ export default function ClassroomLivePage() {
 
   if (!isMounted) {
     return (
-      <div className="h-screen w-screen bg-[#0b0c0e] flex items-center justify-center text-gray-400 font-mono text-xs">
+      <div className="h-screen w-screen bg-[#0b0c0e] flex items-center justify-center text-[#737373] font-mono text-xs">
         Loading classroom...
       </div>
     );
@@ -1390,7 +1509,7 @@ export default function ClassroomLivePage() {
 
   if (isJoinNeeded) {
     return (
-      <div className="h-screen w-screen bg-[#0b0c0e]">
+      <div className="cortex-classroom-immersive-container h-screen w-screen bg-[#0b0c0e]">
         <ClassroomLobbyModal
           isOpen={true}
           defaultRoomId={roomId}
@@ -1452,22 +1571,47 @@ export default function ClassroomLivePage() {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#0b0c0e] text-gray-200 font-sans select-none overflow-hidden">
+    <div className="cortex-classroom-immersive-container h-screen w-screen flex flex-col bg-[#0b0c0e] text-[#E5E5E5] font-sans select-none overflow-hidden">
       {/* 1. Global Header Bar */}
       <header className="h-12 bg-[#101116] border-b border-[#1f2026] px-3 sm:px-4 flex items-center justify-between z-30">
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <Link href="/" className="flex items-center group transition" title="Return to IDE">
+          <Link
+            href="/"
+            onClick={async () => {
+              try {
+                await exitFullscreen();
+              } catch {}
+            }}
+            className="flex items-center group transition"
+            title="Return to IDE"
+          >
             <CortexLogo variant="header" size="sm" />
           </Link>
 
           {/* Breadcrumbs */}
           <div className="flex items-center space-x-1.5 text-xs font-heading">
             <span className="text-gray-600">/</span>
-            <Link href="/" className="text-gray-400 hover:text-white transition">
+            <Link
+              href="/"
+              onClick={async () => {
+                try {
+                  await exitFullscreen();
+                } catch {}
+              }}
+              className="text-[#737373] hover:text-white transition"
+            >
               IDE
             </Link>
             <span className="text-gray-600">/</span>
-            <Link href="/classroom" className="text-gray-400 hover:text-white transition">
+            <Link
+              href="/classroom"
+              onClick={async () => {
+                try {
+                  await exitFullscreen();
+                } catch {}
+              }}
+              className="text-[#737373] hover:text-white transition"
+            >
               Classroom
             </Link>
             <span className="text-gray-600">/</span>
@@ -1485,7 +1629,7 @@ export default function ClassroomLivePage() {
                   setCopiedLink(true);
                   setTimeout(() => setCopiedLink(false), 1500);
                 }}
-                className="px-1.5 py-0.5 rounded bg-[#1b1c24] hover:bg-[#252834] text-[10.5px] text-gray-300 transition flex items-center space-x-1"
+                className="px-1.5 py-0.5 rounded bg-[#1b1c24] hover:bg-[#252834] text-[10.5px] text-[#A3A3A3] transition flex items-center space-x-1"
                 title="Copy student invitation link"
               >
                 {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -1502,7 +1646,7 @@ export default function ClassroomLivePage() {
           {participantRole === 'admin' && room?.state === 'created' && (
             <button
               onClick={handleStartClassroom}
-              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-black font-heading font-bold text-xs shadow-lg hover:from-amber-400 hover:to-orange-400 transition animate-pulse"
+              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[#111111] border border-[#333333] hover:border-amber-500/50 hover:bg-amber-950/30 text-amber-400 hover:text-amber-300 shadow-none animate-pulse"
               title="Start the Code Arena for all waiting participants"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
@@ -1539,7 +1683,7 @@ export default function ClassroomLivePage() {
           </span>
 
           {/* Online Counter Badge */}
-          <span className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded bg-[#16171e] text-[11px] font-mono text-gray-300 border border-[#262834]">
+          <span className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded bg-[#16171e] text-[11px] font-mono text-[#A3A3A3] border border-[#262834]">
             <span>{onlineParticipantsCount} online</span>
           </span>
 
@@ -1547,7 +1691,7 @@ export default function ClassroomLivePage() {
           <button
             onClick={() => setIsUserListOpen(!isUserListOpen)}
             className={`lg:hidden p-1.5 rounded transition ${
-              isUserListOpen ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-gray-400 hover:text-white hover:bg-[#1a1c22]'
+              isUserListOpen ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-[#737373] hover:text-white hover:bg-[#1a1c22]'
             }`}
             title="Toggle Classroom Participants"
           >
@@ -1565,7 +1709,7 @@ export default function ClassroomLivePage() {
               });
             }}
             className={`p-1.5 rounded transition relative ${
-              isChatOpen ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-gray-400 hover:text-white hover:bg-[#1a1c22]'
+              isChatOpen ? 'bg-[#ff9100]/20 text-[#ff9100]' : 'text-[#737373] hover:text-white hover:bg-[#1a1c22]'
             }`}
             title="Toggle Classroom Chat"
           >
@@ -1581,7 +1725,7 @@ export default function ClassroomLivePage() {
           {participantRole === 'admin' && (
             <button
               onClick={() => setIsAdminSettingsOpen(true)}
-              className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-[#1a1c22] transition"
+              className="p-1.5 rounded text-[#737373] hover:text-white hover:bg-[#1a1c22] transition"
               title="Classroom Settings"
             >
               <Settings className="w-4 h-4" />
@@ -1594,7 +1738,7 @@ export default function ClassroomLivePage() {
               <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#ff9100] to-[#ffa733] text-black flex items-center justify-center font-bold text-[10px] shadow-sm">
                 {participantName.charAt(0).toUpperCase()}
               </div>
-              <span className="font-medium text-gray-200 text-xs max-w-[90px] truncate" title={participantName}>
+              <span className="font-medium text-[#E5E5E5] text-xs max-w-[90px] truncate" title={participantName}>
                 {participantName}
               </span>
               <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono font-medium ${
@@ -1606,6 +1750,24 @@ export default function ClassroomLivePage() {
               </span>
             </div>
           )}
+
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={toggleFullscreen}
+            className={`p-1.5 rounded transition ${
+              isFullscreen
+                ? 'bg-[#06B6D4]/20 text-[#06B6D4] hover:bg-[#06B6D4]/30'
+                : 'text-[#737373] hover:text-white hover:bg-[#1a1c22]'
+            }`}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="w-4 h-4 text-[#06B6D4]" />
+            ) : (
+              <Maximize2 className="w-4 h-4" />
+            )}
+          </button>
 
           {/* Leave Classroom */}
           <button
@@ -1629,139 +1791,7 @@ export default function ClassroomLivePage() {
 
       {/* 3. Main Body Container with Accessible Classroom Chat */}
       <div className="flex-1 flex overflow-hidden relative">
-        {isWaitingForAdmin ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#0e1017] to-[#07080a] relative overflow-y-auto select-none">
-            {/* Ambient background glow */}
-            <div className="absolute top-1/3 w-96 h-96 bg-[#ff9100]/5 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="relative max-w-lg w-full bg-[#12141c]/90 border border-[#222533] backdrop-blur-xl rounded-2xl p-8 shadow-2xl space-y-6">
-              {/* Animated Pulse Icon */}
-              <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
-                <div className="absolute inset-0 rounded-full bg-[#ff9100]/20 animate-ping" />
-                <div className="relative w-16 h-16 rounded-full bg-[#ff9100]/10 border border-[#ff9100]/40 flex items-center justify-center text-[#ff9100]">
-                  <Clock className="w-8 h-8" />
-                </div>
-              </div>
-
-              {/* Title & Status */}
-              <div className="space-y-2">
-                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  <span>Waiting for Admin to enter the arena...</span>
-                </div>
-                <h2 className="text-xl font-heading font-bold text-gray-100">
-                  Classroom Waiting Room
-                </h2>
-                <p className="text-xs text-gray-400 leading-relaxed max-w-md mx-auto">
-                  Welcome <strong className="text-gray-200">{participantName}</strong>! The Admin is preparing the classroom session. As soon as the Admin enters the Code Arena, your workspace will automatically launch in real-time.
-                </p>
-              </div>
-
-              {/* Realtime No-Refresh Banner */}
-              <div className="p-3 bg-[#181a24] border border-[#262938] rounded-xl flex items-center space-x-3 text-left">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
-                  <Radio className="w-4 h-4 animate-pulse" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-emerald-300">Live edge synchronization active</div>
-                  <div className="text-[11px] text-gray-400">Do not refresh your browser — updates happen automatically.</div>
-                </div>
-              </div>
-
-              {/* Waiting Lobby Participants */}
-              <div className="space-y-2 text-left">
-                <div className="flex items-center justify-between text-xs font-semibold text-gray-400 px-1">
-                  <span>Connected Participants:</span>
-                  <span className="text-[11px] font-mono text-emerald-400 font-bold">{onlineParticipantsCount} ready</span>
-                </div>
-                <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2.5 bg-[#0c0d12] rounded-lg border border-[#1e202b]">
-                  {validParticipants.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#161822] border border-[#262838] text-xs"
-                    >
-                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="font-medium text-gray-200">{p.name}</span>
-                      {p.role === 'admin' && (
-                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono font-bold">Admin</span>
-                      )}
-                      {p.id === participantId && (
-                        <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded font-mono font-bold">You</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action footer */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs border-t border-[#1e202b]">
-                <span className="font-mono text-gray-500">Room: <strong className="text-[#ff9100] font-bold">{roomId}</strong></span>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => {
-                      setIsChatOpen(true);
-                      setLastReadChatCount(room?.chatMessages?.length || 0);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#ff9100]/15 hover:bg-[#ff9100]/25 text-[#ff9100] border border-[#ff9100]/30 transition flex items-center space-x-1.5"
-                    title="Open Classroom Chat & Announcements"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Chat & Announcements</span>
-                    {unreadChatCount > 0 && (
-                      <span className="px-1.5 py-0.2 rounded-full bg-[#ff9100] text-black font-bold text-[9px]">
-                        {unreadChatCount}
-                      </span>
-                    )}
-                  </button>
-                  {(!room?.admin?.id || room.admin.name === 'Classroom Host' || !validParticipants.some(p => p.role === 'admin')) && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          setParticipantRole('admin');
-                          setTabSession('role', 'admin');
-                          await fetch(`/api/v1/classroom/${roomId}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ action: 'start_classroom', participantId }),
-                          });
-                          await handleStartClassroom();
-                          showToast('👑 Elevated to Teacher / Host!');
-                        } catch (e) {
-                          console.error('Failed to claim host role', e);
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-md transition flex items-center space-x-1.5"
-                      title="No host active. Claim host role to launch arena"
-                    >
-                      <Crown className="w-3.5 h-3.5 fill-current" />
-                      <span>Claim Host Role</span>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      fetchRoomState(participantId, participantName, participantRole);
-                      collabClientRef.current?.triggerImmediateSync();
-                      showToast('Checking arena status...');
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#20222f] hover:bg-[#2b2e40] text-gray-200 border border-[#34384e] transition flex items-center space-x-1.5"
-                    title="Check if Admin has entered the arena"
-                  >
-                    <Radio className="w-3 h-3 text-[#ff9100] animate-pulse" />
-                    <span>Check Status</span>
-                  </button>
-                  <button
-                    onClick={handleLeaveClassroom}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 border border-rose-900/40 transition flex items-center space-x-1"
-                  >
-                    <LogOut className="w-3 h-3" />
-                    <span>Leave Classroom</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Main Body Arena (Left: User List | Center: Two Workspaces) */
+        {/* Main Body Arena (Left: User List | Center: Two Workspaces) */}
           <div className="flex-1 flex overflow-hidden relative">
             {/* Mobile Drawer Backdrop */}
             {isUserListOpen && (
@@ -1824,7 +1854,7 @@ export default function ClassroomLivePage() {
               />
             </div>
           </div>
-        )}
+
 
         {/* Right Drawer: Classroom Chat & Announcements */}
         <ClassroomChatDrawer
@@ -1885,7 +1915,7 @@ export default function ClassroomLivePage() {
             <span className="font-medium leading-tight">{toastMessage}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className="text-gray-400 hover:text-white ml-2 p-0.5 rounded hover:bg-[#1e202c] transition"
+              className="text-[#737373] hover:text-white ml-2 p-0.5 rounded hover:bg-[#111111] transition"
             >
               <X className="w-3.5 h-3.5" />
             </button>

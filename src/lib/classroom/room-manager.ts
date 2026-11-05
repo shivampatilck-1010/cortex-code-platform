@@ -158,7 +158,7 @@ export class ClassroomRoomManager {
       admin: {
         id: adminId,
         name: isPlaceholder ? '' : adminName,
-        enteredArena: false,
+        enteredArena: true,
       },
       participants: isPlaceholder ? {} : { [adminId]: adminParticipant },
       settings: {
@@ -167,6 +167,10 @@ export class ClassroomRoomManager {
       },
       activeWorkspaces: isPlaceholder ? {} : {
         slotAUserId: adminId,
+      },
+      arenaWorkspaces: {
+        A: { workspaceId: 'A', files: [{ id: 'main', name: 'main.py', path: '/main.py', content: '', isFolder: false }], activeFileName: 'main.py', currentLanguage: 'python', activeCode: '' },
+        B: { workspaceId: 'B', files: [{ id: 'main', name: 'main.py', path: '/main.py', content: '', isFolder: false }], activeFileName: 'main.py', currentLanguage: 'python', activeCode: '' }
       },
       collaborationSessions: {},
       collaborationRequests: {},
@@ -186,7 +190,7 @@ export class ClassroomRoomManager {
               isAnnouncement: true,
             },
           ],
-      state: 'created',
+      state: 'active',
       createdAt: Date.now(),
     };
 
@@ -204,6 +208,12 @@ export class ClassroomRoomManager {
     if (!room && autoCreate) {
       const created = this.createRoom('Classroom Host', undefined, normRoomId);
       room = created.room;
+    }
+    if (room) {
+      room.state = 'active';
+      if (room.admin) {
+        room.admin.enteredArena = true;
+      }
     }
     return room || null;
   }
@@ -426,7 +436,7 @@ export class ClassroomRoomManager {
             activeCode: p.activeCode || '',
             files: p.files || [],
             privacy: safePrivacy,
-            online: now - (p.lastActive || 0) < 60000,
+            online: now - (p.lastActive || 0) < 120000,
           };
           if (p.role === 'admin') {
             if (!room.admin.id || room.admin.name === 'Classroom Host' || room.admin.id === p.id) {
@@ -445,7 +455,7 @@ export class ClassroomRoomManager {
           if (p.lastActive && p.lastActive > existing.lastActive) {
             existing.lastActive = p.lastActive;
             existing.status = p.status || existing.status;
-            existing.online = now - p.lastActive < 60000;
+            existing.online = now - p.lastActive < 120000;
             if (p.activeCode && p.activeCode !== existing.activeCode) {
               existing.activeCode = p.activeCode;
             }
@@ -487,7 +497,7 @@ export class ClassroomRoomManager {
         delete room.participants[id];
         if (room.activeWorkspaces.slotAUserId === id) room.activeWorkspaces.slotAUserId = undefined;
         if (room.activeWorkspaces.slotBUserId === id) room.activeWorkspaces.slotBUserId = undefined;
-      } else if (timeSinceActive > 60000) {
+      } else if (timeSinceActive > 120000) {
         p.online = false;
         p.status = 'offline';
       } else {
@@ -805,7 +815,7 @@ export class ClassroomRoomManager {
     const owner = room.participants[ownerId];
     if (!requester || !owner) throw new Error('User not found');
 
-    const file = owner.files.find((f) => f.id === fileId);
+    const file = owner.files.find((f) => f.id === fileId || f.name === fileId) || (owner.activeFileName === fileId || (!owner.activeFileName && fileId === 'main.py') ? { id: fileId, name: fileId, content: owner.activeCode } : undefined);
     if (!file) throw new Error('File not found in owner workspace');
 
     const reqId = generateId('dl_req');
@@ -913,7 +923,7 @@ export class ClassroomRoomManager {
     const owner = room.participants[perm.ownerId];
     if (!owner) throw new Error('File owner no longer exists in classroom.');
 
-    const file = owner.files.find((f) => f.id === fileId);
+    const file = owner.files.find((f) => f.id === fileId || f.name === fileId) || (owner.activeFileName === fileId || (!owner.activeFileName && fileId === 'main.py') ? { id: fileId, name: fileId, content: owner.activeCode } : undefined);
     if (!file) throw new Error('Requested file not found in owner workspace.');
 
     if (perm.type === 'allow_once') {
@@ -1132,3 +1142,4 @@ export class ClassroomRoomManager {
     }
   }
 }
+

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { User, ClassroomMemberRole } from './models';
 import { classroomDb } from './db';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 export type ClassroomRole = 'student' | 'teacher' | 'admin';
 
@@ -30,12 +31,16 @@ export class ClassroomAuth {
    * Internal Auth token creation for Worker -> Durable Object communication.
    */
   static createInternalAuthToken(user: any): string {
-    // Basic base64 payload for DO internal auth. In production, sign this securely.
+    const id = user.userId || user.id;
+    const name = user.displayName || user.name;
     return Buffer.from(JSON.stringify({
-      id: user.id,
-      name: user.name,
+      id,
+      userId: id,
+      name,
+      displayName: name,
       email: user.email,
       role: user.role,
+      classroomId: user.classroomId,
       cortex_id: user.cortex_id
     })).toString('base64');
   }
@@ -48,11 +53,190 @@ export class ClassroomAuth {
     }
   }
 
-  
   /**
-   * Hashes a password using PBKDF2 (SHA-256).
+   * Resolves the server-side signing secret.
+   * In production, requires CORTEX_SESSION_SECRET with >= 32 characters, otherwise fails closed.
+   * In non-production, provides an explicit development fallback.
    */
-  static async hashPassword(password: string, saltHex?: string): Promise<string> {
+  static getLiveSessionSigningSecret(): string {
+    const secret =
+      process.env.CORTEX_SESSION_SECRET ||
+      (typeof globalThis !== 'undefined' && (globalThis as any).env?.CORTEX_SESSION_SECRET) ||
+      process.env.CORTEX_INTERNAL_AUTH_SECRET ||
+      (typeof globalThis !== 'undefined' && (globalThis as any).env?.CORTEX_INTERNAL_AUTH_SECRET);
+    const isProd = process.env.NODE_ENV === 'production';
+
+    if (isProd) {
+      if (!secret || typeof secret !== 'string' || secret.trim().length < 32) {
+        throw new Error('[ClassroomAuth] FATAL: Production environment requires CORTEX_SESSION_SECRET of at least 32 characters.');
+      }
+      return secret.trim();
+    }
+
+    if (secret && typeof secret === 'string' && secret.trim().length >= 32) {
+      return secret.trim();
+    }
+
+    // Explicit development-only secret
+    return 'dev-cortex-live-session-insecure-secret-key-32chars';
+  }
+
+  /**
+   * Creates an ephemeral tamper-evident HMAC-SHA256 signed token for live classroom WebSocket signaling.
+   * Does NOT expose database session credentials or user secrets.
+   */
+  static createLiveSessionToken(payload: {
+    userId: string;
+    userName: string;
+    userEmail: string;
+    classroomId: string;
+    role: 'teacher' | 'student';
+    durationMs?: number;
+  }): string {
+    if (!payload.userId || typeof payload.userId !== 'string' || !payload.userId.trim()) {
+      throw new Error('createLiveSessionToken: userId must be a non-empty string');
+    }
+    if (!payload.classroomId || typeof payload.classroomId !== 'string' || !payload.classroomId.trim()) {
+      throw new Error('createLiveSessionToken: classroomId must be a non-empty string');
+    }
+    if (payload.role !== 'teacher' && payload.role !== 'student') {
+      throw new Error('createLiveSessionToken: role must be either "teacher" or "student"');
+    }
+
+    const issuedAt = Date.now();
+    const defaultDuration = 1000 * 60 * 60; // 1 hour default
+    const requestedDuration = typeof payload.durationMs === 'number' && !isNaN(payload.durationMs) && payload.durationMs > 0
+      ? payload.durationMs
+      : defaultDuration;
+    const maxDuration = 1000 * 60 * 60 * 24; // 24 hours max
+    const duration = Math.min(requestedDuration, maxDuration);
+    const expiresAt = issuedAt + duration;
+
+    const data = {
+      sub: payload.userId.trim(),
+      name: (payload.userName || 'User').trim(),
+      email: (payload.userEmail || '').trim(),
+      cid: payload.classroomId.toUpperCase().trim(),
+      role: payload.role,
+      iat: issuedAt,
+      exp: expiresAt,
+    };
+    const encodedData = Buffer.from(JSON.stringify(data)).toString('base64url');
+    const secret = this.getLiveSessionSigningSecret();
+    const signature = createHmac('sha256', secret).update(encodedData).digest('base64url');
+    return `${encodedData}.${signature}`;
+  }
+
+  /**
+   * Verifies an ephemeral live classroom signaling token with comprehensive claim hardening.
+   * Optional expectedClassroomId and expectedUserId enforce strict context binding.
+   */
+  static verifyLiveSessionToken(
+    token: string,
+    options?: { expectedClassroomId?: string; expectedUserId?: string }
+  ): {
+    userId: string;
+    userName: string;
+    userEmail: string;
+    classroomId: string;
+    role: 'teacher' | 'student';
+    issuedAt: number;
+    expiresAt: number;
+  } | null {
+    if (!token || typeof token !== 'string' || !token.includes('.')) {
+      return null;
+    }
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    const [encodedData, signature] = parts;
+    if (!encodedData || !signature) return null;
+
+    try {
+      const secret = this.getLiveSessionSigningSecret();
+      const expectedSignature = createHmac('sha256', secret).update(encodedData).digest('base64url');
+
+      const sigBuf = Buffer.from(signature, 'utf8');
+      const expBuf = Buffer.from(expectedSignature, 'utf8');
+      if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
+        return null;
+      }
+
+      const rawJson = Buffer.from(encodedData, 'base64url').toString('utf8');
+      const data = JSON.parse(rawJson);
+
+      // Verify payload structure is an object
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        return null;
+      }
+
+      // 1. Validate sub (userId)
+      if (typeof data.sub !== 'string' || !data.sub.trim()) {
+        return null;
+      }
+      if (options?.expectedUserId && data.sub !== options.expectedUserId) {
+        return null;
+      }
+
+      // 2. Validate cid (classroomId)
+      if (typeof data.cid !== 'string' || !data.cid.trim()) {
+        return null;
+      }
+      if (options?.expectedClassroomId && data.cid.toUpperCase().trim() !== options.expectedClassroomId.toUpperCase().trim()) {
+        return null;
+      }
+
+      // 3. Validate role enumeration
+      if (data.role !== 'teacher' && data.role !== 'student') {
+        return null;
+      }
+
+      // 4. Validate timestamps (finite numbers)
+      if (typeof data.iat !== 'number' || isNaN(data.iat) || !isFinite(data.iat)) {
+        return null;
+      }
+      if (typeof data.exp !== 'number' || isNaN(data.exp) || !isFinite(data.exp)) {
+        return null;
+      }
+
+      const now = Date.now();
+      const maxClockSkewMs = 60 * 1000; // 60 seconds tolerance
+
+      // 5. Future issuance check
+      if (data.iat > now + maxClockSkewMs) {
+        return null; // Issued too far in future
+      }
+
+      // 6. Expiration ordering
+      if (data.exp <= data.iat) {
+        return null;
+      }
+
+      // 7. Max lifetime cap (24 hours)
+      const maxLifetimeMs = 1000 * 60 * 60 * 24;
+      if (data.exp - data.iat > maxLifetimeMs) {
+        return null;
+      }
+
+      // 8. Enforce current expiration
+      if (now > data.exp) {
+        return null;
+      }
+
+      return {
+        userId: data.sub,
+        userName: typeof data.name === 'string' ? data.name : '',
+        userEmail: typeof data.email === 'string' ? data.email : '',
+        classroomId: data.cid,
+        role: data.role,
+        issuedAt: data.iat,
+        expiresAt: data.exp,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+    static async hashPassword(password: string, saltHex?: string): Promise<string> {
     const enc = new TextEncoder();
     let salt: Uint8Array;
     if (saltHex) {

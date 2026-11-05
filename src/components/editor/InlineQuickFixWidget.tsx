@@ -88,6 +88,22 @@ export const InlineQuickFixWidget: React.FC<InlineQuickFixWidgetProps> = ({
     if (!isOpen || !fixResult || showKeyInput) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Do not intercept if focus is inside Monaco editor, an input, textarea, or contenteditable
+      const target = e.target as HTMLElement | null;
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        Boolean(target?.closest('.monaco-editor')) ||
+        Boolean(activeEl?.closest('.monaco-editor')) ||
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable ||
+        activeEl?.tagName === 'INPUT' ||
+        activeEl?.tagName === 'TEXTAREA' ||
+        activeEl?.isContentEditable
+      ) {
+        return;
+      }
+
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();

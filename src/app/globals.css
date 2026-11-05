@@ -16,8 +16,8 @@ body {
   background-color: #0b0c0e;
   color: #e6edf3;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  overflow: hidden;
-  user-select: none;
+  
+  
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -58,3 +58,428 @@ body {
 .pulse-glow {
   animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+/* Monochrome Neon Theme Classes */
+.bg-monochrome-dotted {
+  background-image: radial-gradient(circle at center, #525252 1px, transparent 1px);
+  background-size: 24px 24px;
+  animation: pan-grid 60s linear infinite;
+}
+
+@keyframes pan-grid {
+  0% { background-position: 0 0; }
+  100% { background-position: 100% 100%; }
+}
+
+.monochrome-neon-box {
+  background-color: #000000;
+  border: 1px solid #525252;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.05);
+}
+
+.monochrome-neon-box:hover {
+  border-color: #A3A3A3;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.neon-glass {
+  background: rgba(10, 10, 10, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Cyber Grid Pattern */
+.bg-cyber-grid {
+  background-color: #161616;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 50px 50px, 50px 50px, 10px 10px, 10px 10px;
+  background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
+}
+
+
+
+
+/* Cyberpunk Blueprint Buttons */
+.silver-motion-ring, .danger-motion-ring {
+  position: relative;
+  overflow: hidden;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  border-radius: 0 !important;
+  padding: 1px;
+  transition: background-color 0.3s ease;
+}
+.silver-motion-ring {
+  background-color: #737373; /* More visible static idle border */
+}
+
+.danger-motion-ring {
+  background-color: rgba(244, 63, 94, 0.4); /* Faint red idle border */
+}
+
+.silver-motion-ring:hover {
+  background-color: #FFFFFF;
+}
+
+.danger-motion-ring:hover {
+  background-color: #F43F5E;
+}
+
+.silver-motion-inner {
+  position: relative;
+  z-index: 1;
+  /* Faint charcoal background instead of pure black */
+  background-color: #161616;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  
+  /* Idle Blueprint Grid (Faint) */
+  background-size: 15px 15px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    
+  border-radius: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  transition: background-color 0.3s ease, background-image 0.3s ease;
+}
+
+.silver-motion-ring:hover .silver-motion-inner,
+.danger-motion-ring:hover .silver-motion-inner {
+  /* Slightly brighter on hover */
+  background-color: #212121;
+  
+  /* Brighter grid on hover */
+  background-size: 15px 15px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+}
+
+/* Chat UI Keyframes & Utility Classes */
+@keyframes chatPopIn {
+  0% { opacity: 0; transform: translateY(8px) scale(0.98); }
+  70% { transform: translateY(-1px) scale(1.005); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes chatSlideLeft {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes chatSlideRight {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-chat-pop-in {
+  animation: chatPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-chat-slide-left {
+  animation: chatSlideLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-chat-slide-right {
+  animation: chatSlideRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Animated Moving Silver Outline */
+@keyframes spinConic {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes silverShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.silver-moving-border {
+  position: relative;
+  border-radius: 1rem;
+  overflow: hidden;
+  padding: 1.5px;
+  background: transparent;
+}
+
+.silver-moving-border::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    transparent 0deg,
+    rgba(255, 255, 255, 0.05) 60deg,
+    rgba(200, 200, 200, 0.25) 120deg,
+    #ffffff 180deg,
+    rgba(200, 200, 200, 0.35) 240deg,
+    transparent 300deg,
+    transparent 360deg
+  );
+  animation: spinConic 3.2s linear infinite;
+  z-index: 0;
+}
+
+.silver-inner-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  background: #09090b;
+  border-radius: calc(1rem - 1.5px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.silver-strip-pulse {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  background-size: 100% 200%;
+  animation: silverShimmer 2.2s ease-in-out infinite;
+}
+
+/* Vertical Cyber Button Chamfer Shapes (Exact match to + Create Classroom button) */
+.cyber-shape-vertical-ring {
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+}
+
+.cyber-shape-vertical-inner {
+  clip-path: polygon(13px 0, 100% 0, 100% calc(100% - 13px), calc(100% - 13px) 100%, 0 100%, 0 13px);
+}
+
+/* Conic Spinning Moving Silver Cyber Ring */
+.cyber-silver-motion-ring {
+  position: relative;
+  overflow: hidden;
+  padding: 1.5px;
+  background: transparent;
+  transition: all 0.3s ease;
+}
+
+.cyber-silver-motion-ring::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    transparent 0deg,
+    rgba(255, 255, 255, 0.08) 60deg,
+    rgba(200, 200, 200, 0.35) 120deg,
+    #ffffff 180deg,
+    rgba(200, 200, 200, 0.45) 240deg,
+    transparent 300deg,
+    transparent 360deg
+  );
+  animation: spinConic 3.2s linear infinite;
+  z-index: 0;
+}
+
+.cyber-silver-motion-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  background-color: #030303;
+}
+
+/* Hypercar 45-Degree Moving Fine Micro-Grid (11px — NO COARSE LINES) */
+@keyframes moveGrid45DownRight {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 22px 22px;
+  }
+}
+
+.bg-gaming-grid {
+  background-color: #030303;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.18) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.18) 1px, transparent 1px);
+  background-size: 11px 11px;
+  animation: moveGrid45DownRight 2.6s linear infinite;
+}
+
+/* Draco Racing Sports Display Typography Style — CORTEX CHAT SYSTEM */
+.draco-lockup-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  transform-origin: center center;
+}
+
+.racing-sub-tag {
+  font-family: 'Share Tech Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.38em;
+  color: #FF2E00; /* Fiery Racing Red-Orange */
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1;
+  text-shadow: 0 0 8px rgba(255, 46, 0, 0.4);
+  margin-bottom: 5px;
+}
+
+.racing-main-title {
+  font-family: 'Orbitron', 'Chakra Petch', 'Impact', sans-serif;
+  font-weight: 950;
+  font-style: italic;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 0.9;
+  transform: scaleY(0.95);
+  /* Clean & Simple Liquid Metallic Chrome Gradient (ZERO cut line, 40% clean brightness) */
+  background: linear-gradient(
+    180deg,
+    #FFFFFF 0%,
+    #FFFFFF 35%,
+    #E2E8F0 60%,
+    #CBD5E1 85%,
+    #94A3B8 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: 
+    drop-shadow(0 0 5px rgba(255, 255, 255, 0.4))
+    drop-shadow(0 3px 5px rgba(0, 0, 0, 0.9));
+}
+
+/* Cortex Cyber Chamfered Buttons */
+.cyber-btn-ring {
+  position: relative;
+  overflow: hidden;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  padding: 1px;
+  transition: all 0.25s ease;
+  display: inline-block;
+}
+
+.cyber-btn-inner {
+  position: relative;
+  z-index: 1;
+  clip-path: polygon(7.5px 0, 100% 0, 100% calc(100% - 7.5px), calc(100% - 7.5px) 100%, 0 100%, 0 7.5px);
+  background-size: 12px 12px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  transition: all 0.25s ease;
+}
+
+/* Cyber Silver Theme */
+.cyber-btn-silver {
+  background-color: #525252;
+}
+.cyber-btn-silver:hover {
+  background-color: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+}
+.cyber-btn-silver .cyber-btn-inner {
+  background-color: #121212;
+  color: #e5e5e5;
+}
+.cyber-btn-silver:hover .cyber-btn-inner {
+  background-color: #1e1e1e;
+  color: #ffffff;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+}
+
+/* Cyber Emerald Theme (Solve / Action) */
+.cyber-btn-emerald {
+  background-color: rgba(16, 185, 129, 0.55);
+}
+.cyber-btn-emerald:hover {
+  background-color: #10b981;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
+}
+.cyber-btn-emerald .cyber-btn-inner {
+  background-color: #0c1a14;
+  color: #34d399;
+}
+.cyber-btn-emerald:hover .cyber-btn-inner {
+  background-color: #10b981;
+  color: #000000;
+  font-weight: 800;
+}
+
+/* Cortex Live Class Utilities */
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9100] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B0C0E];
+}
+
+.surface-glass {
+  background-color: rgba(17, 18, 22, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid #282A36;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+}
+.no-scrollbar,
+.scrollbar-none,
+.scrollbar-hide {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Cortex Classroom Immersive Mode Styles */
+html.cortex-classroom-immersive-root,
+body.cortex-classroom-immersive {
+  overflow: hidden !important;
+  height: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  touch-action: pan-x pan-y;
+}
+
+.cortex-classroom-immersive-container {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  z-index: 30;
+}
+
+

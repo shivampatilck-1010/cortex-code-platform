@@ -372,10 +372,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   return (
     <div 
       style={width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
-      className={`w-60 border-r flex flex-col h-full text-xs select-none shadow-md transition-colors overflow-hidden ${
+      className={`w-full flex flex-col h-full text-xs select-none shadow-md transition-colors overflow-hidden ${
         isDarkMode 
-          ? 'bg-[#101114] border-[#1f2024]' 
-          : 'bg-[#f8fafc] border-[#e2e8f0]'
+          ? 'bg-[#101114]' 
+          : 'bg-[#f8fafc]'
       }`}
       onClick={() => {
         // Clicking outside any specific row doesn't reset activeFile, but lets user deselect folder

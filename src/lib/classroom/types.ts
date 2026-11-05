@@ -18,6 +18,7 @@ export interface ClassroomParticipant {
   status: ParticipantActivityStatus;
   currentLanguage: string;
   activeFileName: string;
+  joinedAt?: number;
   lastActive: number;
   isLocked: boolean;
   canRun: boolean;
@@ -33,6 +34,7 @@ export interface CollaborationSession {
   sharedDocId: string;
   sharedCode: string;
   createdAt: number;
+  startedAt?: number;
   lastSynced: number;
 }
 
@@ -117,6 +119,16 @@ export interface LiveCursor {
   };
 }
 
+export interface ArenaWorkspaceState {
+  workspaceId: 'A' | 'B';
+  userId?: string;
+  files: ProjectFile[];
+  activeFileName: string;
+  currentLanguage: string;
+  activeCode: string;
+  output?: any;
+}
+
 export interface ClassroomRoom {
   roomId: string;
   admin: {
@@ -129,6 +141,10 @@ export interface ClassroomRoom {
   activeWorkspaces: {
     slotAUserId?: string;
     slotBUserId?: string;
+  };
+  arenaWorkspaces: {
+    A: ArenaWorkspaceState;
+    B: ArenaWorkspaceState;
   };
   collaborationSessions: Record<string, CollaborationSession>;
   collaborationRequests: Record<string, CollaborationRequest>;
@@ -147,6 +163,7 @@ export type ClassroomEventType =
   | 'leave'
   | 'presence'
   | 'user_updated'
+  | 'workspace_updated'
   | 'code_update'
   | 'select_workspaces'
   | 'collaboration_request'
@@ -173,3 +190,4 @@ export interface ClassroomEventMessage {
   payload: any;
   timestamp: number;
 }
+

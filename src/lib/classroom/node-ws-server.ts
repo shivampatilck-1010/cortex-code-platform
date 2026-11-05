@@ -1,4 +1,6 @@
 import * as Y from 'yjs';
+import http from 'http';
+import crypto from 'crypto';
 import { ClassroomRoomManager } from './room-manager';
 import { classroomDb } from './db';
 import { realtimeCoordinator, WsClientSession } from './realtime';
@@ -14,6 +16,7 @@ import {
 
 declare global {
   var __cortex_node_ws_server: any | undefined;
+  var __cortex_node_http_server: any | undefined;
   var __cortex_node_ws_port: number | undefined;
   var __cortex_room_ydocs: Map<string, Map<string, Y.Doc>> | undefined;
 }
@@ -51,17 +54,86 @@ interface ClientMeta {
   participantName: string;
   participantRole: string;
   isAlive: boolean;
+  msgCount: number;
+  windowStart: number;
+  joinedAt: number;
   unregisterRealtime?: () => void;
 }
 
 const connectedClients = new Set<ClientMeta>();
+const roomBroadcastState = new Map<string, 'stopped' | 'broadcasting' | 'paused'>();
+const roomPublishedTeacherFiles = new Map<string, any[]>();
+const roomPublishedActiveFileId = new Map<string, string>();
+const roomObservedSubscriptions = new Map<string, Map<string, string>>(); // room -> (teacherId -> studentId)
+const roomStudentWorkspaces = new Map<string, Map<string, { files: any[]; activeFileId: string; timestamp: number }>>();
+
+const TEACHER_MODERATION_EVENTS = new Set([
+  'TEACHER_MUTE_ALL',
+  'TEACHER_STOP_ALL_CAMERAS',
+  'TEACHER_MUTE_STUDENT',
+  'TEACHER_REQUEST_CAMERA',
+  'TEACHER_REQUEST_UNMUTE',
+  'PERMISSIONS_UPDATED',
+  'media.mute',
+  'media.camera_off',
+  'media.request_unmute',
+  'media.request_camera',
+  'media.lock_mic',
+  'media.lock_camera',
+  'TEACHER_START_BROADCAST',
+  'TEACHER_PAUSE_BROADCAST',
+  'TEACHER_RESUME_BROADCAST',
+  'TEACHER_STOP_BROADCAST',
+  'TEACHER_CODE_BROADCAST',
+  'TEACHER_SHARE_OUTPUT',
+  'OBSERVE_STUDENT_SUBSCRIBE',
+  'OBSERVE_STUDENT_UNSUBSCRIBE',
+]);
+
+const PLATFORM_TEACHER_EVENTS = new Set([
+  'announcement.created',
+  'announcement.deleted',
+  'assignment.published',
+  'assignment.updated',
+  'assignment.deleted',
+  'grade.updated',
+  'submission.graded',
+  'student.removed',
+  'rollcall.started',
+  'rollcall.closed',
+  'session.started',
+  'session.ended',
+  'session.created',
+  'session.updated',
+  'session.recording.started',
+  'session.recording.stopped',
+  'teacher.code.snapshot',
+  'teacher.code.changed',
+  'teacher.file.created',
+  'teacher.file.updated',
+  'teacher.file.deleted',
+  'teacher.cursor.updated',
+  'teacher.output.created',
+  'question.answered',
+  'question.pinned',
+  'media.mute',
+  'media.camera_off',
+  'media.request_unmute',
+  'media.request_camera',
+  'media.lock_mic',
+  'media.lock_camera',
+]);
 
 /**
  * Broadcast message to other clients in the same room with DM privacy protection
  */
-export function broadcastToRoom(roomId: string, message: RealtimeMessage, excludeClientId?: string) {
-  const normRoom = roomId.toUpperCase().trim();
-  const raw = serializeRealtimeMessage(message);
+export function broadcastToRoom(roomId: string, message: any, excludeClientId?: string) {
+  const normRoom = (typeof roomId === 'string' ? roomId : '').toUpperCase().trim();
+  const raw = typeof message === 'string' ? message : (
+    message.type && typeof message.type === 'string' && message.version === '1.0'
+      ? JSON.stringify(message)
+      : serializeRealtimeMessage(message)
+  );
 
   const isDirectMessage =
     (message.type === 'event' && message.payload?.event?.type === 'message.created' && message.payload?.event?.payload?.message?.recipientType === 'direct') ||
@@ -96,7 +168,32 @@ export function broadcastToRoom(roomId: string, message: RealtimeMessage, exclud
 }
 
 /**
- * Ensures the Node.js WebSocket server is started and running
+ * Helper to safely send a JSON envelope over a WebSocket
+ */
+function sendJson(ws: any, envelope: any) {
+  if (ws && ws.readyState === 1) {
+    try {
+      ws.send(JSON.stringify(envelope));
+    } catch {}
+  }
+}
+
+/**
+ * Helper to send protocol errors
+ */
+function sendProtocolError(ws: any, code: string, message: string, sessionId: string = 'unknown') {
+  sendJson(ws, {
+    version: '1.0',
+    messageId: 'err-' + crypto.randomUUID(),
+    type: 'PROTOCOL_ERROR',
+    sessionId,
+    timestamp: Date.now(),
+    payload: { code, message },
+  });
+}
+
+/**
+ * Ensures the Node.js WebSocket server is started and running on port 3002
  */
 export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | null> {
   if (typeof window !== 'undefined') return null;
@@ -110,212 +207,68 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
   try {
     const { WebSocketServer } = await import('ws');
 
-    let wss: any = null;
     let actualPort = desiredPort;
 
-    try {
-      wss = new WebSocketServer({ port: desiredPort });
-    } catch {
-      wss = new WebSocketServer({ port: 0 });
-    }
+    // Create an HTTP server so /health endpoint is available
+    const httpServer = http.createServer((req, res) => {
+      if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            status: 'ok',
+            activeClients: connectedClients.size,
+            port: actualPort,
+            version: '1.0',
+            server: 'cortex-unified-signaling',
+          })
+        );
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    const wss = new WebSocketServer({ server: httpServer, maxPayload: 65536 });
+    wss.on('error', () => {});
 
     await new Promise<void>((resolve, reject) => {
-      wss.on('listening', () => {
-        const addr = wss.address();
-        if (typeof addr === 'object' && addr?.port) {
-          actualPort = addr.port;
-        }
+      httpServer.listen(desiredPort, () => {
+        actualPort = desiredPort;
         globalThis.__cortex_node_ws_port = actualPort;
         globalThis.__cortex_node_ws_server = wss;
+        globalThis.__cortex_node_http_server = httpServer;
         resolve();
       });
 
-      wss.on('error', (err: any) => {
+      httpServer.on('error', (err: any) => {
         if (err.code === 'EADDRINUSE') {
-          try {
-            const fallbackWss = new WebSocketServer({ port: 0 });
-            fallbackWss.on('listening', () => {
-              const addr = fallbackWss.address();
-              actualPort = typeof addr === 'object' && addr?.port ? addr.port : 3003;
-              globalThis.__cortex_node_ws_port = actualPort;
-              globalThis.__cortex_node_ws_server = fallbackWss;
-              resolve();
-            });
-          } catch (e) {
-            reject(e);
-          }
+          // If port 3002 is occupied, pick an ephemeral port
+          const fallbackServer = http.createServer((req, res) => {
+            if (req.url === '/health') {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ status: 'ok', version: '1.0' }));
+              return;
+            }
+            res.writeHead(404);
+            res.end();
+          });
+          fallbackServer.listen(0, () => {
+            const addr = fallbackServer.address();
+            actualPort = typeof addr === 'object' && addr?.port ? addr.port : 3003;
+            const fallbackWss = new WebSocketServer({ server: fallbackServer, maxPayload: 65536 });
+            globalThis.__cortex_node_ws_port = actualPort;
+            globalThis.__cortex_node_ws_server = fallbackWss;
+            globalThis.__cortex_node_http_server = fallbackServer;
+            setupSocketHandlers(fallbackWss);
+            resolve();
+          });
         } else {
           reject(err);
         }
       });
     });
 
-    // Connection handler
-    globalThis.__cortex_node_ws_server.on('connection', async (ws: any, req: any) => {
-      const url = new URL(req.url || '/', 'http://localhost');
-      
-      // Parse classroom ID from path (e.g., /api/v1/classrooms/CLS-123/ws) or query param
-      let pathClassroomId = '';
-      const parts = url.pathname.split('/');
-      const wsIdx = parts.indexOf('ws');
-      if (wsIdx > 0) {
-        pathClassroomId = parts[wsIdx - 1];
-      }
-      const classroomId = (pathClassroomId || url.searchParams.get('classroomId') || url.searchParams.get('roomId') || '').toUpperCase().trim();
-      const requestedUserId = url.searchParams.get('userId') || url.searchParams.get('participantId');
-
-      // 1. Validate Classroom existence
-      if (!classroomId) {
-        ws.send(serializeRealtimeMessage({
-          type: 'error',
-          payload: { code: 'BAD_REQUEST', message: 'Missing classroomId' },
-          timestamp: Date.now(),
-        }));
-        ws.close(4400, 'Bad Request: Missing classroomId');
-        return;
-      }
-
-      // 2. Authoritative User Authentication via ClassroomAuth
-      const user = await ClassroomAuth.authenticateRequest(req);
-      if (!user) {
-        console.warn(`[Security Alert] Rejected unauthenticated connection attempt to classroom ${classroomId}`);
-        ws.send(serializeRealtimeMessage({
-          type: 'error',
-          classroomId,
-          payload: { code: 'UNAUTHORIZED', message: 'Authentication required. Missing or invalid credentials.' },
-          timestamp: Date.now(),
-        }));
-        ws.close(4401, 'Unauthorized: Missing or invalid credentials');
-        return;
-      }
-
-      // 3. Server-Side Classroom Membership & Role Verification
-      const membership = await ClassroomAuth.verifyClassroomMembership(user, classroomId);
-      if (!membership.authorized) {
-        const isNotFound = membership.error?.toLowerCase().includes('not found');
-        const code = isNotFound ? 'NOT_FOUND' : 'FORBIDDEN';
-        const closeCode = isNotFound ? 4404 : 4403;
-        console.warn(`[Security Alert] Access Denied: User ${user.id} (${user.name}) is not authorized for classroom ${classroomId}. ${membership.error}`);
-        ws.send(serializeRealtimeMessage({
-          type: 'error',
-          classroomId,
-          payload: { code, message: membership.error || `Access denied. You are not enrolled in classroom ${classroomId}.` },
-          timestamp: Date.now(),
-        }));
-        ws.close(closeCode, membership.error || 'Forbidden: Not enrolled in classroom');
-        return;
-      }
-
-      const authoritativeRole = membership.role!;
-
-      const clientMeta: ClientMeta = {
-        ws,
-        roomId: classroomId,
-        classroomId,
-        participantId: user.id,
-        participantName: user.name,
-        participantRole: authoritativeRole, // Strictly from server-derived membership
-        isAlive: true,
-      };
-
-      connectedClients.add(clientMeta);
-
-      // Register with RealtimeCoordinator
-      const session: WsClientSession = {
-        id: `ws_${user.id}_${Date.now()}`,
-        userId: user.id,
-        userName: user.name,
-        role: authoritativeRole,
-        classroomId,
-        send: (raw: string) => {
-          if (ws.readyState === 1) {
-            try { ws.send(raw); } catch {}
-          }
-        },
-        isAlive: true,
-        lastActive: Date.now(),
-      };
-
-      clientMeta.unregisterRealtime = await realtimeCoordinator.registerWsClient(classroomId, session);
-
-      // Send initial auth_ok handshake immediately with current authoritative sequence
-      const currentSeq = (await classroomDb.getNextEventSequence(classroomId)) - 1;
-      const members = await classroomDb.listMembers(classroomId);
-
-      ws.send(
-        serializeRealtimeMessage({
-          type: 'auth_ok',
-          classroomId,
-          sequence: Math.max(0, currentSeq),
-          payload: {
-            currentSequence: Math.max(0, currentSeq),
-            userId: user.id,
-            role: authoritativeRole,
-            members: members.map((m) => ({
-              id: m.userId,
-              name: m.userName,
-              role: m.role,
-              isOnline: m.isOnline,
-            })),
-            onlineCount: realtimeCoordinator.getOnlineCount(classroomId),
-          },
-          timestamp: Date.now(),
-        })
-      );
-
-      // Broadcast student.joined
-      realtimeCoordinator.broadcast(
-        classroomId,
-        'student.joined',
-        {
-          userId: user.id,
-          userName: user.name,
-          role: authoritativeRole,
-          onlineCount: realtimeCoordinator.getOnlineCount(classroomId),
-        },
-        { id: user.id, name: user.name }
-      );
-
-      ws.on('pong', () => {
-        clientMeta.isAlive = true;
-      });
-
-      ws.on('message', (data: any) => {
-        try {
-          const rawStr = data.toString('utf-8');
-          const msg = parseRealtimeMessage(rawStr);
-          if (!msg) return;
-
-          handleClientMessage(clientMeta, msg);
-        } catch (err) {
-          console.error('[NodeWSServer] Message error', err);
-        }
-      });
-
-      ws.on('close', () => {
-        connectedClients.delete(clientMeta);
-        if (clientMeta.unregisterRealtime) {
-          clientMeta.unregisterRealtime();
-        }
-
-        if (clientMeta.classroomId) {
-          realtimeCoordinator.broadcast(
-            clientMeta.classroomId,
-            'student.left',
-            {
-              userId: clientMeta.participantId,
-              userName: clientMeta.participantName,
-              onlineCount: realtimeCoordinator.getOnlineCount(clientMeta.classroomId),
-            },
-            { id: clientMeta.participantId, name: clientMeta.participantName }
-          );
-        }
-      });
-
-      ws.on('error', (err: any) => {
-        console.error('[NodeWSServer] Socket error', err);
-      });
-    });
+    setupSocketHandlers(wss);
 
     // 15s Heartbeat Ping
     const pingInterval = setInterval(() => {
@@ -330,7 +283,7 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
       });
     }, 15000);
 
-    globalThis.__cortex_node_ws_server.on('close', () => {
+    wss.on('close', () => {
       clearInterval(pingInterval);
     });
 
@@ -341,6 +294,197 @@ export async function ensureNodeWsServer(desiredPort = 3002): Promise<number | n
   }
 }
 
+function setupSocketHandlers(wss: any) {
+  wss.on('connection', async (ws: any, req: any) => {
+    const url = new URL(req.url || '/', 'http://localhost');
+    
+    // Parse classroom ID from path (e.g., /api/v1/classrooms/CLS-123/ws) or query param
+    let pathClassroomId = '';
+    const parts = url.pathname.split('/');
+    const wsIdx = parts.indexOf('ws');
+    if (wsIdx > 0) {
+      pathClassroomId = parts[wsIdx - 1];
+    }
+    const classroomId = (pathClassroomId || url.searchParams.get('classroomId') || url.searchParams.get('roomId') || '').toUpperCase().trim();
+
+    // Client metadata container
+    const clientMeta: ClientMeta = {
+      ws,
+      roomId: classroomId,
+      classroomId: classroomId,
+      participantId: '',
+      participantName: '',
+      participantRole: 'student',
+      isAlive: true,
+      msgCount: 0,
+      windowStart: Date.now(),
+      joinedAt: Date.now(),
+    };
+
+    connectedClients.add(clientMeta);
+
+    // Immediately emit SERVER_HELLO handshake (supports Live Class protocol)
+    sendJson(ws, {
+      version: '1.0',
+      messageId: 'hello-' + crypto.randomUUID(),
+      type: 'SERVER_HELLO',
+      sessionId: classroomId || 'system',
+      timestamp: Date.now(),
+      payload: {
+        serverVersion: '1.0',
+        protocol: '1.0',
+        connectionId: 'conn_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+        serverTime: Date.now(),
+      },
+    });
+
+    // If pre-authenticated via cookie or query token in URL, complete platform handshake
+    if (classroomId) {
+      let user = await ClassroomAuth.authenticateRequest(req);
+      if (!user) {
+        const token = url.searchParams.get('token') || (typeof req.headers?.authorization === 'string' ? req.headers.authorization.replace(/^Bearer\s+/i, '') : null);
+        if (token) {
+          const verified = ClassroomAuth.verifyLiveSessionToken(token, { expectedClassroomId: classroomId });
+          if (verified) {
+            user = await classroomDb.getUser(verified.userId);
+          }
+        }
+      }
+
+      if (user) {
+        const membership = await ClassroomAuth.verifyClassroomMembership(user, classroomId);
+        if (membership.authorized && membership.role) {
+          clientMeta.participantId = user.id;
+          clientMeta.participantName = user.name;
+          clientMeta.participantRole = membership.role;
+
+          // Register with RealtimeCoordinator
+          const session: WsClientSession = {
+            id: 'ws_' + user.id + '_' + Date.now(),
+            userId: user.id,
+            userName: user.name,
+            role: membership.role,
+            classroomId,
+            send: (raw: string) => {
+              if (ws.readyState === 1) {
+                try { ws.send(raw); } catch {}
+              }
+            },
+            isAlive: true,
+            lastActive: Date.now(),
+          };
+          clientMeta.unregisterRealtime = await realtimeCoordinator.registerWsClient(classroomId, session);
+
+          // Initial platform auth_ok
+          const currentSeq = (await classroomDb.getNextEventSequence(classroomId)) - 1;
+          const members = await classroomDb.listMembers(classroomId);
+          ws.send(
+            serializeRealtimeMessage({
+              type: 'auth_ok',
+              classroomId,
+              sequence: Math.max(0, currentSeq),
+              payload: {
+                currentSequence: Math.max(0, currentSeq),
+                userId: user.id,
+                role: membership.role,
+                members: members.map((m) => ({
+                  id: m.userId,
+                  name: m.userName,
+                  role: m.role,
+                  isOnline: m.isOnline,
+                })),
+                onlineCount: realtimeCoordinator.getOnlineCount(classroomId),
+              },
+              timestamp: Date.now(),
+            })
+          );
+        }
+      }
+    }
+
+    ws.on('pong', () => {
+      clientMeta.isAlive = true;
+    });
+
+    ws.on('message', (data: any) => {
+      try {
+        // Rate limiting: 50 messages / sec
+        const now = Date.now();
+        if (now - clientMeta.windowStart > 1000) {
+          clientMeta.windowStart = now;
+          clientMeta.msgCount = 0;
+        }
+        clientMeta.msgCount++;
+        if (clientMeta.msgCount > 50) {
+          sendProtocolError(ws, 'RATE_LIMITED', 'Message rate limit exceeded. Please throttle sending.', clientMeta.classroomId || 'system');
+          return;
+        }
+
+        const rawStr = data.toString('utf-8');
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(rawStr);
+        } catch {
+          sendProtocolError(ws, 'MALFORMED_JSON', 'Could not parse message as JSON', clientMeta.classroomId || 'system');
+          return;
+        }
+
+        handleClientMessage(clientMeta, parsed);
+      } catch (err) {
+        console.error('[NodeWSServer] Message error', err);
+      }
+    });
+
+    ws.on('close', () => {
+      connectedClients.delete(clientMeta);
+      if (clientMeta.unregisterRealtime) {
+        clientMeta.unregisterRealtime();
+      }
+
+      if (clientMeta.classroomId && clientMeta.participantId) {
+        // Platform event
+        realtimeCoordinator.broadcast(
+          clientMeta.classroomId,
+          'student.left',
+          {
+            userId: clientMeta.participantId,
+            userName: clientMeta.participantName,
+            onlineCount: realtimeCoordinator.getOnlineCount(clientMeta.classroomId),
+          },
+          { id: clientMeta.participantId, name: clientMeta.participantName }
+        );
+
+        // Live Class protocol event
+        const leaveMsg = JSON.stringify({
+          version: '1.0',
+          messageId: 'leave-' + crypto.randomUUID(),
+          type: 'PARTICIPANT_LEFT',
+          sessionId: clientMeta.classroomId,
+          timestamp: Date.now(),
+          payload: {
+            participantId: clientMeta.participantId,
+            name: clientMeta.participantName,
+          },
+        });
+
+        connectedClients.forEach((other) => {
+          if (
+            other !== clientMeta &&
+            (other.classroomId === clientMeta.classroomId || other.roomId === clientMeta.classroomId) &&
+            other.ws.readyState === 1
+          ) {
+            try { other.ws.send(leaveMsg); } catch {}
+          }
+        });
+      }
+    });
+
+    ws.on('error', (err: any) => {
+      console.error('[NodeWSServer] Socket error', err);
+    });
+  });
+}
+
 export function getNodeWsPort(): number | null {
   return globalThis.__cortex_node_ws_port || null;
 }
@@ -348,12 +492,472 @@ export function getNodeWsPort(): number | null {
 /**
  * Handle incoming parsed message from WebSocket client
  */
-async function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
+async function handleClientMessage(client: ClientMeta, msg: any) {
+  // --- 1. Live Class Protocol Envelope Branch ---
+  if (msg && msg.version === '1.0') {
+    const { type, sessionId, payload, messageId } = msg;
+    const targetSessionId = (sessionId || client.classroomId || '').toUpperCase().trim();
+
+    switch (type) {
+      case 'PING': {
+        sendJson(client.ws, {
+          version: '1.0',
+          messageId: 'pong-' + crypto.randomUUID(),
+          type: 'PONG',
+          sessionId: targetSessionId,
+          timestamp: Date.now(),
+          payload: { echo: payload?.echo || Date.now() },
+        });
+        return;
+      }
+
+      case 'JOIN_CLASSROOM': {
+        const { requestedRole, participantName, joinToken } = payload || {};
+
+        if (!targetSessionId) {
+          sendProtocolError(client.ws, 'INVALID_SESSION', 'Missing or empty sessionId', 'system');
+          return;
+        }
+
+        // Validate presence of joinToken
+        if (!joinToken || typeof joinToken !== 'string') {
+          sendJson(client.ws, {
+            version: '1.0',
+            messageId: 'rej-' + crypto.randomUUID(),
+            type: 'JOIN_REJECTED',
+            sessionId: targetSessionId,
+            timestamp: Date.now(),
+            payload: {
+              code: 'UNAUTHORIZED',
+              reason: 'Missing live session token. Client must authenticate first.',
+            },
+          });
+          return;
+        }
+
+        // Cryptographically verify token and context binding
+        const verified = ClassroomAuth.verifyLiveSessionToken(joinToken, {
+          expectedClassroomId: targetSessionId,
+        });
+
+        if (!verified) {
+          sendJson(client.ws, {
+            version: '1.0',
+            messageId: 'rej-' + crypto.randomUUID(),
+            type: 'JOIN_REJECTED',
+            sessionId: targetSessionId,
+            timestamp: Date.now(),
+            payload: {
+              code: 'INVALID_TOKEN',
+              reason: 'Live session token is invalid, expired, or not bound to this classroom.',
+            },
+          });
+          return;
+        }
+
+        // Authoritative role assignment from verified token
+        const authoritativeRole = verified.role;
+        const participantId = verified.userId;
+        const finalName = (participantName && typeof participantName === 'string' && participantName.trim())
+          ? participantName.trim().slice(0, 50)
+          : (verified as any).name || 'Participant';
+
+        client.classroomId = targetSessionId;
+        client.roomId = targetSessionId;
+        client.participantId = participantId;
+        client.participantRole = authoritativeRole;
+        client.participantName = finalName;
+
+        // Build list of active participants in the room
+        const activeParticipants = Array.from(connectedClients)
+          .filter((c) => (c.classroomId === targetSessionId || c.roomId === targetSessionId) && c.ws.readyState === 1 && c.participantId)
+          .map((c) => ({
+            id: c.participantId,
+            name: c.participantName,
+            role: c.participantRole,
+            connectedAt: c.joinedAt,
+          }));
+
+        // Send JOIN_ACCEPTED to caller
+        sendJson(client.ws, {
+          version: '1.0',
+          messageId: 'acc-' + crypto.randomUUID(),
+          type: 'JOIN_ACCEPTED',
+          sessionId: targetSessionId,
+          timestamp: Date.now(),
+          payload: {
+            assignedParticipantId: participantId,
+            assignedRole: authoritativeRole,
+            sessionId: targetSessionId,
+            activeParticipants,
+          },
+        });
+
+        // Current broadcast state synchronization
+        const bState = roomBroadcastState.get(targetSessionId) || 'stopped';
+        const pubFiles = roomPublishedTeacherFiles.get(targetSessionId) || [];
+        const pubFileId = roomPublishedActiveFileId.get(targetSessionId) || '';
+
+        sendJson(client.ws, {
+          version: '1.0',
+          messageId: 'bcast-init-' + Date.now(),
+          type: 'CLASSROOM_EVENT',
+          sessionId: targetSessionId,
+          timestamp: Date.now(),
+          payload: {
+            eventName: 'BROADCAST_STATE_CHANGED',
+            data: {
+              state: bState,
+              files: (bState === 'broadcasting' || bState === 'paused') ? pubFiles : [],
+              activeFileId: (bState === 'broadcasting' || bState === 'paused') ? pubFileId : '',
+            },
+          },
+        });
+
+        // Broadcast PARTICIPANT_JOINED to other clients
+        const joinNotice = JSON.stringify({
+          version: '1.0',
+          messageId: 'join-' + crypto.randomUUID(),
+          type: 'PARTICIPANT_JOINED',
+          sessionId: targetSessionId,
+          timestamp: Date.now(),
+          payload: {
+            participant: {
+              id: participantId,
+              name: finalName,
+              role: authoritativeRole,
+            },
+          },
+        });
+
+        connectedClients.forEach((other) => {
+          if (
+            other !== client &&
+            (other.classroomId === targetSessionId || other.roomId === targetSessionId) &&
+            other.ws.readyState === 1
+          ) {
+            try { other.ws.send(joinNotice); } catch {}
+          }
+        });
+
+        return;
+      }
+
+      case 'CLASSROOM_EVENT': {
+        // Enforce that client has authenticated and joined
+        if (!client.participantId || !client.classroomId) {
+          sendProtocolError(client.ws, 'NOT_JOINED', 'Client must join a classroom before sending events', targetSessionId || 'system');
+          return;
+        }
+
+        // Enforce room isolation: cannot emit event into different classroom
+        if (targetSessionId && targetSessionId !== client.classroomId) {
+          sendProtocolError(client.ws, 'CROSS_CLASSROOM_FORBIDDEN', 'Cross-classroom event broadcast is prohibited', client.classroomId);
+          return;
+        }
+
+        const eventName = payload?.eventName;
+        const requiresTeacher = Boolean(payload?.requiresTeacher);
+        const isModerationEvent = requiresTeacher || (typeof eventName === 'string' && TEACHER_MODERATION_EVENTS.has(eventName));
+
+        // Enforce teacher-only moderation authorization on server
+        if (isModerationEvent) {
+          const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
+          if (!isInstructor) {
+            sendProtocolError(
+              client.ws,
+              'FORBIDDEN_EVENT',
+              'Unauthorized: Only instructors are permitted to emit moderation event: ' + eventName,
+              client.classroomId
+            );
+            return;
+          }
+        }
+
+        // Authoritatively overwrite spoofed sender identities in event payload
+        if (payload && typeof payload === 'object') {
+          if (payload.data && typeof payload.data === 'object') {
+            payload.data.senderId = client.participantId;
+            payload.data.actorId = client.participantId;
+            payload.data.senderRole = client.participantRole;
+          }
+          payload.senderId = client.participantId;
+        }
+
+        // Handle Workspace Broadcast Operations
+        const roomKey = client.classroomId;
+        if (eventName === 'TEACHER_START_BROADCAST') {
+          roomBroadcastState.set(roomKey, 'broadcasting');
+          const files = payload.data?.files || [];
+          const activeFileId = payload.data?.activeFileId || '';
+          roomPublishedTeacherFiles.set(roomKey, files);
+          roomPublishedActiveFileId.set(roomKey, activeFileId);
+
+          const stateMsg = JSON.stringify({
+            version: '1.0',
+            messageId: 'evt-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: roomKey,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'BROADCAST_STATE_CHANGED',
+              data: {
+                state: 'broadcasting',
+                files,
+                activeFileId,
+                teacherId: client.participantId,
+                teacherName: client.participantName,
+              },
+            },
+          });
+          connectedClients.forEach((other) => {
+            if ((other.classroomId === roomKey || other.roomId === roomKey) && other.ws.readyState === 1) {
+              try { other.ws.send(stateMsg); } catch {}
+            }
+          });
+          return;
+        }
+
+        if (eventName === 'TEACHER_PAUSE_BROADCAST') {
+          roomBroadcastState.set(roomKey, 'paused');
+          const stateMsg = JSON.stringify({
+            version: '1.0',
+            messageId: 'evt-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: roomKey,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'BROADCAST_STATE_CHANGED',
+              data: {
+                state: 'paused',
+              },
+            },
+          });
+          connectedClients.forEach((other) => {
+            if ((other.classroomId === roomKey || other.roomId === roomKey) && other.ws.readyState === 1) {
+              try { other.ws.send(stateMsg); } catch {}
+            }
+          });
+          return;
+        }
+
+        if (eventName === 'TEACHER_RESUME_BROADCAST') {
+          roomBroadcastState.set(roomKey, 'broadcasting');
+          const files = roomPublishedTeacherFiles.get(roomKey) || [];
+          const activeFileId = roomPublishedActiveFileId.get(roomKey) || '';
+          const stateMsg = JSON.stringify({
+            version: '1.0',
+            messageId: 'evt-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: roomKey,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'BROADCAST_STATE_CHANGED',
+              data: {
+                state: 'broadcasting',
+                files,
+                activeFileId,
+              },
+            },
+          });
+          connectedClients.forEach((other) => {
+            if ((other.classroomId === roomKey || other.roomId === roomKey) && other.ws.readyState === 1) {
+              try { other.ws.send(stateMsg); } catch {}
+            }
+          });
+          return;
+        }
+
+        if (eventName === 'TEACHER_STOP_BROADCAST') {
+          roomBroadcastState.set(roomKey, 'stopped');
+          roomPublishedTeacherFiles.set(roomKey, []);
+          roomPublishedActiveFileId.set(roomKey, '');
+          const stateMsg = JSON.stringify({
+            version: '1.0',
+            messageId: 'evt-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: roomKey,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'BROADCAST_STATE_CHANGED',
+              data: {
+                state: 'stopped',
+                files: [],
+              },
+            },
+          });
+          connectedClients.forEach((other) => {
+            if ((other.classroomId === roomKey || other.roomId === roomKey) && other.ws.readyState === 1) {
+              try { other.ws.send(stateMsg); } catch {}
+            }
+          });
+          return;
+        }
+
+        if (eventName === 'TEACHER_CODE_BROADCAST') {
+          const bState = roomBroadcastState.get(roomKey) || 'stopped';
+          if (bState !== 'broadcasting') {
+            return;
+          }
+          if (payload.data?.files) {
+            roomPublishedTeacherFiles.set(roomKey, payload.data.files);
+          }
+          if (payload.data?.activeFileId) {
+            roomPublishedActiveFileId.set(roomKey, payload.data.activeFileId);
+          }
+          const codeMsg = JSON.stringify({
+            version: '1.0',
+            messageId: 'evt-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: roomKey,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'TEACHER_CODE_UPDATE',
+              data: payload.data,
+            },
+          });
+          connectedClients.forEach((other) => {
+            if (other !== client && (other.classroomId === roomKey || other.roomId === roomKey) && other.ws.readyState === 1) {
+              try { other.ws.send(codeMsg); } catch {}
+            }
+          });
+          return;
+        }
+
+        if (eventName === 'GET_BROADCAST_STATE') {
+          const bState = roomBroadcastState.get(roomKey) || 'stopped';
+          const pubFiles = roomPublishedTeacherFiles.get(roomKey) || [];
+          const pubFileId = roomPublishedActiveFileId.get(roomKey) || '';
+          sendJson(client.ws, {
+            version: '1.0',
+            messageId: 'evt-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: roomKey,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'BROADCAST_STATE_CHANGED',
+              data: {
+                state: bState,
+                files: (bState === 'broadcasting' || bState === 'paused') ? pubFiles : [],
+                activeFileId: (bState === 'broadcasting' || bState === 'paused') ? pubFileId : '',
+              },
+            },
+          });
+          return;
+        }
+
+        // Handle Student Observation Operations
+        if (!roomObservedSubscriptions.has(roomKey)) {
+          roomObservedSubscriptions.set(roomKey, new Map());
+        }
+        if (!roomStudentWorkspaces.has(roomKey)) {
+          roomStudentWorkspaces.set(roomKey, new Map());
+        }
+        const roomObsMap = roomObservedSubscriptions.get(roomKey)!;
+        const roomWorkspaces = roomStudentWorkspaces.get(roomKey)!;
+
+        if (eventName === 'OBSERVE_STUDENT_SUBSCRIBE') {
+          const studentId = payload.data?.studentId;
+          if (!studentId) return;
+          roomObsMap.set(client.participantId, studentId);
+          const existing = roomWorkspaces.get(studentId);
+          if (existing) {
+            sendJson(client.ws, {
+              version: '1.0',
+              messageId: 'evt-' + Date.now(),
+              type: 'CLASSROOM_EVENT',
+              sessionId: roomKey,
+              timestamp: Date.now(),
+              payload: {
+                eventName: 'STUDENT_WORKSPACE_STREAM',
+                data: {
+                  studentId,
+                  files: existing.files,
+                  activeFileId: existing.activeFileId,
+                  timestamp: existing.timestamp,
+                },
+              },
+            });
+          }
+          return;
+        }
+
+        if (eventName === 'OBSERVE_STUDENT_UNSUBSCRIBE') {
+          roomObsMap.delete(client.participantId);
+          return;
+        }
+
+        if (eventName === 'STUDENT_WORKSPACE_UPDATE') {
+          const studentId = client.participantId;
+          const files = payload.data?.files || [];
+          const activeFileId = payload.data?.activeFileId || '';
+          roomWorkspaces.set(studentId, { files, activeFileId, timestamp: Date.now() });
+
+          const streamMsg = JSON.stringify({
+            version: '1.0',
+            messageId: 'evt-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: roomKey,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'STUDENT_WORKSPACE_STREAM',
+              data: {
+                studentId,
+                files,
+                activeFileId,
+                timestamp: Date.now(),
+              },
+            },
+          });
+
+          connectedClients.forEach((other) => {
+            if (
+              (other.classroomId === roomKey || other.roomId === roomKey) &&
+              (other.participantRole === 'teacher' || other.participantRole === 'admin') &&
+              other.ws.readyState === 1
+            ) {
+              if (roomObsMap.get(other.participantId) === studentId) {
+                try { other.ws.send(streamMsg); } catch {}
+              }
+            }
+          });
+          return;
+        }
+
+        // Broadcast to all other peers in the room
+        const broadcastEnvelope = JSON.stringify({
+          version: '1.0',
+          messageId: 'evt-' + crypto.randomUUID(),
+          type: 'CLASSROOM_EVENT',
+          sessionId: client.classroomId,
+          timestamp: Date.now(),
+          payload,
+        });
+
+        connectedClients.forEach((other) => {
+          if (
+            other !== client &&
+            (other.classroomId === client.classroomId || other.roomId === client.classroomId) &&
+            other.ws.readyState === 1
+          ) {
+            try { other.ws.send(broadcastEnvelope); } catch {}
+          }
+        });
+
+        return;
+      }
+
+      default:
+        // Other Live Class envelope types
+        return;
+    }
+  }
+
+  // --- 2. Platform RealtimeMessage Branch ---
   const normRoom = (msg.classroomId || msg.roomId || client.classroomId || '').toUpperCase().trim();
 
   switch (msg.type) {
     case 'auth': {
-      // Re-verify auth but NEVER allow client to escalate role or spoof identity
       const currentSeq = (await classroomDb.getNextEventSequence(normRoom)) - 1;
       client.ws.send(
         serializeRealtimeMessage({
@@ -411,11 +1015,9 @@ async function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         return true;
       });
 
-      // Check if client sequence is older than available ring-buffer / event retention
       const isBufferOverflow = since > 0 && currentSeq - since > 500;
 
       if (isBufferOverflow || since === 0) {
-        // Authoritative full state snapshot
         const announcements = await classroomDb.listAnnouncements(normRoom);
         const rawAssignments = await classroomDb.listAssignments(normRoom);
         const assignments = isInstructor
@@ -485,44 +1087,16 @@ async function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
       const eventData = msg.payload?.event || msg.payload;
       if (!eventData || !eventData.type) return;
 
-      const teacherOnlyEvents = new Set([
-        'announcement.created',
-        'announcement.deleted',
-        'assignment.published',
-        'assignment.updated',
-        'assignment.deleted',
-        'grade.updated',
-        'submission.graded',
-        'student.removed',
-        'rollcall.started',
-        'rollcall.closed',
-        'session.started',
-        'session.ended',
-        'session.created',
-        'session.updated',
-        'session.recording.started',
-        'session.recording.stopped',
-        'teacher.code.snapshot',
-        'teacher.code.changed',
-        'teacher.file.created',
-        'teacher.file.updated',
-        'teacher.file.deleted',
-        'teacher.cursor.updated',
-        'teacher.output.created',
-        'question.answered',
-        'question.pinned',
-      ]);
-
       const isInstructor = client.participantRole === 'teacher' || client.participantRole === 'admin';
-      if (teacherOnlyEvents.has(eventData.type) && !isInstructor) {
-        console.warn(`[Security Alert] Non-teacher user ${client.participantId} attempted forbidden event: ${eventData.type}`);
+      if (PLATFORM_TEACHER_EVENTS.has(eventData.type) && !isInstructor) {
+        console.warn('[Security Alert] Non-teacher user ' + client.participantId + ' attempted forbidden event: ' + eventData.type);
         client.ws.send(
           serializeRealtimeMessage({
             type: 'error',
             classroomId: normRoom,
             payload: {
               code: 'FORBIDDEN_EVENT',
-              message: `Unauthorized: Only instructors are permitted to emit '${eventData.type}'.`,
+              message: 'Unauthorized: Only instructors are permitted to emit ' + eventData.type,
             },
             timestamp: Date.now(),
           })
@@ -530,14 +1104,11 @@ async function handleClientMessage(client: ClientMeta, msg: RealtimeMessage) {
         return;
       }
 
-      // Overwrite actor identity authoritatively
       eventData.actorId = client.participantId;
       eventData.actorName = client.participantName;
 
-      // Prevent payload spoofing
       if (eventData.payload && typeof eventData.payload === 'object') {
         if (eventData.payload.userId && eventData.payload.userId !== client.participantId) {
-          console.warn(`[Security Alert] Overwriting spoofed payload.userId ${eventData.payload.userId} with ${client.participantId}`);
           eventData.payload.userId = client.participantId;
         }
         if (eventData.payload.actorId && eventData.payload.actorId !== client.participantId) {

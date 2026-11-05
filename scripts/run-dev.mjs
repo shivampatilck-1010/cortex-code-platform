@@ -6,11 +6,13 @@ const NEXT_PORT = 3001;
 const WS_PORT = 3002;
 const GATEWAY_PORT = 3000;
 
-const nextBin = './node_modules/.bin/next';
+const isWin = process.platform === 'win32';
+const nextBin = isWin ? '.\\node_modules\\.bin\\next.cmd' : './node_modules/.bin/next';
 
 // Start Next.js dev server on 3001
 const nextChild = spawn(nextBin, ['dev', '-p', String(NEXT_PORT), '-H', '127.0.0.1'], {
   stdio: 'inherit',
+  shell: isWin,
   env: {
     ...process.env,
     PORT: String(NEXT_PORT),
@@ -18,7 +20,19 @@ const nextChild = spawn(nextBin, ['dev', '-p', String(NEXT_PORT), '-H', '127.0.0
 });
 
 nextChild.on('exit', (code, signal) => {
+  if (wsChild) wsChild.kill();
   process.exit(code ?? (signal ? 1 : 0));
+});
+
+// Start Authoritative Classroom WebSocket server on 3002
+const wsBin = isWin ? 'npx.cmd' : 'npx';
+const wsChild = spawn(wsBin, ['tsx', './scripts/start-ws.ts'], {
+  stdio: 'inherit',
+  shell: isWin,
+});
+
+wsChild.on('error', (err) => {
+  console.warn('[Classroom WS] Spawn warning:', err.message);
 });
 
 // Gateway server on port 3000
@@ -84,9 +98,11 @@ gateway.listen(GATEWAY_PORT, '0.0.0.0', () => {
 
 process.on('SIGINT', () => {
   nextChild.kill('SIGINT');
+  if (wsChild) wsChild.kill('SIGINT');
   gateway.close();
 });
 process.on('SIGTERM', () => {
   nextChild.kill('SIGTERM');
+  if (wsChild) wsChild.kill('SIGTERM');
   gateway.close();
 });

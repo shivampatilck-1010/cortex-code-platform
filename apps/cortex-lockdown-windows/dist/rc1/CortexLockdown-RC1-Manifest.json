@@ -1,0 +1,49 @@
+{
+  "releaseCandidate": "RC1",
+  "version": "1.0.0-rc1",
+  "buildDate": "2026-11-02T23:10:00Z",
+  "architecture": "win32-x64",
+  "targetPlatforms": [
+    "Microsoft Windows 10 64-bit (Version 21H2 or later)",
+    "Microsoft Windows 11 64-bit (Build 22000 or later)"
+  ],
+  "authoritativeArtifacts": [
+    {
+      "filename": "CortexLockdown-Hardened.exe",
+      "relativePath": "apps/cortex-lockdown-windows/bin/CortexLockdown-Hardened.exe",
+      "sha256": "82518B2D6966E3FB358892A040F148E52AA5ECDF8CAB92E0D93A2A22F3AFC895",
+      "classification": "Production Hardened Release Binary (PE32+ GUI)",
+      "verifiedStatus": "MATCHED"
+    },
+    {
+      "filename": "CortexLockdown-Windows-x64.zip",
+      "relativePath": "apps/cortex-lockdown-windows/dist/CortexLockdown-Windows-x64.zip",
+      "sha256": "08BD0C5AAC9C5E7466D09A11A7E1A70F4203E131097F4C843C71231772CA6B30",
+      "classification": "Portable Distribution Archive (ZIP)",
+      "verifiedStatus": "MATCHED"
+    },
+    {
+      "filename": "CortexLockdown.exe",
+      "relativePath": "apps/cortex-lockdown-windows/bin/CortexLockdown.exe",
+      "sha256": "68C13F5BB3409F8A7524C1FB5BA9E504A5ADDA88FAEAB09813CC9C0F292CF466",
+      "classification": "Baseline Demonstration Binary (PE32+ GUI)",
+      "verifiedStatus": "MATCHED"
+    }
+  ],
+  "qualificationSummary": {
+    "cumulativeRegressionSuites": 14,
+    "cumulativeChecksPassed": 390,
+    "passRate": "100.0%",
+    "hardwarePlatform": "AMD Ryzen 7 8840U w/ Radeon 780M Graphics (16 vCPUs), 15.31 GB RAM, Windows 11 Build 26300",
+    "budgetExpended": "INR 0",
+    "qualificationDecision": "RELEASE CANDIDATE CONDITIONALLY APPROVED"
+  },
+  "deploymentDomains": {
+    "privateCollegeDemonstration": "GO",
+    "facultyEvaluation": "GO",
+    "supervisedInstitutionalPilot": "CONDITIONAL",
+    "fullInstitutionalDeployment": "NO-GO",
+    "publicByodRelease": "NO-GO",
+    "macosRelease": "NO-GO"
+  }
+}

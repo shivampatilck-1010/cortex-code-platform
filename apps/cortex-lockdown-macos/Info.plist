@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>CortexLockdown</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.cortex.lockdown</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Cortex Lockdown</string>
+    <key>CFBundleDisplayName</key>
+    <string>Cortex Lockdown</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>NSCameraUsageDescription</key>
+    <string>Cortex Lockdown requires access to your camera for live proctoring and face presence verification during your examination.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Cortex Lockdown requires access to your microphone for proctoring audio verification during your examination.</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.cortex.lockdown</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>cortex-lockdown</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

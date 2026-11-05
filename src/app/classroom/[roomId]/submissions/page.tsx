@@ -48,16 +48,16 @@ export default function SubmissionsDashboard() {
   if (error) return <div className="p-8 text-red-400">Error: {error}</div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-gray-200 p-8">
+    <div className="min-h-screen bg-[#0a0a0f] text-[#E5E5E5] p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button onClick={() => router.push(`/classroom`)} className="p-2 bg-[#13141a] rounded hover:bg-[#1f212a] transition">
-              <ArrowLeft className="w-5 h-5 text-gray-400" />
+              <ArrowLeft className="w-5 h-5 text-[#737373]" />
             </button>
             <div>
               <h1 className="text-2xl font-bold text-white">Submissions Dashboard</h1>
-              <p className="text-sm text-gray-400">Review and grade all student submissions for this classroom</p>
+              <p className="text-sm text-[#737373]">Review and grade all student submissions for this classroom</p>
             </div>
           </div>
         </div>
@@ -86,7 +86,7 @@ export default function SubmissionsDashboard() {
 
         <div className="bg-[#13141a] border border-[#272a38] rounded-xl overflow-hidden">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#1a1c25] border-b border-[#272a38] text-gray-400 uppercase tracking-wider text-xs">
+            <thead className="bg-[#1a1c25] border-b border-[#272a38] text-[#737373] uppercase tracking-wider text-xs">
               <tr>
                 <th className="px-6 py-4">Student</th>
                 <th className="px-6 py-4">Assignment</th>
@@ -109,12 +109,12 @@ export default function SubmissionsDashboard() {
                   return (
                     <tr key={sub.id} className="hover:bg-[#181922] transition">
                       <td className="px-6 py-4 font-medium text-white">{sub.studentName}</td>
-                      <td className="px-6 py-4 text-gray-300">{sub.assignmentTitle}</td>
-                      <td className="px-6 py-4 text-gray-400 text-xs">
+                      <td className="px-6 py-4 text-[#A3A3A3]">{sub.assignmentTitle}</td>
+                      <td className="px-6 py-4 text-[#737373] text-xs">
                         {new Date(sub.submittedAt).toLocaleString()}
                         {sub.isLate && <span className="ml-2 text-red-400 bg-red-400/10 px-2 py-0.5 rounded text-[10px] uppercase font-bold">Late</span>}
                       </td>
-                      <td className="px-6 py-4 text-gray-400">V{sub.version}</td>
+                      <td className="px-6 py-4 text-[#737373]">V{sub.version}</td>
                       <td className="px-6 py-4 font-mono text-emerald-400 font-bold">{sub.score}</td>
                       <td className="px-6 py-4 font-mono font-bold text-white">
                         {sub.grade ? sub.grade.finalScore : '-'}

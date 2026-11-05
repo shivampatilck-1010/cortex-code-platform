@@ -16,13 +16,17 @@ export async function GET(
 ) {
   const { roomId } = await params;
   const normRoomId = roomId.toUpperCase().trim();
-  const room = ClassroomRoomManager.getRoom(normRoomId);
+  const room = ClassroomRoomManager.getRoom(normRoomId, true);
 
   if (!room) {
     return new Response(JSON.stringify({ error: 'Room not found' }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+  room.state = 'active';
+  if (room.admin) {
+    room.admin.enteredArena = true;
   }
 
   const url = new URL(req.url);
@@ -87,6 +91,21 @@ export async function GET(
           const msg = parseRealtimeMessage(raw);
           if (!msg) return;
 
+          if (msg.type === 'ping') {
+            try {
+              server.send(
+                serializeRealtimeMessage({
+                  type: 'pong',
+                  roomId: normRoomId,
+                  clientId: 'server',
+                  payload: { clientTimestamp: msg.payload?.clientTimestamp || Date.now() },
+                  timestamp: Date.now(),
+                })
+              );
+            } catch {}
+            return;
+          }
+
           if (msg.type === 'doc_sync_step1') {
             const docId = msg.documentId || 'default';
             const ydoc = getServerYDoc(normRoomId, docId, msg.payload?.initialContent);
@@ -140,6 +159,53 @@ export async function GET(
                 code: msg.payload.code,
                 language: msg.payload.language,
               });
+            }
+          }
+
+          // Persist collaboration requests in room state when received via WebSocket
+          if (msg.type === 'collaboration_request' && msg.payload) {
+            const req = msg.payload;
+            if (req.id && req.fromId && req.toId) {
+              const roomState = ClassroomRoomManager.getRoom(normRoomId, true);
+              if (roomState) {
+                if (!roomState.collaborationRequests) roomState.collaborationRequests = {};
+                roomState.collaborationRequests[req.id] = {
+                  id: req.id,
+                  fromId: req.fromId,
+                  fromName: req.fromName || msg.senderName || 'Unknown',
+                  toId: req.toId,
+                  toName: req.toName || '',
+                  status: 'pending',
+                  createdAt: req.requestedAt || Date.now(),
+                };
+              }
+            }
+          }
+
+          // Persist collaboration responses in room state
+          if (msg.type === 'collaboration_response' && msg.payload?.request) {
+            const resp = msg.payload.request;
+            const roomState = ClassroomRoomManager.getRoom(normRoomId, true);
+            if (roomState) {
+              // Update the request status
+              if (resp.id && roomState.collaborationRequests?.[resp.id]) {
+                roomState.collaborationRequests[resp.id].status = resp.status;
+              }
+              // If accepted, create a collaboration session
+              if (resp.status === 'accepted' && resp.fromId && resp.toId) {
+                if (!roomState.collaborationSessions) roomState.collaborationSessions = {};
+                const sessionId = 'session_' + Date.now();
+                roomState.collaborationSessions[sessionId] = {
+                  id: sessionId,
+                  participantIds: [resp.fromId, resp.toId],
+                  mode: 'shared',
+                  sharedDocId: `doc_${sessionId}`,
+                  sharedCode: '',
+                  createdAt: Date.now(),
+                  startedAt: Date.now(),
+                  lastSynced: Date.now(),
+                };
+              }
             }
           }
 

@@ -1,3 +1,4 @@
+import { classroomDb } from './lib/classroom/db';
 import { ClassroomRoomDO } from './lib/classroom/durable-object';
 import { ClassroomAuth, AuthenticatedClassroomUser } from './lib/classroom/auth';
 import { executeInCloudRunner } from './lib/execution/cloud-runner';
@@ -71,12 +72,11 @@ export default {
     // Production Cloudflare WebSocket Path:
     // Browser -> WSS -> Cloudflare Worker (Auth & Membership Verification) -> ClassroomRoomDO (Durable Object)
     const isWebSocket = request.headers.get('Upgrade') === 'websocket';
-    const isClassroomWs =
-      url.pathname.includes('/classrooms/') ||
-      url.pathname.includes('/classroom/') ||
-      url.pathname.endsWith('/ws');
+    const isEnterpriseClassroomWs =
+      url.pathname.endsWith('/ws') ||
+      (url.pathname.includes('/classrooms/') && !url.pathname.includes('/events'));
 
-    if (isWebSocket && isClassroomWs && env.CLASSROOM_ROOM_DO) {
+    if (isWebSocket && isEnterpriseClassroomWs && env.CLASSROOM_ROOM_DO) {
       // 1. Defend against spoofed internal headers from the browser
       const cleanHeaders = new Headers(request.headers);
       cleanHeaders.delete('x-cortex-internal-auth');
@@ -93,7 +93,16 @@ export default {
       classroomId = classroomId.toUpperCase().trim();
 
       // 3. Pre-upgrade Authentication: Authenticate user before WebSocket upgrade
-      const user = await ClassroomAuth.authenticateRequest(request);
+      let user = await ClassroomAuth.authenticateRequest(request);
+      if (!user) {
+        const token = url.searchParams.get('token') || url.searchParams.get('joinToken');
+        if (token) {
+          const verified = ClassroomAuth.verifyLiveSessionToken(token, { expectedClassroomId: classroomId });
+          if (verified) {
+            user = await classroomDb.getUser(verified.userId);
+          }
+        }
+      }
       if (!user) {
         console.warn(`[Security Alert] Rejected unauthenticated WebSocket connection attempt to classroom ${classroomId}`);
         return new Response(

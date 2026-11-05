@@ -25,6 +25,29 @@ interface SessionMeta {
  * Provides persistent event sequencing, duplicate-event deduplication,
  * real-time broadcast, presence management, and catch-up resynchronization.
  */
+const TEACHER_MODERATION_EVENTS = new Set([
+  'TEACHER_MUTE_ALL',
+  'TEACHER_STOP_ALL_CAMERAS',
+  'TEACHER_MUTE_STUDENT',
+  'TEACHER_REQUEST_CAMERA',
+  'TEACHER_REQUEST_UNMUTE',
+  'PERMISSIONS_UPDATED',
+  'media.mute',
+  'media.camera_off',
+  'media.request_unmute',
+  'media.request_camera',
+  'media.lock_mic',
+  'media.lock_camera',
+  'TEACHER_START_BROADCAST',
+  'TEACHER_PAUSE_BROADCAST',
+  'TEACHER_RESUME_BROADCAST',
+  'TEACHER_STOP_BROADCAST',
+  'TEACHER_CODE_BROADCAST',
+  'TEACHER_SHARE_OUTPUT',
+  'OBSERVE_STUDENT_SUBSCRIBE',
+  'OBSERVE_STUDENT_UNSUBSCRIBE',
+]);
+
 export class ClassroomRoomDO {
   state: any;
   env: any;
@@ -37,6 +60,12 @@ export class ClassroomRoomDO {
   private initialized: boolean = false;
   private latestTeacherCode: string | null = null;
   private latestTeacherOutput: any | null = null;
+  private broadcastState: 'stopped' | 'broadcasting' | 'paused' = 'stopped';
+  private publishedTeacherFiles: any[] = [];
+  private publishedActiveFileId: string = '';
+  private publishedOutput: any = null;
+  private observedSubscriptions: Map<string, string> = new Map();
+  private studentWorkspaces: Map<string, { files: any[]; activeFileId: string; timestamp: number }> = new Map();
 
   constructor(state: any, env: any) {
     this.state = state;
@@ -65,6 +94,18 @@ export class ClassroomRoomDO {
         if (typeof storedCode === 'string') this.latestTeacherCode = storedCode;
         const storedOutput = await this.state.storage.get('latestTeacherOutput');
         if (storedOutput !== undefined) this.latestTeacherOutput = storedOutput;
+        const storedBState = await this.state.storage.get('broadcastState');
+        if (typeof storedBState === 'string' && (storedBState === 'broadcasting' || storedBState === 'paused' || storedBState === 'stopped')) {
+          this.broadcastState = storedBState;
+        }
+        const storedPubFiles = await this.state.storage.get('publishedTeacherFiles');
+        if (Array.isArray(storedPubFiles)) {
+          this.publishedTeacherFiles = storedPubFiles;
+        }
+        const storedPubFileId = await this.state.storage.get('publishedActiveFileId');
+        if (typeof storedPubFileId === 'string') {
+          this.publishedActiveFileId = storedPubFileId;
+        }
       }
     } catch (e) {
       console.warn('[ClassroomRoomDO] Failed to restore state from storage', e);
@@ -94,9 +135,8 @@ export class ClassroomRoomDO {
   getYDoc(documentId: string, initialContent?: string): Y.Doc {
     if (!this.yDocs.has(documentId)) {
       const ydoc = new Y.Doc();
-      const ytext = ydoc.getText('monaco');
       if (initialContent) {
-        ytext.insert(0, initialContent);
+        ydoc.getText('monaco').insert(0, initialContent);
       }
       this.yDocs.set(documentId, ydoc);
     }
@@ -104,6 +144,7 @@ export class ClassroomRoomDO {
   }
 
   async fetch(request: Request): Promise<Response> {
+    if (this.env) { (globalThis as any).env = this.env; }
     await this.ensureInitialized();
     const upgradeHeader = request.headers.get('Upgrade');
 
@@ -167,8 +208,8 @@ export class ClassroomRoomDO {
 
       const sessionMeta: SessionMeta = {
         auth,
-        participantId: auth.userId,
-        name: auth.displayName,
+        participantId: auth.userId || (auth as any).id,
+        name: auth.displayName || (auth as any).name,
         role: auth.role, // Derived authoritatively from server membership
         authenticated: true,
         lastActive: Date.now(),
@@ -201,6 +242,25 @@ export class ClassroomRoomDO {
           timestamp: Date.now(),
         })
       );
+
+      // Emit SERVER_HELLO for Live Class protocol clients
+      try {
+        server.send(
+          JSON.stringify({
+            version: '1.0',
+            messageId: 'hello-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+            type: 'SERVER_HELLO',
+            sessionId: classroomId,
+            timestamp: Date.now(),
+            payload: {
+              serverVersion: '1.0',
+              protocol: '1.0',
+              connectionId: 'conn_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8),
+              serverTime: Date.now(),
+            },
+          })
+        );
+      } catch (_) {}
 
       // Broadcast student.joined event
       const joinSeq = this.getNextSequence();
@@ -243,14 +303,14 @@ export class ClassroomRoomDO {
             return;
           }
 
-          // Rate limit: max 100 events per 10s window
+          // Rate limit: max 5000 events per 10s window (Increased heavily for Yjs typing)
           const now = Date.now();
           if (now - sessionMeta.eventRateWindowStart > 10_000) {
             sessionMeta.eventRateWindowStart = now;
             sessionMeta.eventRateCount = 0;
           }
           sessionMeta.eventRateCount++;
-          if (sessionMeta.eventRateCount > 100) {
+          if (sessionMeta.eventRateCount > 5000) {
             console.warn(`[Security Alert] Rate limit exceeded by user ${sessionMeta.participantId}`);
             server.send(
               serializeRealtimeMessage({
@@ -263,6 +323,18 @@ export class ClassroomRoomDO {
                 timestamp: Date.now(),
               })
             );
+            return;
+          }
+
+          // Live Class Protocol 1.0 Interceptor
+          let parsedLiveMsg: any = null;
+          try {
+            parsedLiveMsg = JSON.parse(raw);
+          } catch (_) {}
+
+          if (parsedLiveMsg && (parsedLiveMsg.version === '1.0' || parsedLiveMsg.type === 'JOIN_CLASSROOM' || parsedLiveMsg.type === 'PING' || parsedLiveMsg.type === 'CLASSROOM_EVENT')) {
+            sessionMeta.lastActive = Date.now();
+            await this.handleLiveClassProtocol(server, sessionMeta, parsedLiveMsg);
             return;
           }
 
@@ -309,6 +381,22 @@ export class ClassroomRoomDO {
 
         this.recordAndStoreEvent(leaveEvent);
         this.broadcastEvent(leaveEvent);
+
+        // Broadcast PARTICIPANT_LEFT for Live Class protocol clients
+        try {
+          const leaveMsg = JSON.stringify({
+            version: '1.0',
+            messageId: 'leave-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+            type: 'PARTICIPANT_LEFT',
+            sessionId: classroomId,
+            timestamp: Date.now(),
+            payload: {
+              participantId: sessionMeta.participantId,
+              name: sessionMeta.name,
+            },
+          });
+          this.broadcastRaw(leaveMsg);
+        } catch (_) {}
         
         if (this.sessions.size === 0) {
           this.flushToD1(classroomId).catch(err => {
@@ -369,6 +457,147 @@ export class ClassroomRoomDO {
       }),
       { headers: { 'Content-Type': 'application/json' } }
     );
+  }
+
+  async handleLiveClassProtocol(senderWs: any, meta: SessionMeta, msg: any) {
+    const { type, sessionId, payload } = msg;
+    const targetSessionId = sessionId || meta.auth.classroomId;
+
+    switch (type) {
+      case 'PING': {
+        senderWs.send(
+          JSON.stringify({
+            version: '1.0',
+            messageId: 'pong-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+            type: 'PONG',
+            sessionId: targetSessionId,
+            timestamp: Date.now(),
+            payload: { echo: payload?.echo || Date.now() },
+          })
+        );
+        return;
+      }
+
+      case 'JOIN_CLASSROOM': {
+        const participantId = meta.auth?.userId || (meta.auth as any)?.id || meta.participantId;
+        const finalName = (payload?.participantName && typeof payload.participantName === 'string' && payload.participantName.trim())
+          ? payload.participantName.trim().slice(0, 50)
+          : meta.name || 'Participant';
+
+        meta.participantId = participantId;
+        meta.name = finalName;
+
+        const activeParticipants = Array.from(this.sessions.values()).map((s) => ({
+          id: s.participantId,
+          name: s.name,
+          role: s.role,
+          connectedAt: s.lastActive,
+        }));
+
+        senderWs.send(
+          JSON.stringify({
+            version: '1.0',
+            messageId: 'acc-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+            type: 'JOIN_ACCEPTED',
+            sessionId: targetSessionId,
+            timestamp: Date.now(),
+            payload: {
+              assignedParticipantId: participantId,
+              assignedRole: meta.role,
+              sessionId: targetSessionId,
+              activeParticipants,
+            },
+          })
+        );
+
+        // Immediate broadcast state alignment for joining participant
+        senderWs.send(
+          JSON.stringify({
+            version: '1.0',
+            messageId: 'bcast-init-' + Date.now(),
+            type: 'CLASSROOM_EVENT',
+            sessionId: targetSessionId,
+            timestamp: Date.now(),
+            payload: {
+              eventName: 'BROADCAST_STATE_CHANGED',
+              data: {
+                state: this.broadcastState,
+                files: (this.broadcastState === 'broadcasting' || this.broadcastState === 'paused') ? this.publishedTeacherFiles : [],
+                activeFileId: (this.broadcastState === 'broadcasting' || this.broadcastState === 'paused') ? this.publishedActiveFileId : '',
+              },
+            },
+          })
+        );
+
+        const joinNotice = JSON.stringify({
+          version: '1.0',
+          messageId: 'join-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+          type: 'PARTICIPANT_JOINED',
+          sessionId: targetSessionId,
+          timestamp: Date.now(),
+          payload: {
+            participant: {
+              id: participantId,
+              name: finalName,
+              role: meta.role,
+            },
+          },
+        });
+        this.broadcastRaw(joinNotice, senderWs);
+        return;
+      }
+
+      case 'CLASSROOM_EVENT': {
+        const eventName = payload?.eventName;
+        const requiresTeacher = Boolean(payload?.requiresTeacher);
+        const isModerationEvent = requiresTeacher || (typeof eventName === 'string' && TEACHER_MODERATION_EVENTS.has(eventName));
+
+        if (isModerationEvent) {
+          const isInstructor = meta.role === 'teacher' || meta.role === 'admin';
+          if (!isInstructor) {
+            senderWs.send(
+              JSON.stringify({
+                version: '1.0',
+                messageId: 'err-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+                type: 'PROTOCOL_ERROR',
+                sessionId: targetSessionId,
+                timestamp: Date.now(),
+                payload: {
+                  code: 'FORBIDDEN_EVENT',
+                  message: 'Unauthorized: Only instructors are permitted to emit moderation event: ' + eventName,
+                },
+              })
+            );
+            return;
+          }
+        }
+
+        if (payload && typeof payload === 'object') {
+          if (payload.data && typeof payload.data === 'object') {
+            payload.data.senderId = meta.participantId;
+            payload.data.actorId = meta.participantId;
+            payload.data.senderRole = meta.role;
+          }
+          payload.senderId = meta.participantId;
+        }
+
+        const broadcastEnvelope = JSON.stringify({
+          version: '1.0',
+          messageId: 'evt-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+          type: 'CLASSROOM_EVENT',
+          sessionId: targetSessionId,
+          timestamp: Date.now(),
+          payload,
+        });
+
+        this.broadcastRaw(broadcastEnvelope, senderWs);
+        return;
+      }
+
+      default:
+        this.broadcastRaw(JSON.stringify(msg), senderWs);
+        return;
+    }
   }
 
   async handleMessage(senderWs: any, meta: SessionMeta, msg: RealtimeMessage) {

@@ -1,0 +1,51 @@
+{
+  "productName": "Cortex Lockdown",
+  "version": "1.0.0-rc1.2",
+  "milestone": "Production Release Gate / Staging Pilot",
+  "releaseDate": "2026-11-03",
+  "budgetExpenditure": "INR 0",
+  "targetPlatform": {
+    "os": "Windows 10 / Windows 11",
+    "architecture": "x64",
+    "minBuild": "17763 (Version 1809)",
+    "runtimes": [
+      "Microsoft.NET Framework 4.8+",
+      "Microsoft Edge WebView2 Evergreen Runtime"
+    ]
+  },
+  "artifacts": [
+    {
+      "name": "Portable Distribution Archive",
+      "filename": "CortexLockdown-Windows-x64.zip",
+      "sizeBytes": 18700,
+      "sha256": "08BD0C5AAC9C5E7466D09A11A7E1A70F4203E131097F4C843C71231772CA6B30",
+      "classification": "Production Pilot Qualified",
+      "description": "Complete portable ZIP archive containing hardened client binary, protocol installer, and uninstaller."
+    },
+    {
+      "name": "Hardened Windows Executable",
+      "filename": "CortexLockdown-Hardened.exe",
+      "sizeBytes": 35840,
+      "sha256": "82518B2D6966E3FB358892A040F148E52AA5ECDF8CAB92E0D93A2A22F3AFC895",
+      "classification": "Production Pilot Qualified",
+      "description": "Standalone compiled Win32 PE32+ application with embedded manifest and assembly metadata."
+    }
+  ],
+  "securityMetadata": {
+    "codeSigningStatus": "Unsigned (Zero Budget Constraint)",
+    "smartScreenBehavior": "Triggers unrecognized application warning on unmanaged personal PCs.",
+    "deploymentProtocol": "Campus IT pre-authorization via WDAC or AppLocker SHA-256 hash rule.",
+    "userInstructions": "Campus IT policies strictly prohibit instructing students or faculty to click 'Run Anyway'.",
+    "emergencyExitHotkey": "Ctrl+Alt+F10 (VK_F10 = 0x79 with server-side 6-digit challenge code)"
+  },
+  "domainDecisions": {
+    "controlledDemonstration": "GO",
+    "facultyEvaluation": "GO",
+    "managedStagingPilot": "GO (Conditional upon written IT pre-authorization)",
+    "publicWindowsDownload": "NOT RECOMMENDED (Unsigned binary, SmartScreen warnings)",
+    "highStakesExam": "REJECTED (Requires kernel-mode driver, lack of Ctrl+Alt+Del interception)",
+    "publicByod": "REJECTED (Untrusted student OS, virtualization, HDMI taps)",
+    "samlFederation": "BLOCKED (Non-W3C Exclusive C14N XML canonicalizer)",
+    "macos": "BLOCKED (Win32 specific subsystems; non-goal)"
+  }
+}

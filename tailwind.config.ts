@@ -15,7 +15,30 @@ const config: Config = {
         mono: ["JetBrains Mono", "Consolas", "Monaco", "monospace"],
       },
       colors: {
-        border: "hsl(var(--border))",
+        border: {
+          subtle: "#20222A",
+          DEFAULT: "hsl(var(--border))",
+          focus: "#3F4457",
+        },
+        bg: {
+          main: "#0B0C0E",
+          surface: "#111216",
+          secondary: "#15161C",
+          tertiary: "#1A1C24",
+        },
+        accent: {
+          primary: "#FF9100",
+          whiteboard: "#06B6D4",
+          workspace: "#A855F7",
+          success: "#10B981",
+          danger: "#F43F5E",
+          warning: "#F59E0B",
+        },
+        text: {
+          main: "#F5F5F5",
+          secondary: "#A1A1AA",
+          muted: "#71717A",
+        },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         cortex: {
@@ -33,6 +56,12 @@ const config: Config = {
           border: "#2b2a29",
           gutter: "#858585"
         }
+      },
+      boxShadow: {
+        panel: "0 4px 20px -2px rgba(0, 0, 0, 0.5)",
+        elevated: "0 8px 30px -4px rgba(0, 0, 0, 0.65)",
+        "glow-primary": "0 0 20px -5px rgba(255, 145, 0, 0.3)",
+        "glow-cyan": "0 0 20px -5px rgba(6, 182, 212, 0.3)",
       },
     },
   },

@@ -59,16 +59,16 @@ export default function GradebookPage() {
   if (error || !data) return <div className="p-8 text-red-400">Error: {error}</div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-gray-200 p-8">
+    <div className="min-h-screen bg-[#0a0a0f] text-[#E5E5E5] p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button onClick={() => router.push(`/classroom`)} className="p-2 bg-[#13141a] rounded hover:bg-[#1f212a] transition">
-              <ArrowLeft className="w-5 h-5 text-gray-400" />
+              <ArrowLeft className="w-5 h-5 text-[#737373]" />
             </button>
             <div>
               <h1 className="text-2xl font-bold text-white">Classroom Gradebook</h1>
-              <p className="text-sm text-gray-400">Overview of student performance</p>
+              <p className="text-sm text-[#737373]">Overview of student performance</p>
             </div>
           </div>
           
@@ -83,12 +83,12 @@ export default function GradebookPage() {
 
         <div className="bg-[#13141a] border border-[#272a38] rounded-xl overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-[#1a1c25] border-b border-[#272a38] text-gray-400 uppercase tracking-wider text-[11px]">
+            <thead className="bg-[#1a1c25] border-b border-[#272a38] text-[#737373] uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="px-6 py-4 sticky left-0 bg-[#1a1c25] z-10 border-r border-[#272a38]">Student</th>
                 {data.assignments.map(a => (
                   <th key={a.id} className="px-6 py-4">
-                    <div className="font-bold text-gray-300">{a.title}</div>
+                    <div className="font-bold text-[#A3A3A3]">{a.title}</div>
                     <div className="text-gray-500 font-normal">Max: {a.maxMarks}</div>
                   </th>
                 ))}

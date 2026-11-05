@@ -190,7 +190,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Orbitron:ital,wght@0,700;0,900;1,800;1,900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
         {/* Cortex Favicon */}
@@ -204,7 +204,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="bg-[#0b0c0e] text-[#e6edf3] font-sans antialiased overflow-hidden selection:bg-[#ff9100]/30 selection:text-[#ff9100]">
+      <body className="bg-[#0b0c0e] text-[#e6edf3] font-sans antialiased selection:bg-[#ff9100]/30 selection:text-[#ff9100]">
         {children}
       </body>
     </html>

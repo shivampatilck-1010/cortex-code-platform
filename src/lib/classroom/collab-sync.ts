@@ -136,7 +136,7 @@ export class CollaborationClient {
           try { this.ws?.close(); } catch {}
           this.fallbackToSSE();
         }
-      }, 3000);
+      }, 6000);
 
       this.ws.onopen = () => {
         clearTimeout(connectTimeout);
@@ -209,6 +209,10 @@ export class CollaborationClient {
       this.sse.onerror = () => {
         if (!this.isDestroyed) {
           this.setLifecycle('reconnecting');
+          // Close broken SSE and attempt full reconnection after backoff
+          try { this.sse?.close(); } catch {}
+          this.sse = null;
+          this.scheduleReconnect();
         }
       };
     } catch (e) {
@@ -345,6 +349,17 @@ export class CollaborationClient {
     if (this.isDestroyed || this.reconnectTimer) return;
 
     this.reconnectAttempts++;
+
+    // After 8 failed reconnection attempts, settle on SSE long-polling permanently
+    // to avoid infinite reconnect loops that waste bandwidth and CPU
+    if (this.reconnectAttempts > 8) {
+      console.warn('[CollabClient] Max reconnect attempts reached, settling on SSE');
+      if (!this.sse) {
+        this.fallbackToSSE();
+      }
+      return;
+    }
+
     // Exponential backoff with random jitter: min(1000 * 2^attempts, 16000) + random(500)
     const baseDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 16000);
     const jitter = Math.floor(Math.random() * 500);
@@ -371,7 +386,7 @@ export class CollaborationClient {
           timestamp: this.lastPingSent,
         });
       }
-    }, 15000);
+    }, 25000);
   }
 
   private setLifecycle(newLifecycle: ConnectionLifecycle) {
@@ -461,7 +476,19 @@ export class CollaborationClient {
       case 'doc_sync_step2':
       case 'doc_update': {
         const docId = msg.documentId || 'default';
-        const ydoc = this.ydocs.get(docId);
+        let ydoc = this.ydocs.get(docId);
+
+        // AUTO-CREATE doc if we receive an update for an unknown docId.
+        // This fixes Workspace B not receiving remote typing when the slot
+        // is assigned after the editor already mounted.
+        if (!ydoc && msg.payload?.update) {
+          const newDoc = new Y.Doc();
+          const newAwareness = new Awareness(newDoc);
+          this.ydocs.set(docId, newDoc);
+          this.awarenessMap.set(docId, newAwareness);
+          ydoc = newDoc;
+        }
+
         if (ydoc && msg.payload?.update) {
           try {
             const binary = base64ToUint8Array(msg.payload.update);
@@ -524,13 +551,6 @@ export class CollaborationClient {
       const ydoc = new Y.Doc();
       const ytext = ydoc.getText('monaco');
       const awareness = new Awareness(ydoc);
-
-      // Seed initial content if brand new
-      if (ytext.length === 0 && initialContent) {
-        ydoc.transact(() => {
-          ytext.insert(0, initialContent);
-        }, 'init');
-      }
 
       // 1. Broadcast local Yjs CRDT changes asynchronously
       ydoc.on('update', (update: Uint8Array, origin: any) => {
@@ -672,7 +692,7 @@ export class CollaborationClient {
       column,
     };
 
-    if (now - this.lastCursorSentTime >= 25) {
+    if (now - this.lastCursorSentTime >= 150) {
       this.lastCursorSentTime = now;
       this.sendRaw({
         type: 'cursor_update',
@@ -701,7 +721,7 @@ export class CollaborationClient {
             });
             this.pendingCursorUpdate = null;
           }
-        }, 25);
+        }, 150);
       }
     }
   }
@@ -773,11 +793,11 @@ export class CollaborationClient {
 
   public async sendEvent(event: Partial<ClassroomEventMessage>) {
     await this.sendRaw({
-      type: (event.type || 'presence') as any,
+      type: 'event',
       roomId: this.roomId,
       clientId: this.participantId,
       senderName: this.participantName,
-      payload: event.payload,
+      payload: { event },
       timestamp: Date.now(),
     });
   }

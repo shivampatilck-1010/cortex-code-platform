@@ -1,0 +1,7 @@
+# CORTEX LOCKDOWN PRODUCTION RELEASE CANDIDATE (RC1.2)
+# Authoritative Cryptographic Checksum Register (SHA-256)
+# Target: Windows 10 & 11 (x64) Institutional Baseline
+# Strictly Zero Emojis Enforced. Additional Budget: INR 0.
+
+08BD0C5AAC9C5E7466D09A11A7E1A70F4203E131097F4C843C71231772CA6B30 *CortexLockdown-Windows-x64.zip
+82518B2D6966E3FB358892A040F148E52AA5ECDF8CAB92E0D93A2A22F3AFC895 *CortexLockdown-Hardened.exe

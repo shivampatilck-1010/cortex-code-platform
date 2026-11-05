@@ -125,11 +125,12 @@ export const CompilerClientView: React.FC<CompilerClientViewProps> = ({
           {/* Split View: Editor and Output */}
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
             {/* Monaco Editor Pane */}
-            <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-[#1f2024]">
+            <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-[#1f2024] select-text" style={{ userSelect: 'text' }}>
               <Editor
+                key={langConfig.id}
                 height="100%"
                 language={langConfig.monacoLang}
-                value={code}
+                defaultValue={code}
                 theme="vs-dark"
                 onChange={(val) => setCode(val || '')}
                 options={{
@@ -138,6 +139,18 @@ export const CompilerClientView: React.FC<CompilerClientViewProps> = ({
                   automaticLayout: true,
                   lineNumbers: 'on',
                   scrollBeyondLastLine: false,
+                  selectOnLineNumbers: true,
+                  dragAndDrop: true,
+                  contextmenu: true,
+                  multiCursorModifier: 'alt',
+                  copyWithSyntaxHighlighting: true,
+                  emptySelectionClipboard: false,
+                  selectionHighlight: true,
+                  autoClosingBrackets: 'always',
+                  autoClosingQuotes: 'always',
+                  autoSurround: 'languageDefined',
+                  formatOnPaste: false,
+                  formatOnType: false,
                   fontFamily: "'JetBrains Mono', 'Consolas', monospace",
                 }}
               />

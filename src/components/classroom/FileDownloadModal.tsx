@@ -26,10 +26,10 @@ export const FileDownloadModal: React.FC<FileDownloadModalProps> = ({
           <h3 className="font-heading font-bold text-base text-white">
             File Download Request
           </h3>
-          <p className="text-xs text-gray-300 leading-relaxed">
+          <p className="text-xs text-[#A3A3A3] leading-relaxed">
             <strong className="text-cyan-400 font-semibold">{request.requesterName}</strong> wants to download your file:
           </p>
-          <div className="bg-[#191b24] border border-[#2b2d3d] rounded-lg px-3 py-2 text-xs font-mono text-gray-200 flex items-center justify-center space-x-2">
+          <div className="bg-[#191b24] border border-[#2b2d3d] rounded-lg px-3 py-2 text-xs font-mono text-[#E5E5E5] flex items-center justify-center space-x-2">
             <FileCode className="w-4 h-4 text-cyan-400 flex-shrink-0" />
             <span className="truncate">{request.fileName}</span>
           </div>
@@ -39,7 +39,7 @@ export const FileDownloadModal: React.FC<FileDownloadModalProps> = ({
           <button
             type="button"
             onClick={() => onRespond(request.id, 'denied')}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-[#1e202c] hover:bg-[#282a3c] text-gray-300 text-xs font-semibold transition"
+            className="flex-1 py-2.5 px-4 rounded-xl bg-[#111111] hover:bg-[#282a3c] text-[#A3A3A3] text-xs font-semibold transition"
           >
             Decline
           </button>

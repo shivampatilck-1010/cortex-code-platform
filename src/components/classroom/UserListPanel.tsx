@@ -69,13 +69,13 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
   );
 
   return (
-    <div className="h-full flex flex-col bg-[#111216] border-r border-[#1f2026] text-gray-200 select-none">
+    <div className="h-full flex flex-col bg-[#111216] border-r border-[#1f2026] text-[#E5E5E5] select-none">
       {/* 1. Header & Live Stats */}
       <div className="p-3 border-b border-[#1f2026] space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Users className="w-4 h-4 text-[#ff9100]" />
-            <span className="font-heading font-bold text-xs tracking-wider uppercase text-gray-200">
+            <span className="font-heading font-bold text-xs tracking-wider uppercase text-[#E5E5E5]">
               Classroom Users
             </span>
           </div>
@@ -92,13 +92,13 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
             placeholder="Search users or language..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-[#16171d] text-xs text-gray-200 placeholder-gray-500 border border-[#262832] rounded-md focus:outline-none focus:border-[#ff9100] transition"
+            className="w-full pl-8 pr-3 py-1.5 bg-[#16171d] text-xs text-[#E5E5E5] placeholder-gray-500 border border-[#262832] rounded-md focus:outline-none focus:border-[#ff9100] transition"
           />
         </div>
 
         {/* Mini stats */}
-        <div className="flex items-center justify-between text-[10px] text-gray-400 px-1">
-          <span>Active coding: <strong className="text-gray-200">{codingCount}</strong></span>
+        <div className="flex items-center justify-between text-[10px] text-[#737373] px-1">
+          <span>Active coding: <strong className="text-[#E5E5E5]">{codingCount}</strong></span>
           {onOpenPrivacyModal && (
             <button
               onClick={onOpenPrivacyModal}
@@ -141,17 +141,16 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                     {/* Presence Dot */}
                     <span
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        user.online
-                          ? user.status === 'coding'
+                        (user.online || isSelf) ? user.status === 'coding'
                             ? 'bg-emerald-400 animate-pulse'
                             : 'bg-emerald-400'
                           : 'bg-gray-600'
                       }`}
-                      title={user.online ? `Online (${user.status})` : 'Offline'}
+                      title={(user.online || isSelf) ? `Online (${isSelf && (!user.status || user.status === "offline") ? "active" : (user.status || "active")})` : "Offline"}
                     />
 
                     {/* Name */}
-                    <span className="font-heading font-semibold text-xs text-gray-200 truncate">
+                    <span className="font-heading font-semibold text-xs text-[#E5E5E5] truncate">
                       {user.name}
                     </span>
 
@@ -163,7 +162,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                       </span>
                     )}
                     {isSelf && (
-                      <span className="text-[9.5px] text-gray-400 font-mono">
+                      <span className="text-[9.5px] text-[#737373] font-mono">
                         (You)
                       </span>
                     )}
@@ -185,12 +184,12 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                 </div>
 
                 {/* Sub-info: Language & Active file */}
-                <div className="flex items-center justify-between text-[10.5px] text-gray-400">
-                  <span className="font-mono text-gray-300 capitalize">
+                <div className="flex items-center justify-between text-[10.5px] text-[#737373]">
+                  <span className="font-mono text-[#A3A3A3] capitalize">
                     {user.currentLanguage || 'python'} • {user.activeFileName || 'main.py'}
                   </span>
                   <span className="capitalize text-[10px] text-gray-500">
-                    {user.online ? user.status : 'offline'}
+                    {isSelf ? (user.status === "offline" ? "active" : (user.status || "active")) : (user.online ? user.status : "offline")}
                   </span>
                 </div>
 
@@ -203,7 +202,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                       className={`px-2 py-0.5 rounded text-[10.5px] font-medium transition ${
                         isSlotA
                           ? 'bg-cyan-600 text-white font-bold'
-                          : 'bg-[#20222b] hover:bg-[#282a36] text-gray-300'
+                          : 'bg-[#20222b] hover:bg-[#282a36] text-[#A3A3A3]'
                       }`}
                       title="Display in Workspace A"
                     >
@@ -214,7 +213,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                       className={`px-2 py-0.5 rounded text-[10.5px] font-medium transition ${
                         isSlotB
                           ? 'bg-purple-600 text-white font-bold'
-                          : 'bg-[#20222b] hover:bg-[#282a36] text-gray-300'
+                          : 'bg-[#20222b] hover:bg-[#282a36] text-[#A3A3A3]'
                       }`}
                       title="Display in Workspace B"
                     >
@@ -227,7 +226,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                     {!isSelf && (
                       <button
                         onClick={() => onRequestCollaboration(user.id)}
-                        className="p-1 rounded bg-[#20222b] hover:bg-[#ff9100]/20 hover:text-[#ff9100] text-gray-300 transition"
+                        className="p-1 rounded bg-[#20222b] hover:bg-[#ff9100]/20 hover:text-[#ff9100] text-[#A3A3A3] transition"
                         title={`Request mutual collaboration with ${user.name}`}
                       >
                         <Handshake className="w-3.5 h-3.5" />
@@ -237,7 +236,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                     {!isSelf && user.files && user.files.length > 0 && (
                       <button
                         onClick={() => onRequestFileDownload(user.id, user.files[0].id)}
-                        className="p-1 rounded bg-[#20222b] hover:bg-cyan-500/20 hover:text-cyan-300 text-gray-300 transition"
+                        className="p-1 rounded bg-[#20222b] hover:bg-cyan-500/20 hover:text-cyan-300 text-[#A3A3A3] transition"
                         title={`Request download of ${user.files[0].name}`}
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -257,7 +256,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                           className={`p-1 rounded transition ${
                             user.isLocked
                               ? 'bg-amber-900/40 text-amber-300'
-                              : 'bg-[#20222b] hover:bg-amber-500/20 text-gray-400'
+                              : 'bg-[#20222b] hover:bg-amber-500/20 text-[#737373]'
                           }`}
                           title={user.isLocked ? 'Unlock Workspace' : 'Lock Workspace'}
                         >
@@ -271,7 +270,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                               targetUserId: user.id,
                             })
                           }
-                          className="p-1 rounded bg-[#20222b] hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 transition"
+                          className="p-1 rounded bg-[#20222b] hover:bg-rose-500/20 text-[#737373] hover:text-rose-300 transition"
                           title="Reset Workspace"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
@@ -279,7 +278,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
 
                         <button
                           onClick={() => setConfirmRemoveId(user.id)}
-                          className="p-1 rounded bg-[#20222b] hover:bg-rose-900/60 text-gray-400 hover:text-rose-400 transition"
+                          className="p-1 rounded bg-[#20222b] hover:bg-rose-900/60 text-[#737373] hover:text-rose-400 transition"
                           title="Remove user from classroom"
                         >
                           <UserMinus className="w-3.5 h-3.5" />
@@ -296,7 +295,7 @@ export const UserListPanel: React.FC<UserListPanelProps> = ({
                     <div className="flex justify-end space-x-2">
                       <button
                         onClick={() => setConfirmRemoveId(null)}
-                        className="px-2 py-0.5 rounded bg-gray-800 text-gray-300 text-[10px]"
+                        className="px-2 py-0.5 rounded bg-gray-800 text-[#A3A3A3] text-[10px]"
                       >
                         Cancel
                       </button>

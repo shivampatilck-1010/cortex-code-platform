@@ -91,6 +91,58 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   
 
   const activeFile = files.find((f) => f.id === activeFileId) || files[0];
+  const snippetsRegisteredRef = useRef(false);
+  const lastReportedValueRef = useRef<string>(activeFile?.content || '');
+  const pendingReportedValuesRef = useRef<Set<string>>(new Set());
+  const prevFileIdRef = useRef(activeFileId);
+
+  // Sync external file content / file switches without fighting user keystrokes
+  useEffect(() => {
+    if (!editorRef.current) return;
+    const currentVal = editorRef.current.getValue();
+    
+    // File switch: always sync
+    if (prevFileIdRef.current !== activeFileId) {
+      prevFileIdRef.current = activeFileId;
+      lastReportedValueRef.current = activeFile?.content || '';
+      pendingReportedValuesRef.current.clear();
+      if (activeFile && currentVal !== activeFile.content) {
+        editorRef.current.setValue(activeFile.content || '');
+      }
+      return;
+    }
+    
+    // External update (starter code loaded, AI fix applied, etc.)
+    // Only apply if it wasn't typed by the user directly in this editor
+    if (
+      activeFile && 
+      activeFile.content !== currentVal && 
+      activeFile.content !== lastReportedValueRef.current &&
+      !pendingReportedValuesRef.current.has(activeFile.content)
+    ) {
+      lastReportedValueRef.current = activeFile.content;
+      pendingReportedValuesRef.current.clear();
+      const prevSelection = editorRef.current.getSelection();
+      const model = editorRef.current.getModel();
+            if (model) {
+        editorRef.current.executeEdits('external', [{
+          range: model.getFullModelRange(),
+          text: activeFile.content,
+          forceMoveMarkers: true,
+        }]);
+        if (prevSelection) {
+          editorRef.current.setSelection(prevSelection);
+        }
+      } else {
+        editorRef.current.setValue(activeFile.content);
+        if (prevSelection) {
+          editorRef.current.setSelection(prevSelection);
+        }
+      }
+    } else if (activeFile && pendingReportedValuesRef.current.has(activeFile.content)) {
+      pendingReportedValuesRef.current.delete(activeFile.content);
+    }
+  }, [activeFileId, activeFile?.content]);
 
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -147,8 +199,11 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
     monaco.editor.setTheme(theme);
 
-    // Register standard VS Code Snippets & IntelliSense across all languages
-    registerMonacoSnippets(monaco);
+    // Register standard VS Code Snippets & IntelliSense across all languages once
+    if (!snippetsRegisteredRef.current) {
+      registerMonacoSnippets(monaco);
+      snippetsRegisteredRef.current = true;
+    }
 
     // Register Inline Completions Provider for Ghost Text (Copilot-style)
     if (!inlineProviderDisposableRef.current && monaco.languages.registerInlineCompletionsProvider) {
@@ -355,11 +410,11 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   }, [breakpoints, activeLine, diagnostics]);
 
   return (
-    <div className={`flex flex-col h-full bg-[#0b0c0e] border-r border-[#1f2024] select-none ${
+    <div className={`flex flex-col h-full bg-[#0b0c0e] border-r border-[#1f2024] ${
       isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : ''
     }`}>
       {/* File Tabs Bar */}
-      <div className="h-9 bg-[#101114] flex items-center justify-between border-b border-[#1f2024] text-xs">
+      <div className="h-9 bg-[#101114] flex items-center justify-between border-b border-[#1f2024] text-xs select-none">
         <div className="flex items-center overflow-x-auto h-full">
           {files
             .filter((f) => !f.isFolder)
@@ -475,7 +530,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       </div>
 
       {/* Editor Body */}
-      <div className={`flex-1 relative transition-colors ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#ffffff]'}`}>
+      <div className={`flex-1 relative select-text transition-colors ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#ffffff]'}`}>
         {/* Copilot-Style Inline Quick-Fix Widget */}
         {isQuickFixOpen && (
           <InlineQuickFixWidget
@@ -496,9 +551,19 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         <Editor
           height="100%"
           language={language}
-          value={activeFile?.content || ''}
+          path={activeFile?.id}
+          defaultValue={activeFile?.content || ''}
           theme={theme}
-          onChange={(value) => onContentChange(value || '')}
+                    onChange={(value) => {
+            const nextVal = value || '';
+            lastReportedValueRef.current = nextVal;
+            pendingReportedValuesRef.current.add(nextVal);
+            if (pendingReportedValuesRef.current.size > 100) {
+              const first = pendingReportedValuesRef.current.values().next().value;
+              if (first !== undefined) pendingReportedValuesRef.current.delete(first);
+            }
+            onContentChange(nextVal);
+          }}
           onMount={handleEditorMount}
           options={{
             fontFamily: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
@@ -510,12 +575,23 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             scrollBeyondLastLine: false,
             smoothScrolling: true,
             automaticLayout: true,
-            formatOnPaste: true,
-            formatOnType: true,
+            formatOnPaste: false,
+            formatOnType: false,
             tabSize: 4,
             cursorBlinking: 'smooth',
             lineNumbersMinChars: 3,
             renderLineHighlight: 'all',
+            selectOnLineNumbers: true,
+            contextmenu: true,
+            dragAndDrop: true,
+            multiCursorModifier: 'alt',
+            copyWithSyntaxHighlighting: true,
+            emptySelectionClipboard: false,
+            selectionHighlight: true,
+            autoClosingBrackets: 'always',
+            autoClosingQuotes: 'always',
+            autoSurround: 'languageDefined',
+            bracketPairColorization: { enabled: true },
             inlineSuggest: {
               enabled: Boolean(enableInlineSuggestions),
               mode: 'subwordSmart',

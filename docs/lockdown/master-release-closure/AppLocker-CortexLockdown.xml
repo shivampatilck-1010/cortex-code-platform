@@ -1,0 +1,76 @@
+<AppLockerPolicy Version="1">
+  <!--
+    ================================================================================
+    CORTEX LOCKDOWN — MASTER INSTITUTIONAL APPLOCKER POLICY TEMPLATE
+    Programme: Cortex Lockdown v1.0
+    Baseline: v1.0.0-rc3 (Master Programme Complete)
+    Target Environment: Windows 10 & 11 Enterprise / Education (64-bit)
+    
+    Hash Rule Target:
+      Binary: CortexLockdown.exe
+      Size: 33,280 bytes
+      SHA-256: 68C13F5BB3409F8A7524C1FB5BA9E504A5ADDA88FAEAB09813CC9C0F292CF466
+      
+    Dependency Allowance:
+      Microsoft Edge WebView2 Evergreen Runtime (msedgewebview2.exe)
+      
+    AppLocker vs WDAC Architecture Notice:
+      - AppLocker operates via the Application Identity Service (AppIDSvc) and kernel
+        driver (appid.sys). It is enforceable on Windows Enterprise and Education editions.
+      - Windows Defender Application Control (WDAC) operates inside the hypervisor (HVCI)
+        providing kernel-level integrity against local administrator compromise.
+      - For managed computer labs with standard non-admin student profiles, AppLocker
+        hash allowlisting provides immediate, robust operational containment.
+    ================================================================================
+  -->
+  <RuleCollection Type="Exe" EnforcementMode="Enabled">
+    <!-- Default Rule 1: Allow local Administrators group to run all files -->
+    <FilePathRule Id="921cc481-6e17-4653-8f75-050b80abca0a" Name="(Default Rule) All files in Windows and Program Files for Administrators" Description="Allows members of the local Administrators group to run all applications." UserOrGroupSid="S-1-5-32-544" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="*" />
+      </Conditions>
+    </FilePathRule>
+
+    <!-- Default Rule 2: Allow all users to run files in Windows directory -->
+    <FilePathRule Id="a61c8b27-0121-4cd9-b4d5-e20083a4691b" Name="(Default Rule) All files in Windows folder" Description="Allows members of the Everyone group to run applications in the Windows folder." UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%WINDIR%\*" />
+      </Conditions>
+    </FilePathRule>
+
+    <!-- Default Rule 3: Allow all users to run files in Program Files directory -->
+    <FilePathRule Id="b8d27a11-0a44-482d-bc48-77c8e9b01234" Name="(Default Rule) All files in Program Files folder" Description="Allows members of the Everyone group to run applications in the Program Files folder." UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES%\*" />
+      </Conditions>
+    </FilePathRule>
+
+    <!-- Specific Rule 4: Allow Cortex Lockdown by SHA-256 Hash Condition -->
+    <FileHashRule Id="a4f91b72-2d93-41c8-886d-09b626e3c0f4" Name="Allow Cortex Lockdown Native Client (v1.0.0-rc3)" Description="Authorizes execution of official certified Cortex Lockdown binary regardless of location." UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FileHashCondition>
+          <FileHash Type="SHA256" Data="0x68C13F5BB3409F8A7524C1FB5BA9E504A5ADDA88FAEAB09813CC9C0F292CF466" SourceFileName="CortexLockdown.exe" SourceFileLength="33280" />
+        </FileHashCondition>
+      </Conditions>
+    </FileHashRule>
+
+    <!-- Specific Rule 5: Allow Edge WebView2 Evergreen Runtime dependency -->
+    <FilePathRule Id="c198f244-9382-411a-9823-11928374a5e1" Name="Allow Microsoft Edge WebView2 Runtime" Description="Enables the WebView2 kiosk browser engine." UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES(X86)%\Microsoft\EdgeWebView\Application\*\msedgewebview2.exe" />
+      </Conditions>
+    </FilePathRule>
+
+    <!-- Specific Rule 6: Allow fallback x64 WebView2 path -->
+    <FilePathRule Id="d209a355-8493-522b-8934-22039485b6f2" Name="Allow Microsoft Edge WebView2 Runtime (x64)" Description="Enables x64 WebView2 kiosk engine." UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES%\Microsoft\EdgeWebView\Application\*\msedgewebview2.exe" />
+      </Conditions>
+    </FilePathRule>
+  </RuleCollection>
+
+  <RuleCollection Type="Msi" EnforcementMode="NotConfigured" />
+  <RuleCollection Type="Script" EnforcementMode="NotConfigured" />
+  <RuleCollection Type="Dll" EnforcementMode="NotConfigured" />
+  <RuleCollection Type="Appx" EnforcementMode="NotConfigured" />
+</AppLockerPolicy>

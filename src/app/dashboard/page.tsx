@@ -19,6 +19,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
+import { requestBrowserFullscreen } from '@/lib/classroom/useClassroomFullscreen';
 
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = React.useState<any>(null);
@@ -55,6 +56,15 @@ export default function DashboardPage() {
           <nav className="hidden sm:flex items-center space-x-1 pl-3 border-l border-[#252830]">
             <Link href="/" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
               IDE
+            </Link>
+            <Link
+              href="/classroom"
+              onClick={() => {
+                requestBrowserFullscreen().catch(() => {});
+              }}
+              className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition"
+            >
+              Classroom
             </Link>
             <Link href="/challenges" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
               Challenges

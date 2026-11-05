@@ -46,7 +46,7 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
               Admin Control Center
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-[#1e202c] transition">
+          <button onClick={onClose} className="p-1 rounded-lg text-[#737373] hover:text-white hover:bg-[#111111] transition">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -56,8 +56,8 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
           {/* Student-to-Student Collab */}
           <div className="p-3 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
-              <span className="font-semibold text-gray-200 block">Student Collaboration</span>
-              <span className="text-gray-400 text-[11px] block">Allow participants to collaborate via mutual consent</span>
+              <span className="font-semibold text-[#E5E5E5] block">Student Collaboration</span>
+              <span className="text-[#737373] text-[11px] block">Allow participants to collaborate via mutual consent</span>
             </div>
             <button
               type="button"
@@ -75,8 +75,8 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
           {/* Code Execution */}
           <div className="p-3 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
-              <span className="font-semibold text-gray-200 block">Cloud Code Execution</span>
-              <span className="text-gray-400 text-[11px] block">Allow students to run code in cloud sandboxes</span>
+              <span className="font-semibold text-[#E5E5E5] block">Cloud Code Execution</span>
+              <span className="text-[#737373] text-[11px] block">Allow students to run code in cloud sandboxes</span>
             </div>
             <button
               type="button"
@@ -94,8 +94,8 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
           {/* File Downloads */}
           <div className="p-3 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
             <div className="space-y-0.5 pr-2">
-              <span className="font-semibold text-gray-200 block">File Downloads</span>
-              <span className="text-gray-400 text-[11px] block">Allow downloading authorized code files</span>
+              <span className="font-semibold text-[#E5E5E5] block">File Downloads</span>
+              <span className="text-[#737373] text-[11px] block">Allow downloading authorized code files</span>
             </div>
             <button
               type="button"
@@ -113,7 +113,7 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
 
         {/* Room Announcement */}
         <form onSubmit={handleSendAnnouncement} className="space-y-1.5 pt-1">
-          <label className="text-xs font-semibold text-gray-300 flex items-center space-x-1.5">
+          <label className="text-xs font-semibold text-[#A3A3A3] flex items-center space-x-1.5">
             <Megaphone className="w-3.5 h-3.5 text-[#ff9100]" />
             <span>Broadcast Announcement</span>
           </label>
@@ -123,7 +123,7 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
               placeholder="Send message to all students..."
               value={announcement}
               onChange={(e) => setAnnouncement(e.target.value)}
-              className="flex-1 bg-[#191b24] border border-[#2b2d38] rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-[#ff9100]"
+              className="flex-1 bg-[#191b24] border border-[#2b2d38] rounded-xl px-3 py-2 text-xs text-[#E5E5E5] focus:outline-none focus:border-[#ff9100]"
             />
             <button
               type="submit"
@@ -153,7 +153,7 @@ export const ClassroomAdminSettingsModal: React.FC<ClassroomAdminSettingsModalPr
                 <button
                   type="button"
                   onClick={() => setConfirmEnd(false)}
-                  className="px-4 py-1.5 rounded-lg bg-[#20222e] text-gray-300 text-xs"
+                  className="px-4 py-1.5 rounded-lg bg-[#20222e] text-[#A3A3A3] text-xs"
                 >
                   Cancel
                 </button>

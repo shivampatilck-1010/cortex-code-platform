@@ -231,11 +231,12 @@ export default function CourseLessonPage() {
 
         {/* Right Side: Monaco Code Editor & Solution Output */}
         <div className="w-1/2 flex flex-col overflow-hidden bg-[#1e1e1e]">
-          <div className="flex-1 overflow-hidden relative">
+          <div className="flex-1 overflow-hidden relative select-text" style={{ userSelect: 'text' }}>
             <Editor
+              key={currentLesson.id}
               height="100%"
               language={currentLesson.language === 'cpp' ? 'cpp' : currentLesson.language === 'python' ? 'python' : 'rust'}
-              value={code}
+              defaultValue={code}
               theme="vs-dark"
               onChange={(val) => setCode(val || '')}
               options={{
@@ -243,6 +244,10 @@ export default function CourseLessonPage() {
                 minimap: { enabled: false },
                 lineNumbersMinChars: 3,
                 automaticLayout: true,
+                scrollBeyondLastLine: false,
+                selectOnLineNumbers: true,
+                dragAndDrop: true,
+                contextmenu: true,
               }}
             />
           </div>

@@ -93,24 +93,42 @@ export async function DELETE(
     const { id } = await params;
     const auth = await ClassroomAuth.verifyAccess(req, id, 'teacher');
     if (!auth.authorized) {
-      return NextResponse.json({ error: auth.error || 'Only instructors can archive a classroom.' }, { status: 403 });
+      return NextResponse.json({ error: auth.error || 'Only instructors can modify a classroom.' }, { status: 403 });
     }
 
-    const archived = await classroomDb.archiveClassroom(id);
-    if (!archived) {
-      return NextResponse.json({ error: 'Classroom not found or already archived' }, { status: 404 });
-    }
-
+    const isPermanent = req.nextUrl.searchParams.get('permanent') === 'true';
     const user = auth.context?.user || (await ClassroomAuth.getCurrentUser(req));
-    realtimeCoordinator.broadcast(
-      id,
-      'classroom.archived',
-      { classroomId: id, archivedAt: archived.archivedAt },
-      { id: user.id, name: user.name }
-    );
 
-    return NextResponse.json({ success: true, classroom: archived });
+    if (isPermanent) {
+      const deleted = await classroomDb.deleteClassroom(id);
+      if (!deleted) {
+        return NextResponse.json({ error: 'Classroom not found or could not be deleted' }, { status: 404 });
+      }
+      
+      realtimeCoordinator.broadcast(
+        id,
+        'classroom.deleted',
+        { classroomId: id },
+        { id: user.id, name: user.name }
+      );
+      
+      return NextResponse.json({ success: true, deleted: true });
+    } else {
+      const archived = await classroomDb.archiveClassroom(id);
+      if (!archived) {
+        return NextResponse.json({ error: 'Classroom not found or already archived' }, { status: 404 });
+      }
+
+      realtimeCoordinator.broadcast(
+        id,
+        'classroom.archived',
+        { classroomId: id, archivedAt: archived.archivedAt },
+        { id: user.id, name: user.name }
+      );
+
+      return NextResponse.json({ success: true, classroom: archived });
+    }
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to archive classroom' }, { status: 500 });
+    return NextResponse.json({ error: err?.message || 'Failed to archive/delete classroom' }, { status: 500 });
   }
 }

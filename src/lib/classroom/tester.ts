@@ -12,6 +12,64 @@ export interface TestOutcome {
   allPassed: boolean;
 }
 
+function prepareHarnessCode(code: string, language: string): string {
+  if (language === 'python' || language === 'py') {
+    if (code.includes('def two_sum(') && !code.includes('sys.stdin.read')) {
+      return `${code}
+
+if __name__ == '__main__':
+    import sys, json
+    _raw = sys.stdin.read().strip()
+    if _raw:
+        try:
+            if '],' in _raw:
+                _parts = _raw.split('],')
+                _nums = json.loads(_parts[0].strip() + ']')
+                _target = int(_parts[1].strip())
+                print(json.dumps(two_sum(_nums, _target)))
+            else:
+                _data = json.loads(_raw)
+                print(json.dumps(two_sum(_data[0], _data[1])))
+        except Exception:
+            pass
+`;
+    }
+    if (code.includes('def is_valid_bst(') && !code.includes('sys.stdin.read')) {
+      return `${code}
+
+if __name__ == '__main__':
+    import sys, json
+    _raw = sys.stdin.read().strip()
+    if _raw:
+        try:
+            _vals = json.loads(_raw)
+            def _build_tree(nodes):
+                if not nodes or nodes[0] is None:
+                    return None
+                root = TreeNode(nodes[0])
+                queue = [root]
+                i = 1
+                while queue and i < len(nodes):
+                    curr = queue.pop(0)
+                    if i < len(nodes) and nodes[i] is not None:
+                        curr.left = TreeNode(nodes[i])
+                        queue.append(curr.left)
+                    i += 1
+                    if i < len(nodes) and nodes[i] is not None:
+                        curr.right = TreeNode(nodes[i])
+                        queue.append(curr.right)
+                    i += 1
+                return root
+            _tree = _build_tree(_vals)
+            print(str(is_valid_bst(_tree)))
+        except Exception:
+            pass
+`;
+    }
+  }
+  return code;
+}
+
 export async function runAssignmentTestCases(
   code: string,
   language: string,
@@ -95,6 +153,8 @@ export async function runAssignmentTestCases(
     };
   }
 
+  const executableCode = prepareHarnessCode(code, language);
+
   for (const tc of testCases) {
     totalScore += tc.weight;
 
@@ -106,7 +166,7 @@ export async function runAssignmentTestCases(
           id: 'main',
           name: langConfig.defaultFileName,
           path: `/${langConfig.defaultFileName}`,
-          content: code,
+          content: executableCode,
         },
       ],
       stdin: tc.input || '',
@@ -148,12 +208,13 @@ export async function runAssignmentTestCases(
     }
 
     // STRICT HIDDEN TEST PRIVACY:
-    // When visibility === 'hidden', input, expectedOutput, and actualOutput are NEVER exposed.
-    const isPublic = tc.visibility === 'public';
+    // When visibility === 'hidden' or isHidden is true, input, expectedOutput, and actualOutput are NEVER exposed.
+    const isHidden = tc.visibility === 'hidden' || (tc as any).isHidden === true || (tc as any).hidden === true;
+    const isPublic = !isHidden;
     results.push({
       testCaseId: tc.id,
       status,
-      visibility: tc.visibility,
+      visibility: isHidden ? 'hidden' : 'public',
       input: isPublic ? tc.input : undefined,
       expectedOutput: isPublic ? tc.expectedOutput : undefined,
       actualOutput: isPublic ? execRes.stdout : undefined,

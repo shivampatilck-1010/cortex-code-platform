@@ -23,6 +23,7 @@ import {
   Terminal, 
   FileText, 
   ChevronRight, 
+  ChevronLeft, 
   RefreshCw, 
   ExternalLink, 
   Flame, 
@@ -36,6 +37,7 @@ import {
   WifiOff,
   Bell,
   Trash2,
+  Download,
   Edit3,
   Pin,
   UserMinus,
@@ -49,10 +51,25 @@ import {
   BarChart2,
   CheckCircle2,
   Activity,
+  ArrowLeft,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { ClassroomRealtimeClient, ConnectionState } from '@/lib/classroom/realtime-client';
 import { ClassroomRealtimeEvent } from '@/lib/classroom/protocol';
+import { ResourceBranchingCard } from '@/components/classroom/ResourceBranchingCard';
+import { TeamsTab } from '@/components/classroom/teams/TeamsTab';
+import { ExaminationsTab } from '@/components/classroom/exams/ExaminationsTab';
+import { 
+  useClassroomFullscreen, 
+  requestBrowserFullscreen, 
+  exitBrowserFullscreen, 
+  enableImmersiveLayout, 
+  disableImmersiveLayout 
+} from '@/lib/classroom/useClassroomFullscreen';
 import { 
   Classroom, 
   Assignment, 
@@ -69,6 +86,39 @@ import {
 
 export default function ClassroomHubPage() {
   const router = useRouter();
+
+  // Classroom Immersive & Fullscreen Management
+  const {
+    isImmersive,
+    isFullscreen,
+    isExiting,
+    needsRecovery,
+    toggleFullscreen,
+    requestFullscreen,
+    exitFullscreen,
+    retryFullscreen,
+    dismissRecovery,
+    handleExitToIDE: hookExitToIDE,
+  } = useClassroomFullscreen({
+    autoImmersive: true,
+  });
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (tabsContainerRef.current) {
+      tabsContainerRef.current.scrollBy({
+        left: direction === 'left' ? -220 : 220,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  const handleExitToIDE = async () => {
+    await hookExitToIDE();
+    window.location.href = '/';
+  };
 
   // Active Role & User Persona
   const [currentUserRole, setCurrentUserRole] = useState<'teacher' | 'student' | 'admin'>('teacher');
@@ -128,7 +178,7 @@ export default function ClassroomHubPage() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [activeTab, setActiveTab] = useState<'stream' | 'people' | 'assignments' | 'arena' | 'grades' | 'resources' | 'leaderboard' | 'analytics' | 'settings'>('stream');
+  const [activeTab, setActiveTab] = useState<'stream' | 'people' | 'assignments' | 'examinations' | 'teams' | 'grades' | 'resources' | 'leaderboard' | 'analytics' | 'settings'>('stream');
   const [isLoading, setIsLoading] = useState(true);
 
   // Sub-data for selected classroom
@@ -200,11 +250,32 @@ export default function ClassroomHubPage() {
   const [memberToRemove, setMemberToRemove] = useState<ClassroomMember | null>(null);
   const [searchMemberQuery, setSearchMemberQuery] = useState('');
 
+  // Assignment Filtering State (LeetCode-style Problem Catalog)
+  const [asgSearchQuery, setAsgSearchQuery] = useState('');
+  const [asgDifficultyFilter, setAsgDifficultyFilter] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
+  const [asgStatusFilter, setAsgStatusFilter] = useState<'all' | 'solved' | 'unsolved'>('all');
+
   // Classroom Archive Confirmation
   const [isConfirmArchiveOpen, setIsConfirmArchiveOpen] = useState(false);
 
   // Form Inputs
   const [newChatText, setNewChatText] = useState('');
+  const [annCommentInputs, setAnnCommentInputs] = useState<Record<string, string>>({});
+  const [activeChatUserId, setActiveChatUserId] = useState<string | null>(null);
+  const activeChatUserIdRef = useRef<string | null>(null);
+  const chatMessagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [isChatPinned, setIsChatPinned] = useState(false);
+  useEffect(() => {
+    activeChatUserIdRef.current = activeChatUserId;
+  }, [activeChatUserId]);
+
+  // Auto-scroll chat to bottom strictly within its own scroll container
+  useEffect(() => {
+    if (chatMessagesContainerRef.current) {
+      chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
+    }
+  }, [messages, activeChatUserId, isChatExpanded]);
   const [newAnnTitle, setNewAnnTitle] = useState('');
   const [newAnnContent, setNewAnnContent] = useState('');
   const [newAnnPinned, setNewAnnPinned] = useState(false);
@@ -390,6 +461,15 @@ export default function ClassroomHubPage() {
   }, [currentUserRole, currentUserId]);
 
   useEffect(() => {
+    const pendingCode = sessionStorage.getItem('pendingJoinCode');
+    if (pendingCode) {
+      sessionStorage.removeItem('pendingJoinCode');
+      setIsJoinClassModalOpen(true);
+      setJoinCodeInput(pendingCode);
+    }
+  }, []);
+
+  useEffect(() => {
     if (selectedClassroom) {
       fetchClassroomDetails(selectedClassroom.id);
       // Initialize settings form
@@ -445,10 +525,22 @@ export default function ClassroomHubPage() {
           }
           case 'message.created': {
             if (payload.message) {
+              const msg = payload.message;
               setMessages((prev) => {
-                if (prev.some((m) => m.id === payload.message.id)) return prev;
-                return [...prev, payload.message];
+                if (prev.some((m) => m.id === msg.id)) return prev;
+                return [...prev, msg];
               });
+              
+              // Show notification for incoming messages if not in active view
+              if (msg.senderId !== currentUserId) {
+                if (currentUserRole === 'teacher' && (msg.recipientType === 'teacher' || msg.recipientType === 'direct')) {
+                  if (activeChatUserIdRef.current !== msg.senderId) {
+                    setToastMessage(`New message from ${msg.senderName || 'Student'}`);
+                  }
+                } else if (currentUserRole !== 'teacher' && msg.recipientType === 'direct') {
+                  setToastMessage(`New message from ${msg.senderName || 'Instructor'}`);
+                }
+              }
             }
             break;
           }
@@ -610,6 +702,17 @@ export default function ClassroomHubPage() {
             break;
           }
 
+          case 'classroom.deleted': {
+            if (payload.classroomId) {
+              setClassrooms((prev) => prev.filter(c => c.id !== payload.classroomId));
+              if (payload.classroomId === selectedClassroom.id) {
+                setSelectedClassroom(null);
+                showToast('This classroom has been permanently deleted by the instructor.');
+              }
+            }
+            break;
+          }
+
           case 'classroom.code_regenerated': {
             if (payload.classroomId === selectedClassroom.id && payload.joincode) {
               setSelectedClassroom((prev) => prev ? { ...prev, joincode: payload.joincode } : null);
@@ -706,6 +809,25 @@ export default function ClassroomHubPage() {
     }
   };
 
+  // Handler: Delete Resource
+  const handleDeleteResource = async (resourceId: string) => {
+    if (!selectedClassroom) return;
+    try {
+      const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/resources/${resourceId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        setResources((prev) => prev.filter((r) => r.id !== resourceId));
+        showToast('Resource deleted');
+      } else {
+        showToast('Failed to delete resource');
+      }
+    } catch {
+      showToast('Error deleting resource');
+    }
+  };
+
   // Handler: Delete Announcement
   const handleDeleteAnnouncement = async () => {
     if (!selectedClassroom || !annToDelete) return;
@@ -733,19 +855,63 @@ export default function ClassroomHubPage() {
     const text = newChatText.trim();
     setNewChatText('');
 
-    if (realtimeClientRef.current && connectionState === 'CONNECTED') {
-      realtimeClientRef.current.sendMessage(text);
-      return;
+    let targetRecipientType: 'class' | 'teacher' | 'direct' | 'announcement' = currentUserRole === 'teacher' ? 'class' : 'teacher';
+    let targetRecipientId: string | undefined = undefined;
+
+    if (currentUserRole === 'teacher' && activeChatUserId && activeChatUserId !== 'class') {
+      targetRecipientType = 'direct';
+      targetRecipientId = activeChatUserId;
     }
+
+    const msgId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    // Optimistically add message to local state so sender sees it immediately
+    const optimisticMsg = {
+      id: msgId,
+      classroomId: selectedClassroom.id,
+      senderId: currentUserId,
+      senderName: currentUserName,
+      senderRole: currentUserRole,
+      recipientType: targetRecipientType,
+      recipientId: targetRecipientId,
+      content: text,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg as ClassroomMessage]);
+
+    // Send via WebSocket for real-time delivery to the OTHER person
+    if (realtimeClientRef.current && connectionState === 'CONNECTED') {
+      realtimeClientRef.current.sendMessage(text, targetRecipientType, targetRecipientId);
+    }
+
+    // Persist to database via API (no broadcast needed — DO handles real-time)
+    try {
+      await fetch(`/api/v1/classrooms/${selectedClassroom.id}/messages`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ content: text, recipientType: targetRecipientType, recipientId: targetRecipientId }),
+      });
+    } catch (err) {
+      showToast('Failed to send message');
+    }
+  };
+
+  const handlePostAnnComment = async (e: React.FormEvent, annId: string) => {
+    e.preventDefault();
+    if (!selectedClassroom || !annCommentInputs[annId]?.trim()) return;
+    const text = annCommentInputs[annId].trim();
+    
+    setAnnCommentInputs((prev) => ({ ...prev, [annId]: '' }));
 
     try {
       await fetch(`/api/v1/classrooms/${selectedClassroom.id}/messages`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({ content: text, recipientType: 'announcement', recipientId: annId }),
       });
     } catch (err) {
-      showToast('Failed to send message');
+      showToast('Failed to post comment');
     }
   };
 
@@ -780,7 +946,7 @@ export default function ClassroomHubPage() {
       const res = await fetch('/api/v1/classrooms/join', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ joincode: joincodeInput.trim() }),
+        body: JSON.stringify({ joinCode: joincodeInput.trim() }),
       });
       const data = await res.json();
       if (res.ok && data.classroom) {
@@ -806,10 +972,10 @@ export default function ClassroomHubPage() {
         headers: getAuthHeaders(),
       });
       const data = await res.json();
-      if (res.ok && data.joincode) {
-        setSelectedClassroom((prev) => prev ? { ...prev, joincode: data.joincode } : null);
-        setClassrooms((prev) => prev.map((c) => c.id === selectedClassroom.id ? { ...c, joincode: data.joincode } : c));
-        showToast(`Generated new join code: ${data.joincode}`);
+      if (res.ok && data.joinCode) {
+        setSelectedClassroom((prev) => prev ? { ...prev, joincode: data.joinCode } : null);
+        setClassrooms((prev) => prev.map((c) => c.id === selectedClassroom.id ? { ...c, joincode: data.joinCode } : c));
+        showToast(`Generated new join code: ${data.joinCode}`);
       } else {
         showToast(data.error || 'Failed to regenerate code');
       }
@@ -903,6 +1069,7 @@ export default function ClassroomHubPage() {
   };
 
   // Handler: Archive Classroom
+  // Handler: Archive Classroom
   const handleArchiveClassroom = async () => {
     if (!selectedClassroom) return;
     try {
@@ -921,6 +1088,30 @@ export default function ClassroomHubPage() {
       }
     } catch {
       showToast('Error archiving classroom');
+    }
+  };
+
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+
+  // Handler: Delete Classroom (Permanent)
+  const handleDeleteClassroom = async () => {
+    if (!selectedClassroom) return;
+    try {
+      const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}?permanent=true`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setIsConfirmDeleteOpen(false);
+        setClassrooms((prev) => prev.filter((c) => c.id !== selectedClassroom.id));
+        setSelectedClassroom(null);
+        showToast('Classroom permanently deleted.');
+      } else {
+        showToast(data.error || 'Failed to delete classroom');
+      }
+    } catch {
+      showToast('Error deleting classroom');
     }
   };
 
@@ -1023,73 +1214,107 @@ export default function ClassroomHubPage() {
 
   // Filtered members list
   const filteredMembers = useMemo(() => {
-    if (!searchMemberQuery.trim()) return members;
-    const q = searchMemberQuery.toLowerCase();
-    return members.filter(
-      (m) => m.userName.toLowerCase().includes(q) || m.userEmail.toLowerCase().includes(q) || m.role.toLowerCase().includes(q)
-    );
+    let list = members;
+    if (searchMemberQuery.trim()) {
+      const q = searchMemberQuery.toLowerCase();
+      list = list.filter(
+        (m) => m.userName.toLowerCase().includes(q) || m.userEmail.toLowerCase().includes(q) || m.role.toLowerCase().includes(q)
+      );
+    }
+    
+    // Deduplicate by email (or userId as fallback) to ensure the same student doesn't appear multiple times
+    const unique = new Map<string, typeof list[0]>();
+    for (const m of list) {
+      const key = m.userEmail || m.userId;
+      if (!unique.has(key)) {
+        unique.set(key, m);
+      } else {
+        // If the existing entry is offline and this one is online, prefer the online one
+        if (!unique.get(key)?.isOnline && m.isOnline) {
+          unique.set(key, m);
+        }
+      }
+    }
+    return Array.from(unique.values());
   }, [members, searchMemberQuery]);
 
   const unreadNotifCount = useMemo(() => {
     return notifications.filter((n) => !n.readAt).length;
   }, [notifications]);
 
+  // Solved Count for Student Progress
+  const solvedCount = useMemo(() => {
+    return assignments.filter((asg) => {
+      const mySub = submissions.find((s) => s.assignmentId === asg.id && s.studentId === currentUserId);
+      return mySub && (mySub.score >= 70 || mySub.status === 'completed');
+    }).length;
+  }, [assignments, submissions, currentUserId]);
+
+  // Filtered Assignments for LeetCode-style Problem Catalog
+  const filteredAssignments = useMemo(() => {
+    return assignments.filter((asg) => {
+      if (asgSearchQuery.trim()) {
+        const q = asgSearchQuery.toLowerCase();
+        const matchTitle = asg.title.toLowerCase().includes(q);
+        const matchLang = asg.language.toLowerCase().includes(q);
+        const matchDesc = (asg.description || '').toLowerCase().includes(q);
+        if (!matchTitle && !matchLang && !matchDesc) return false;
+      }
+      if (asgDifficultyFilter !== 'all') {
+        if (asg.difficulty?.toLowerCase() !== asgDifficultyFilter) return false;
+      }
+      if (asgStatusFilter !== 'all') {
+        const mySub = submissions.find((s) => s.assignmentId === asg.id && s.studentId === currentUserId);
+        const isSolved = mySub && (mySub.score >= 70 || mySub.status === 'completed');
+        if (asgStatusFilter === 'solved' && !isSolved) return false;
+        if (asgStatusFilter === 'unsolved' && isSolved) return false;
+      }
+      return true;
+    });
+  }, [assignments, asgSearchQuery, asgDifficultyFilter, asgStatusFilter, submissions, currentUserId]);
+
 
   const handleLiveSessionClick = async () => {
     if (!selectedClassroom) return;
-    if (liveSession) {
-      router.push(`/classroom/${selectedClassroom.id}/live/${liveSession.id}`);
-      return;
-    }
-    
-    if (currentUserRole === 'teacher' || currentUserRole === 'admin') {
-      try {
-        const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'start', title: 'Live Coding' })
-        });
-        const data = await res.json();
-        if (data.session) {
-           router.push(`/classroom/${selectedClassroom.id}/live/${data.session.id}`);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    try {
+      await requestBrowserFullscreen();
+    } catch {}
+    router.push(`/classroom/${selectedClassroom.id}`);
   };
 
   const isArchived = selectedClassroom?.status === 'archived';
 
   return (
-    <div className="h-screen w-screen bg-[#0d0e12] text-gray-200 flex flex-col font-sans select-none overflow-hidden">
+    <div className={`h-screen w-screen bg-[#000000] bg-monochrome-dotted text-[#FFFFFF] flex flex-col font-sans select-none overflow-hidden relative ${isImmersive ? 'cortex-classroom-immersive-container' : ''}`}>
+      <div className="absolute inset-0 bg-[#000000]/60 pointer-events-none z-0"></div>
+      <div className="relative z-10 flex flex-col h-full w-full min-h-0 min-w-0 overflow-hidden">
 
       {/* Create Resource Modal */}
       {isCreateResourceModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f111a] border border-[#2a2e3d] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="neon-glass rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-2">Add Resource</h2>
-            <p className="text-[#8a91a6] text-sm mb-6">Upload a link, PDF, or reference guide for students.</p>
+            <p className="text-[#FFFFFF] text-sm mb-6">Upload a link, PDF, or reference guide for students.</p>
             
             <form onSubmit={handleCreateResource} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-[#8a91a6] mb-1">Resource Name</label>
+                <label className="block text-xs font-medium text-[#FFFFFF] mb-1">Resource Name</label>
                 <input
                   type="text"
                   required
                   value={newResourceForm.name}
                   onChange={e => setNewResourceForm({...newResourceForm, name: e.target.value})}
-                  className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#A3A3A3]"
                   placeholder="e.g. Chapter 1 Slides"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-[#8a91a6] mb-1">Type</label>
+                  <label className="block text-xs font-medium text-[#FFFFFF] mb-1">Type</label>
                   <select
                     value={newResourceForm.type}
                     onChange={e => setNewResourceForm({...newResourceForm, type: e.target.value as any})}
-                    className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                    className="w-full bg-[#0A0A0A] border border-[#525252] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#A3A3A3]"
                   >
                     <option value="pdf">PDF</option>
                     <option value="link">Link</option>
@@ -1099,24 +1324,24 @@ export default function ClassroomHubPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#8a91a6] mb-1">URL / Link</label>
+                  <label className="block text-xs font-medium text-[#FFFFFF] mb-1">URL / Link</label>
                   <input
                     type="url"
                     required
                     value={newResourceForm.url}
                     onChange={e => setNewResourceForm({...newResourceForm, url: e.target.value})}
-                    className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                    className="w-full bg-[#0A0A0A] border border-[#525252] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#A3A3A3]"
                     placeholder="https://..."
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#8a91a6] mb-1">Description (Optional)</label>
+                <label className="block text-xs font-medium text-[#FFFFFF] mb-1">Description (Optional)</label>
                 <textarea
                   rows={2}
                   value={newResourceForm.description}
                   onChange={e => setNewResourceForm({...newResourceForm, description: e.target.value})}
-                  className="w-full bg-[#161925] border border-[#2a2e3d] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#A3A3A3]"
                 />
               </div>
 
@@ -1124,13 +1349,13 @@ export default function ClassroomHubPage() {
                 <button
                   type="button"
                   onClick={() => setIsCreateResourceModalOpen(false)}
-                  className="px-6 py-2.5 rounded-xl font-bold text-sm text-gray-400 hover:text-white transition hover:bg-white/5"
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm text-[#E5E5E5] hover:text-white transition hover:bg-white/5"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:opacity-90 transition shadow-lg shadow-cyan-500/20"
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm  bg-[#000000] border border-[#525252] hover:border-[#FFFFFF] text-white hover:opacity-90 transition shadow-[0_0_15px_rgba(255,255,255,0.1)]"
                 >
                   Add Resource
                 </button>
@@ -1140,190 +1365,424 @@ export default function ClassroomHubPage() {
         </div>
       )}
 
-      {/* Main Header */}
-      <header className="h-16 bg-[#13141a] border-b border-[#1f212a] flex items-center justify-between px-6 shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#ff9100] to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
+      {/* Immersive Classroom Header */}
+      <header className="h-12 sm:h-14 bg-[#0b0c0e] border-b border-[#1f2024] flex items-center justify-between px-3 sm:px-5 shrink-0 relative z-20">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+          {/* Exit Classroom / Return to IDE */}
+          <button
+            data-testid="exit-to-ide-btn"
+            onClick={handleExitToIDE}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-300 hover:text-white bg-[#15161c] hover:bg-[#1f2128] border border-[#262832] transition group shrink-0"
+            title="Return to Cortex IDE (Exit Classroom)"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#ff9100] transition" />
+            <span className="hidden sm:inline">Exit to IDE</span>
+          </button>
+
+          <div className="h-4 w-px bg-[#262832] hidden sm:block shrink-0" />
+
+          {/* Logo & Classroom Badge */}
+          <div className="flex items-center space-x-2 truncate">
+            <Link href="/" onClick={handleExitToIDE} className="flex items-center group transition shrink-0" title="Cortex — Code Beyond Limits">
+              <CortexLogo variant="header" size="sm" />
+            </Link>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#FF9100]/15 text-[#FF9100] border border-[#FF9100]/30 shrink-0">
+              Classroom
+            </span>
+            {selectedClassroom && (
+              <span className="text-xs font-semibold text-white truncate max-w-[140px] sm:max-w-[220px] md:max-w-xs hidden sm:inline" title={selectedClassroom.name}>
+                / {selectedClassroom.name}
+              </span>
+            )}
           </div>
-          <span className="text-lg font-black tracking-tight text-white">CORTEX</span>
-          <span className="text-xs font-bold text-[#ff9100] bg-[#ff9100]/10 px-2 py-0.5 rounded ml-2 uppercase tracking-widest">Classroom</span>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <span className="text-xs font-bold text-gray-300">{currentUserName}</span>
-          <span className={`px-2 py-1 rounded text-[10px] uppercase tracking-wider font-bold ${currentUserRole === 'teacher' ? 'bg-amber-500/20 text-amber-500' : 'bg-cyan-500/20 text-cyan-500'}`}>
-            {currentUserRole}
-          </span>
+        {/* Right: Fullscreen Toggle, User Role, Notifications, Profile */}
+        <div className="flex items-center space-x-2 shrink-0">
+          {/* Sidebar Toggle (Collapse / Expand Classroom List) */}
+          <button
+            data-testid="classroom-sidebar-toggle"
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className={`p-1.5 rounded-lg text-xs font-semibold border transition ${
+              !isSidebarOpen
+                ? 'bg-[#FF9100]/15 text-[#FF9100] border-[#FF9100]/40'
+                : 'bg-[#15161c] hover:bg-[#1f2128] text-gray-300 hover:text-white border-[#262832]'
+            }`}
+            title={isSidebarOpen ? 'Collapse Classroom Sidebar' : 'Expand Classroom Sidebar'}
+            aria-label={isSidebarOpen ? 'Collapse Classroom Sidebar' : 'Expand Classroom Sidebar'}
+          >
+            {isSidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+          </button>
+
+          {/* Prominent Return to Fullscreen Button (Shown only when not in native fullscreen) */}
+          {(!isFullscreen || needsRecovery) && (
+            <button
+              data-testid="return-to-fullscreen-btn"
+              onClick={retryFullscreen}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#FF9100] hover:bg-[#FF9100]/90 text-black shadow-md transition"
+              title="Return to Fullscreen"
+              aria-label="Return to Fullscreen"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Return to Fullscreen</span>
+            </button>
+          )}
+
+          {/* User Persona & Role */}
+          <div className="flex items-center space-x-1.5 pl-1.5 border-l border-[#262832]">
+            <span className="text-xs font-semibold text-[#E5E5E5] hidden md:inline truncate max-w-[120px]">{currentUserName}</span>
+            <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${
+              currentUserRole === 'teacher' || currentUserRole === 'admin'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+            }`}>
+              {currentUserRole}
+            </span>
+          </div>
+
+          {/* Notifications */}
+          <button
+            onClick={() => setShowNotifications((p) => !p)}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#1a1c22] transition relative"
+            title="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {notifications.length > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#FF9100]" />
+            )}
+          </button>
+
+          {/* Logout */}
           <button
             onClick={async () => {
               await fetch('/api/v1/auth/logout', { method: 'POST' });
               window.location.href = '/login';
             }}
-            className="px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+            className="px-2.5 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border border-rose-500/30"
           >
             Logout
           </button>
         </div>
       </header>
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <aside className="w-64 bg-[#13141a] border-r border-[#1f212a] flex flex-col shrink-0">
-          <div className="p-4 border-b border-[#1f212a]">
+
+      {/* Fullscreen Recovery Notification Banner */}
+      {needsRecovery && !isExiting && (
+        <div
+          data-testid="fullscreen-recovery-banner"
+          className="bg-[#15161c] border-b border-[#FF9100]/40 px-3 sm:px-5 py-2 flex items-center justify-between z-30 shrink-0 text-xs shadow-md"
+        >
+          <div className="flex items-center space-x-2 text-gray-300">
+            <span className="w-2 h-2 rounded-full bg-[#FF9100] animate-ping shrink-0" />
+            <span className="text-gray-200">
+              Classroom is optimized for Fullscreen mode. Your window is currently in standard view.
+            </span>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0">
             <button
-              onClick={() => setIsCreateClassModalOpen(true)}
-              className="w-full py-2 bg-[#ff9100]/10 hover:bg-[#ff9100]/20 text-[#ff9100] text-xs font-bold rounded-lg border border-[#ff9100]/30 transition"
+              data-testid="banner-return-fullscreen-btn"
+              onClick={retryFullscreen}
+              className="px-3 py-1 rounded bg-[#FF9100] hover:bg-[#FF9100]/90 text-black font-bold text-xs transition flex items-center space-x-1 shadow-sm"
+              title="Return to Fullscreen"
             >
-              + Create Classroom
+              <Maximize2 className="w-3 h-3" />
+              <span>Return to Fullscreen</span>
+            </button>
+            <button
+              data-testid="dismiss-recovery-btn"
+              onClick={dismissRecovery}
+              className="text-gray-400 hover:text-white px-2 py-1 text-xs transition"
+              title="Dismiss notice"
+            >
+              Dismiss
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        </div>
+      )}
+
+      <div className="flex-1 flex overflow-hidden min-h-0 min-w-0">
+        {/* Left Sidebar */}
+        {isSidebarOpen && (
+        <aside className="w-64 bg-cyber-grid border-r border-[#525252] flex flex-col shrink-0 relative overflow-hidden shadow-2xl">
+          <div className="absolute inset-0 bg-gradient-to-b from-[#161616]/40 via-[#161616]/70 to-[#161616] pointer-events-none z-0"></div>
+          <div className="relative z-10 p-4 border-b border-[#525252] flex flex-col gap-2">
+            {(currentUserRole === 'teacher' || currentUserRole === 'admin') && (
+              <button
+                onClick={() => setIsCreateClassModalOpen(true)}
+                className="w-full silver-motion-ring rounded-lg text-[#FFFFFF] text-xs font-bold transition"
+              >
+                <div className="silver-motion-inner py-2 w-full">
+                  + Create Classroom
+                </div>
+              </button>
+            )}
+            <button
+              onClick={() => setIsJoinClassModalOpen(true)}
+              className="w-full silver-motion-ring rounded-lg text-[#E5E5E5] hover:text-[#FFFFFF] text-xs font-bold transition"
+            >
+              <div className="silver-motion-inner py-2 w-full">
+                + Join Classroom
+              </div>
+            </button>
+          </div>
+          <div className="relative z-10 flex-1 overflow-y-auto p-2 space-y-1">
             {classrooms.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setSelectedClassroom(c)}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition flex flex-col ${
                   selectedClassroom?.id === c.id
-                    ? 'bg-[#1f212a] text-white font-semibold'
-                    : 'text-gray-400 hover:bg-[#1a1c24] hover:text-gray-200'
+                    ? 'bg-[#000000] border border-[#525252] shadow-[0_0_15px_rgba(255,255,255,0.05)] text-white font-semibold'
+                    : 'text-[#E5E5E5] hover:bg-[#212121] hover:text-[#FFFFFF]'
                 }`}
               >
                 <span>{c.name}</span>
-                <span className="text-[10px] text-gray-500">{c.subject}</span>
+                <span className="text-[10px] text-[#E5E5E5]">{c.subject}</span>
               </button>
             ))}
           </div>
         </aside>
+        )}
 
 
         {/* Main Area */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0d0e12]">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-transparent relative">
           {selectedClassroom ? (
             <main className="flex-1 flex flex-col min-w-0 min-h-0">
 
-              {/* Top Navigation Tabs */}
-              <div className="h-12 bg-[#13141a] border-b border-[#20222d] px-6 flex space-x-6 overflow-x-auto shrink-0 scrollbar-hide">
+              {/* Top Navigation Tabs - Responsive Scroll Strip with Zero Page Overflow */}
+              <div className="h-11 sm:h-12 bg-[#0A0A0A]/90 backdrop-blur-md border-b border-[#262832] px-2 sm:px-4 flex items-center justify-between shrink-0 relative z-10 w-full max-w-full overflow-hidden">
+                {/* Scroll Left Button (desktop/touch affordance) */}
                 <button
-                  onClick={() => setActiveTab('stream')}
-                  className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                    activeTab === 'stream'
-                      ? 'border-[#ff9100] text-white font-semibold'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
+                  type="button"
+                  onClick={() => scrollTabs('left')}
+                  className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-[#1a1c22] transition shrink-0 hidden sm:flex items-center justify-center mr-1"
+                  title="Scroll tabs left"
+                  aria-label="Scroll tabs left"
                 >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Stream</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('people')}
-                  className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                    activeTab === 'people'
-                      ? 'border-[#ff9100] text-white font-semibold'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>People</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('assignments')}
-                  className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                    activeTab === 'assignments'
-                      ? 'border-[#ff9100] text-white font-semibold'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Assignments</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('arena')}
-                  className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                    activeTab === 'arena'
-                      ? 'border-[#ff9100] text-white font-semibold'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <Terminal className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Arena</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('grades')}
-                  className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                    activeTab === 'grades'
-                      ? 'border-[#ff9100] text-white font-semibold'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <Award className="w-3.5 h-3.5" />
-                  <span>Grades & Feedback</span>
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
 
-              <button
-                onClick={() => setActiveTab('resources')}
-                className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                  activeTab === 'resources'
-                    ? 'border-[#ff9100] text-white font-semibold'
-                    : 'border-transparent text-gray-400 hover:text-gray-200'
-                }`}
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                <span>Resources ({resources.length})</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('leaderboard')}
-                className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                  activeTab === 'leaderboard'
-                    ? 'border-[#ff9100] text-white font-semibold'
-                    : 'border-transparent text-gray-400 hover:text-gray-200'
-                }`}
-              >
-                <Flame className="w-3.5 h-3.5 text-amber-500" />
-                <span>Leaderboard</span>
-              </button>
-
-
-              {currentUserRole === 'teacher' && (
-                <button
-                  onClick={() => setActiveTab('analytics')}
-                  className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                    activeTab === 'analytics'
-                      ? 'border-[#ff9100] text-white font-semibold'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
+                {/* Scrollable Tab Track */}
+                <div
+                  ref={tabsContainerRef}
+                  role="tablist"
+                  aria-label="Classroom sections"
+                  className="flex items-center gap-1.5 overflow-x-auto scrollbar-none scrollbar-hide scroll-smooth min-w-0 flex-1 py-1"
                 >
-                  <BarChart2 className="w-3.5 h-3.5" />
-                  <span>Teacher Analytics</span>
-                </button>
-              )}
-              {currentUserRole === 'teacher' && (
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'stream'}
+                    onClick={(e) => {
+                      setActiveTab('stream');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'stream'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Stream</span>
+                  </button>
+
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'people'}
+                    onClick={(e) => {
+                      setActiveTab('people');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'people'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>People</span>
+                  </button>
+
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'assignments'}
+                    onClick={(e) => {
+                      setActiveTab('assignments');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'assignments'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Assignments</span>
+                  </button>
+
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'examinations'}
+                    onClick={(e) => {
+                      setActiveTab('examinations');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'examinations'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Examinations</span>
+                  </button>
+
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'teams'}
+                    onClick={(e) => {
+                      setActiveTab('teams');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'teams'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Project Teams</span>
+                  </button>
+
+
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'grades'}
+                    onClick={(e) => {
+                      setActiveTab('grades');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'grades'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Grades & Feedback</span>
+                  </button>
+
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'resources'}
+                    onClick={(e) => {
+                      setActiveTab('resources');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'resources'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span>Resources ({resources.length})</span>
+                  </button>
+
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'leaderboard'}
+                    onClick={(e) => {
+                      setActiveTab('leaderboard');
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }}
+                    className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                      activeTab === 'leaderboard'
+                        ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                    }`}
+                  >
+                    <Flame className="w-3.5 h-3.5" />
+                    <span>Leaderboard</span>
+                  </button>
+
+                  {currentUserRole === 'teacher' && (
+                    <button
+                      role="tab"
+                      aria-selected={activeTab === 'analytics'}
+                      onClick={(e) => {
+                        setActiveTab('analytics');
+                        e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                      }}
+                      className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                        activeTab === 'analytics'
+                          ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                      }`}
+                    >
+                      <BarChart2 className="w-3.5 h-3.5" />
+                      <span>Teacher Analytics</span>
+                    </button>
+                  )}
+
+                  {currentUserRole === 'teacher' && (
+                    <button
+                      role="tab"
+                      aria-selected={activeTab === 'settings'}
+                      onClick={(e) => {
+                        setActiveTab('settings');
+                        e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                      }}
+                      className={`h-8 px-3 rounded-lg text-xs font-heading font-semibold transition flex items-center space-x-1.5 shrink-0 ${
+                        activeTab === 'settings'
+                          ? 'bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 font-bold shadow-sm'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-[#16171c] border border-transparent'
+                      }`}
+                    >
+                      <SettingsIcon className="w-3.5 h-3.5" />
+                      <span>Class Settings</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Scroll Right Button (desktop/touch affordance) */}
                 <button
-                  onClick={() => setActiveTab('settings')}
-                  className={`h-full border-b-2 font-medium transition flex items-center space-x-2 shrink-0 ${
-                    activeTab === 'settings'
-                      ? 'border-[#ff9100] text-white font-semibold'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
+                  type="button"
+                  onClick={() => scrollTabs('right')}
+                  className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-[#1a1c22] transition shrink-0 hidden sm:flex items-center justify-center ml-1"
+                  title="Scroll tabs right"
+                  aria-label="Scroll tabs right"
                 >
-                  <SettingsIcon className="w-3.5 h-3.5" />
-                  <span>Class Settings</span>
+                  <ChevronRight className="w-4 h-4" />
                 </button>
-              )}
-            </div>
+
+                {/* Direct Live Class Launch Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await requestBrowserFullscreen();
+                    } catch {}
+                    router.push(`/classroom/${selectedClassroom?.id}/live/session_main`);
+                  }}
+                  className="h-7.5 px-3 rounded-lg text-xs font-heading font-bold bg-[#FF9100]/20 text-[#FF9100] border border-[#FF9100]/40 hover:bg-[#FF9100] hover:text-black transition flex items-center space-x-1.5 shrink-0 ml-2 shadow-sm"
+                  title="Launch Live Class (Interactive Whiteboard, Slides & Media)"
+                >
+                  <Radio className="w-3.5 h-3.5 animate-pulse text-[#FF9100]" />
+                  <span className="hidden sm:inline">Live Class</span>
+                </button>
+              </div>
 
             {/* TAB 1: Stream & Announcements Feed */}
             {activeTab === 'stream' && (
-              <div className="flex-1 flex overflow-hidden p-6 gap-6">
+              <div className="flex-1 flex overflow-hidden relative">
                 {/* Left Column: Announcements Feed */}
-                <div className="flex-1 flex flex-col space-y-4 overflow-y-auto">
+                <div className="flex-1 min-w-0 flex flex-col space-y-4 overflow-y-auto p-4 sm:p-6">
                   {/* Create Announcement Box */}
-                  {!isArchived && (currentUserRole === 'teacher' || (selectedClassroom.settings as any)?.allowStudentPosting) && (
-                    <div className="bg-[#14151c] border border-[#212330] rounded-xl p-4 shadow-sm space-y-3">
-                      <span className="text-xs font-semibold text-gray-300 flex items-center space-x-2">
-                        <Sparkles className="w-3.5 h-3.5 text-[#ff9100]" />
+                  {!isArchived && currentUserRole === 'teacher' && (
+                    <div className="bg-[#0A0A0A] border border-[#525252] rounded-xl p-4 shadow-sm space-y-3 min-w-0">
+                      <span className="text-xs font-semibold text-[#E5E5E5] flex items-center space-x-2">
+                        <Sparkles className="w-3.5 h-3.5 text-[#FFFFFF]" />
                         <span>Post Class Announcement</span>
                       </span>
                       <form onSubmit={handlePostAnnouncement} className="space-y-3">
@@ -1332,30 +1791,30 @@ export default function ClassroomHubPage() {
                           placeholder="Announcement Title..."
                           value={newAnnTitle}
                           onChange={(e) => setNewAnnTitle(e.target.value)}
-                          className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#ff9100]"
+                          className="w-full min-w-0 bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#525252]"
                         />
                         <textarea
                           rows={3}
                           placeholder="Share course updates, lecture notes, test case hints, or lab reminders..."
                           value={newAnnContent}
                           onChange={(e) => setNewAnnContent(e.target.value)}
-                          className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#ff9100] resize-none"
+                          className="w-full min-w-0 bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#525252] resize-none"
                         />
                         <div className="flex items-center justify-between">
                           {currentUserRole === 'teacher' ? (
-                            <label className="flex items-center space-x-2 text-xs text-gray-400 cursor-pointer">
+                            <label className="flex items-center space-x-2 text-xs text-[#E5E5E5] cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={newAnnPinned}
                                 onChange={(e) => setNewAnnPinned(e.target.checked)}
-                                className="rounded bg-[#1b1d26] border-[#292c3d] text-[#ff9100] focus:ring-0"
+                                className="rounded bg-[#0A0A0A] border-[#525252] text-[#FFFFFF] focus:ring-0"
                               />
                               <span>Pin to top of stream</span>
                             </label>
                           ) : <div />}
                           <button
                             type="submit"
-                            className="px-4 py-1.5 rounded-lg bg-[#ff9100] hover:bg-[#e08000] text-black font-semibold text-xs transition"
+                            className="px-4 py-1.5 rounded-lg bg-[#0A0A0A] hover:bg-[#212121] text-[#FFFFFF] font-semibold text-xs transition"
                           >
                             Post Update
                           </button>
@@ -1365,42 +1824,42 @@ export default function ClassroomHubPage() {
                   )}
 
                   {/* Announcements List */}
-                  <div className="space-y-3">
+                  <div className="space-y-3 min-w-0">
                     {sortedAnnouncements.length === 0 ? (
-                      <div className="text-center text-xs text-gray-500 py-12 bg-[#13141a] border border-[#20222d] rounded-xl p-8">
+                      <div className="text-center text-xs text-[#E5E5E5] py-12 bg-[#000000] border border-[#525252] rounded-xl p-8">
                         No announcements posted yet.
                       </div>
                     ) : (
                       sortedAnnouncements.map((ann) => (
                         <div
                           key={ann.id}
-                          className={`p-4 rounded-xl border transition space-y-2 ${
+                          className={`p-4 rounded-xl border transition space-y-2 min-w-0 ${
                             ann.pinned
-                              ? 'bg-[#181922] border-[#ff9100]/40 shadow-sm'
-                              : 'bg-[#13141a] border-[#20222d]'
+                              ? 'bg-[#0A0A0A] border-[#525252]/40 shadow-sm'
+                              : 'bg-[#000000] border-[#525252]'
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 min-w-0">
                               {ann.pinned && (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#ff9100]/20 text-[#ff9100] border border-[#ff9100]/40 flex items-center space-x-1">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0A0A0A]/20 text-[#FFFFFF] border border-[#525252]/40 flex items-center space-x-1 shrink-0">
                                   <Pin className="w-3 h-3" />
                                   <span>PINNED</span>
                                 </span>
                               )}
-                              <h4 className="text-sm font-semibold text-white">{ann.title}</h4>
+                              <h4 className="text-sm font-semibold text-white truncate">{ann.title}</h4>
                             </div>
 
                             {/* Actions for Instructor */}
-                            <div className="flex items-center space-x-2">
-                              <span className="text-[11px] text-gray-500">
+                            <div className="flex items-center space-x-2 shrink-0">
+                              <span className="text-[11px] text-[#E5E5E5]">
                                 {new Date(ann.createdAt).toLocaleDateString()}
                               </span>
                               {currentUserRole === 'teacher' && !isArchived && (
-                                <div className="flex items-center space-x-1 pl-2 border-l border-[#20222d]">
+                                <div className="flex items-center space-x-1 pl-2 border-l border-[#525252]">
                                   <button
                                     onClick={() => handleTogglePin(ann)}
-                                    className={`p-1 rounded hover:bg-[#20232e] text-xs transition ${ann.pinned ? 'text-[#ff9100]' : 'text-gray-500 hover:text-gray-300'}`}
+                                    className={`p-1 rounded hover:bg-[#212121] text-xs transition ${ann.pinned ? 'text-[#FFFFFF]' : 'text-[#E5E5E5] hover:text-[#E5E5E5]'}`}
                                     title={ann.pinned ? 'Unpin' : 'Pin to top'}
                                   >
                                     <Pin className="w-3.5 h-3.5" />
@@ -1412,14 +1871,14 @@ export default function ClassroomHubPage() {
                                       setEditAnnContent(ann.content);
                                       setEditAnnPinned(ann.pinned);
                                     }}
-                                    className="p-1 rounded hover:bg-[#20232e] text-gray-400 hover:text-white transition"
+                                    className="p-1 rounded hover:bg-[#212121] text-[#E5E5E5] hover:text-white transition"
                                     title="Edit announcement"
                                   >
                                     <Edit3 className="w-3.5 h-3.5" />
                                   </button>
                                   <button
                                     onClick={() => setAnnToDelete(ann)}
-                                    className="p-1 rounded hover:bg-[#20232e] text-gray-400 hover:text-rose-400 transition"
+                                    className="p-1 rounded hover:bg-[#212121] text-[#E5E5E5] hover:text-[#FFFFFF] transition"
                                     title="Delete announcement"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1429,11 +1888,43 @@ export default function ClassroomHubPage() {
                             </div>
                           </div>
 
-                          <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">
+                          <p className="text-xs text-[#E5E5E5] leading-relaxed whitespace-pre-line break-words">
                             {ann.content}
                           </p>
-                          <div className="text-[10px] text-gray-500 pt-2 border-t border-[#1d1f29] flex items-center justify-between">
+                          <div className="text-[10px] text-[#E5E5E5] pt-2 border-t border-[#525252] flex items-center justify-between">
                             <span>Posted by {ann.authorName} ({ann.authorRole})</span>
+                          </div>
+
+                          {/* Comments Section */}
+                          <div className="pt-3 space-y-2 mt-2 border-t border-[#525252]/50 min-w-0">
+                            {messages
+                              .filter((m) => m.recipientType === 'announcement' && m.recipientId === ann.id)
+                              .map((c) => (
+                                <div key={c.id} className="flex flex-col bg-[#0A0A0A] p-2 rounded-lg border border-[#525252]/50 min-w-0">
+                                  <span className="text-[10px] font-bold text-white mb-0.5">{c.senderName}</span>
+                                  <span className="text-xs text-[#E5E5E5] break-words">{c.content}</span>
+                                </div>
+                              ))}
+                            
+                            {/* Comment Input */}
+                            {!isArchived && (
+                              <form onSubmit={(e) => handlePostAnnComment(e, ann.id)} className="flex items-center space-x-2 pt-1 min-w-0">
+                                <input
+                                  type="text"
+                                  placeholder="Add class comment..."
+                                  value={annCommentInputs[ann.id] || ''}
+                                  onChange={(e) => setAnnCommentInputs((prev) => ({ ...prev, [ann.id]: e.target.value }))}
+                                  className="flex-1 min-w-0 bg-[#000000] border border-[#525252] rounded-lg px-3 py-1.5 text-[11px] text-white focus:outline-none focus:border-[#525252]"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={!annCommentInputs[ann.id]?.trim()}
+                                  className="p-1.5 rounded-lg bg-[#212121] text-[#E5E5E5] hover:text-white hover:bg-[#525252] disabled:opacity-50 transition shrink-0"
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                </button>
+                              </form>
+                            )}
                           </div>
                         </div>
                       ))
@@ -1441,78 +1932,300 @@ export default function ClassroomHubPage() {
                   </div>
                 </div>
 
-                {/* Right Column: Classroom Realtime Chat */}
-                <div className="w-80 bg-[#13141a] border border-[#20222d] rounded-xl flex flex-col overflow-hidden">
-                  <div className="p-3.5 border-b border-[#20222d] flex items-center justify-between bg-[#161720]">
-                    <div className="flex items-center space-x-2">
-                      <MessageSquare className="w-4 h-4 text-cyan-400" />
-                      <span className="text-xs font-semibold text-white">Live Classroom Chat</span>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#20232e] text-gray-400">
-                      Real-time
-                    </span>
-                  </div>
+                {/* Right Column: Classroom Realtime Chat with Moving Silver Border & Slide Drawer */}
+                {(() => {
+                  const unreadChatCount = currentUserRole === 'teacher' 
+                    ? members.filter(m => {
+                        if (m.role === 'teacher') return false;
+                        const studentMsgs = messages.filter(msg => (msg.senderId === m.userId && (msg.recipientType === 'teacher' || msg.recipientType === 'direct')));
+                        const latestMsg = studentMsgs[studentMsgs.length - 1];
+                        return Boolean(latestMsg && latestMsg.senderId === m.userId);
+                      }).length
+                    : messages.filter(m => m.recipientType === 'direct' && m.recipientId === currentUserId).length;
 
-                  {/* Messages Feed */}
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-                    {messages.length === 0 ? (
-                      <div className="text-center text-xs text-gray-500 py-12">
-                        No messages yet. Start the discussion!
-                      </div>
-                    ) : (
-                      messages.map((m) => {
-                        const isMe = m.senderId === currentUserId;
-                        return (
-                          <div
-                            key={m.id}
-                            className={`flex flex-col space-y-1 ${isMe ? 'items-end' : 'items-start'}`}
-                          >
-                            <div className="flex items-center space-x-1.5 text-[10px] text-gray-500">
-                              <span className="font-medium text-gray-400">{m.senderName}</span>
-                              <span className="px-1 py-0.2 rounded text-[9px] bg-[#1d1f2a] text-gray-400">
-                                {m.senderRole}
-                              </span>
+                  if (!isChatExpanded) {
+                    return (
+                      <div 
+                        className="w-[74px] h-full flex flex-col shrink-0 border-l border-neutral-800 bg-[#030303] cursor-pointer hover:border-neutral-500 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] select-none group relative z-10 p-1"
+                        onClick={() => { setIsChatExpanded(true); setIsChatPinned(true); }}
+                        title="Click to open Cortex Chat System"
+                      >
+                        <div className="cyber-silver-motion-ring cyber-shape-vertical-ring w-full h-full">
+                          <div className="cyber-silver-motion-inner cyber-shape-vertical-inner bg-gaming-grid flex flex-col items-center justify-between py-6 relative h-full">
+                            {/* Top Cyber Status Tag */}
+                            <div className="pt-2 flex flex-col items-center opacity-70 group-hover:opacity-100 transition-opacity">
+                              <div className="w-4 h-1 rounded-full bg-white/60 shadow-[0_0_6px_rgba(255,255,255,0.8)]" />
+                              <span className="font-mono text-[7px] text-neutral-400 tracking-widest mt-1">SYS // CX</span>
                             </div>
-                            <div
-                              className={`px-3 py-2 rounded-xl text-xs max-w-[85%] leading-relaxed ${
-                                isMe
-                                  ? 'bg-[#ff9100]/20 text-gray-100 border border-[#ff9100]/40'
-                                  : 'bg-[#1b1d26] text-gray-200 border border-[#282a38]'
-                              }`}
-                            >
-                              {m.content}
+
+                            {/* Center: Prominent Draco Racing Typography Lockup (74px width, 40% clean brightness) */}
+                            <div className="flex-1 flex items-center justify-center my-auto py-2 group-hover:scale-105 transition-transform select-none">
+                              <div className="draco-lockup-container" style={{ transform: 'rotate(-90deg)', width: '330px' }}>
+                                {/* Parallel Fiery Red-Orange Sub-Tag */}
+                                <div className="racing-sub-tag text-[9.5px]">
+                                  CHAT SYSTEM
+                                </div>
+                                
+                                {/* Bold Speed-Italic Metallic Chrome Main Title */}
+                                <div className="racing-main-title text-[32px]">
+                                  CORTEX
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Cyber Click Indicator */}
+                            <div className="pb-2 flex flex-col items-center opacity-60 group-hover:opacity-100 transition-opacity">
+                              <ChevronLeft className="w-3.5 h-3.5 text-white animate-pulse" />
+                              <span className="font-mono text-[7.5px] text-neutral-400 uppercase tracking-widest mt-0.5">CLICK</span>
                             </div>
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+                        </div>
+                      </div>
+                    );
+                  }
 
-                  {/* Chat Input */}
-                  {!isArchived ? (
-                    <form onSubmit={handleSendMessage} className="p-3 border-t border-[#20222d] bg-[#161720] flex space-x-2">
-                      <input
-                        type="text"
-                        placeholder="Type a message to class..."
-                        value={newChatText}
-                        onChange={(e) => setNewChatText(e.target.value)}
-                        className="flex-1 bg-[#1b1d26] border border-[#282b3a] rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400"
+                  return (
+                    <>
+                      {/* Responsive Backdrop on small/tablet/laptop viewports (< xl) */}
+                      <div 
+                        className="xl:hidden absolute inset-0 bg-black/60 backdrop-blur-xs z-20 transition-opacity"
+                        onClick={() => { setIsChatExpanded(false); setIsChatPinned(false); }}
                       />
-                      <button
-                        type="submit"
-                        className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition flex items-center justify-center"
+
+                      <div 
+                        className="absolute right-0 top-0 bottom-0 h-full z-30 w-full sm:w-[390px] xl:w-96 xl:relative xl:z-20 xl:shrink-0 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex border-l border-neutral-800 bg-[#09090b] shadow-2xl p-2 max-w-full min-w-0"
                       >
-                        <Send className="w-3.5 h-3.5" />
-                      </button>
-                    </form>
-                  ) : (
-                    <div className="p-3 border-t border-[#20222d] bg-[#161720] text-center text-xs text-gray-500">
-                      Chat is disabled for archived classrooms
+                        <div className="silver-moving-border w-full h-full shadow-2xl flex flex-col min-w-0">
+                          <div className="silver-inner-content flex flex-col overflow-hidden h-full min-w-0">
+                          
+                          {/* Chat Header */}
+                          <div className="p-3 border-b border-neutral-800 flex items-center justify-between bg-[#0E0E0E] shrink-0 z-10">
+                            {currentUserRole === 'teacher' && activeChatUserId !== null ? (
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <button 
+                                  onClick={() => setActiveChatUserId(null)} 
+                                  className="p-1 rounded-lg hover:bg-neutral-800 text-neutral-300 hover:text-white transition-all active:scale-90 shrink-0"
+                                >
+                                  <ArrowLeft className="w-4 h-4" />
+                                </button>
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-xs font-semibold text-white truncate max-w-[140px]">
+                                    {activeChatUserId === 'class' ? 'Class Announcements' : `${members.find(m => m.userId === activeChatUserId)?.userName || 'Student'}`}
+                                  </span>
+                                  <span className="text-[9px] text-cyan-400 flex items-center space-x-1 truncate">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0"></span>
+                                    <span className="truncate">{activeChatUserId === 'class' ? 'Broadcast' : 'Direct Message'}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-[#141416] border border-neutral-700/80 flex items-center justify-center shrink-0 p-1 shadow-inner">
+                                  <CortexLogo variant="icon" size="sm" />
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                  <div className="flex items-center space-x-2 min-w-0">
+                                    <h3 className="text-sm font-semibold text-white tracking-tight truncate">
+                                      Cortex Chat System
+                                    </h3>
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0" />
+                                  </div>
+                                  <span className="text-[11px] text-neutral-400 truncate">
+                                    {currentUserRole === 'teacher' ? 'Prioritized Student Messages' : 'Live Realtime Classroom'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Header Action Buttons (Collapse) */}
+                            <div className="flex items-center space-x-1.5 shrink-0 ml-2">
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/60 text-cyan-400 border border-cyan-500/30 font-medium whitespace-nowrap">
+                                Real-time
+                              </span>
+                              <button
+                                onClick={() => { setIsChatExpanded(false); setIsChatPinned(false); }}
+                                title="Slide close chat"
+                                className="p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white transition active:scale-90 border border-neutral-800 shrink-0"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {currentUserRole === 'teacher' && activeChatUserId === null ? (
+                            // Chats List View with Smooth Slide Animation
+                            <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1 animate-chat-slide-right custom-scrollbar">
+                              <div
+                                onClick={() => setActiveChatUserId('class')}
+                                className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-neutral-900 cursor-pointer transition border border-transparent hover:border-neutral-800 group"
+                              >
+                                <div className="w-9 h-9 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0 group-hover:scale-105 transition-transform">
+                                  <MessageSquare className="w-4 h-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex justify-between items-baseline">
+                                    <span className="text-xs font-semibold text-white">Class Broadcast</span>
+                                    <span className="text-[9px] text-neutral-500">Live</span>
+                                  </div>
+                                  <div className="text-[10px] text-neutral-400 truncate">Broadcast message to all students</div>
+                                </div>
+                              </div>
+
+                              <div className="pt-2 pb-1 px-2 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex justify-between items-center">
+                                <span>Students</span>
+                                <span className="text-[9px] text-cyan-400 font-normal">Sorted by latest</span>
+                              </div>
+
+                              {filteredMembers
+                                .filter((m) => m.role !== 'teacher')
+                                .map((student) => {
+                                  const studentMsgs = messages.filter(m => 
+                                    (m.senderId === student.userId && (m.recipientType === 'teacher' || m.recipientType === 'direct')) ||
+                                    (m.senderId === currentUserId && m.recipientId === student.userId)
+                                  );
+                                  const latestMsg = studentMsgs[studentMsgs.length - 1];
+                                  const latestTs = latestMsg?.createdAt || 0;
+                                  // Unread = latest message is FROM the student (not from teacher)
+                                  const hasUnread = latestMsg && latestMsg.senderId === student.userId;
+                                  return { student, studentMsgs, latestMsg, latestTs, hasUnread };
+                                })
+                                .sort((a, b) => b.latestTs - a.latestTs)
+                                .map(({ student, latestMsg, hasUnread }) => (
+                                  <div
+                                    key={student.userId}
+                                    onClick={() => setActiveChatUserId(student.userId)}
+                                    className="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-neutral-900 cursor-pointer transition border border-transparent hover:border-neutral-800 group"
+                                  >
+                                    <div className="relative shrink-0">
+                                      <div className="w-9 h-9 rounded-full bg-[#0A0A0A] border border-neutral-700 flex items-center justify-center font-bold text-white text-xs group-hover:scale-105 transition-transform">
+                                        {student.userName.charAt(0) || '?'}
+                                      </div>
+                                      {hasUnread && (
+                                        <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-cyan-400 rounded-full border-2 border-[#0A0A0A] shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex justify-between items-baseline">
+                                        <span className={`text-xs truncate ${hasUnread ? 'font-bold text-white' : 'font-semibold text-neutral-200'}`}>{student.userName || 'Student'}</span>
+                                        {latestMsg && (
+                                          <span className={`text-[9px] ${hasUnread ? 'text-cyan-400 font-semibold' : 'text-neutral-500'} shrink-0 ml-1`}>
+                                            {new Date(latestMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className={`text-[11px] truncate ${hasUnread ? 'text-cyan-300 font-medium' : 'text-neutral-400'}`}>
+                                        {latestMsg ? latestMsg.content : 'No messages yet'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
+                            // Messages Feed View with Slide and Pop-in Animations
+                            <div 
+                              ref={chatMessagesContainerRef} 
+                              className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 animate-chat-slide-left custom-scrollbar"
+                            >
+                              {(() => {
+                                const effectiveChatId = activeChatUserId || 'class';
+                                const displayedMessages = messages.filter(m => {
+                                  if (m.recipientType === 'announcement') return false;
+                                  if (currentUserRole === 'teacher' && effectiveChatId !== 'class') {
+                                    return (m.senderId === effectiveChatId && (m.recipientType === 'teacher' || m.recipientType === 'direct')) ||
+                                           (m.senderId === currentUserId && m.recipientId === effectiveChatId);
+                                  }
+                                  // Class broadcast feed OR student unified feed
+                                  if (m.recipientType === 'class') return true;
+                                  // Student sees their own outgoing messages to teacher
+                                  if (m.recipientType === 'teacher' && m.senderId === currentUserId) return true;
+                                  // Student sees DMs addressed to them (from teacher)
+                                  if (m.recipientType === 'direct' && m.recipientId === currentUserId) return true;
+                                  // Student sees their own sent DMs (shown as outgoing)
+                                  if (m.recipientType === 'direct' && m.senderId === currentUserId) return true;
+                                  return false;
+                                });
+
+                                if (displayedMessages.length === 0) {
+                                  return (
+                                    <div className="text-center text-xs text-neutral-400 py-16 flex flex-col items-center justify-center space-y-2">
+                                      <div className="w-10 h-10 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-500">
+                                        <MessageSquare className="w-5 h-5" />
+                                      </div>
+                                      <span>No messages yet. Start the discussion!</span>
+                                    </div>
+                                  );
+                                }
+
+                                return displayedMessages.map((m) => {
+                                  const isMe = m.senderId === currentUserId;
+                                  return (
+                                    <div
+                                      key={m.id}
+                                      className={`flex flex-col space-y-1 ${isMe ? 'items-end' : 'items-start'} animate-chat-pop-in max-w-full`}
+                                    >
+                                      <div className="flex items-center space-x-1.5 text-[10px] text-neutral-400 max-w-full">
+                                        <span className="font-medium text-neutral-300 truncate max-w-[140px]">{m.senderName || (m.senderRole === 'student' ? 'Student' : 'Instructor')}</span>
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-neutral-900 text-neutral-400 border border-neutral-800 shrink-0">
+                                          {m.senderRole}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={`px-3.5 py-2 text-xs max-w-[85%] leading-relaxed shadow-sm break-words ${
+                                          isMe
+                                            ? 'bg-[#005c4b]/85 text-white rounded-2xl rounded-tr-xs border border-[#00a884]/40'
+                                            : 'bg-[#202c33] text-white rounded-2xl rounded-tl-xs border border-neutral-700/60'
+                                        }`}
+                                      >
+                                        <div className="break-words">{m.content}</div>
+                                        <div className="text-[9px] text-right mt-1 opacity-75 flex items-center justify-end space-x-1 shrink-0">
+                                          <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                          {isMe && <span className="text-cyan-300 font-bold ml-1 text-[10px]">✓✓</span>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
+                          )}
+
+                          {/* Chat Input Bar */}
+                          {!(currentUserRole === 'teacher' && activeChatUserId === null) && (
+                            !isArchived ? (
+                              <form onSubmit={handleSendMessage} className="p-2.5 border-t border-neutral-800 bg-[#0E0E0E] flex space-x-2 items-center shrink-0 min-w-0">
+                                <input
+                                  type="text"
+                                  placeholder={
+                                    currentUserRole === 'teacher' 
+                                      ? (activeChatUserId === 'class' ? "Type a message to class..." : "Message student...") 
+                                      : "Message teachers..."
+                                  }
+                                  value={newChatText}
+                                  onChange={(e) => setNewChatText(e.target.value)}
+                                  onFocus={() => setIsChatPinned(true)}
+                                  className="flex-1 min-w-0 bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-cyan-400 transition-colors shadow-inner"
+                                />
+                                <button
+                                  type="submit"
+                                  className="w-8 h-8 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:scale-95 text-black font-semibold flex items-center justify-center transition-all shadow-md shrink-0"
+                                >
+                                  <Send className="w-3.5 h-3.5 ml-0.5" />
+                                </button>
+                              </form>
+                            ) : (
+                              <div className="p-3 border-t border-[#525252] bg-[#0A0A0A] text-center text-xs text-[#E5E5E5] shrink-0">
+                                Chat is disabled for archived classrooms
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
 
             {/* TAB 2: People & Roster Management */}
             {activeTab === 'people' && (
@@ -1521,34 +2234,34 @@ export default function ClassroomHubPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-bold text-white">Course Members & Roster</h3>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-[#E5E5E5]">
                       Manage enrolled students, verify attendance presence, and maintain class permissions.
                     </p>
                   </div>
                   <div className="flex items-center space-x-3">
                     <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5" />
+                      <Search className="w-3.5 h-3.5 text-[#E5E5E5] absolute left-3 top-2.5" />
                       <input
                         type="text"
                         placeholder="Search student or email..."
                         value={searchMemberQuery}
                         onChange={(e) => setSearchMemberQuery(e.target.value)}
-                        className="bg-[#14151d] border border-[#232636] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#ff9100]"
+                        className="bg-[#0A0A0A] border border-[#525252] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#525252]"
                       />
                     </div>
-                    <span className="px-3 py-1.5 rounded-xl bg-[#14151d] border border-[#232636] text-xs font-mono text-gray-300">
-                      {members.length} Enrolled
+                    <span className="px-3 py-1.5 rounded-xl bg-[#0A0A0A] border border-[#525252] text-xs font-mono text-[#E5E5E5]">
+                      {new Set(members.map(m => m.userEmail || m.userId)).size} Enrolled
                     </span>
                   </div>
                 </div>
 
                 {/* Instructors Section */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Instructors</h4>
-                  <div className="bg-[#13141a] border border-[#20222d] rounded-xl overflow-hidden divide-y divide-[#1e202b]">
-                    <div className="p-4 flex items-center justify-between hover:bg-[#181922] transition">
+                  <h4 className="text-xs font-semibold text-[#E5E5E5] uppercase tracking-wider">Instructors</h4>
+                  <div className="bg-[#000000] border border-[#525252] rounded-xl overflow-hidden divide-y divide-[#1e202b]">
+                    <div className="p-4 flex items-center justify-between hover:bg-[#212121] transition">
                       <div className="flex items-center space-x-3">
-                        <div className="w-9 h-9 rounded-full bg-[#ff9100]/20 border border-[#ff9100]/40 flex items-center justify-center font-bold text-[#ff9100] text-sm">
+                        <div className="w-9 h-9 rounded-full bg-[#0A0A0A]/20 border border-[#525252]/40 flex items-center justify-center font-bold text-[#FFFFFF] text-sm">
                           {selectedClassroom.teacherName.charAt(0)}
                         </div>
                         <div>
@@ -1558,12 +2271,12 @@ export default function ClassroomHubPage() {
                               COURSE INSTRUCTOR
                             </span>
                           </div>
-                          <div className="text-xs text-gray-500">elena.rostova@cortex.edu</div>
+                          <div className="text-xs text-[#E5E5E5]">elena.rostova@cortex.edu</div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="text-xs text-gray-400">Instructor Available</span>
+                        <span className="text-xs text-[#E5E5E5]">Instructor Available</span>
                       </div>
                     </div>
                   </div>
@@ -1572,14 +2285,14 @@ export default function ClassroomHubPage() {
                 {/* Students Section */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    <h4 className="text-xs font-semibold text-[#E5E5E5] uppercase tracking-wider">
                       Students ({filteredMembers.filter((m) => m.role !== 'teacher').length})
                     </h4>
                   </div>
 
-                  <div className="bg-[#13141a] border border-[#20222d] rounded-xl overflow-hidden divide-y divide-[#1e202b]">
+                  <div className="bg-[#000000] border border-[#525252] rounded-xl overflow-hidden divide-y divide-[#1e202b]">
                     {filteredMembers.filter((m) => m.role !== 'teacher').length === 0 ? (
-                      <div className="p-8 text-center text-xs text-gray-500">
+                      <div className="p-8 text-center text-xs text-[#E5E5E5]">
                         No students enrolled yet or matching search filter. Share the join code with your students!
                       </div>
                     ) : (
@@ -1588,15 +2301,15 @@ export default function ClassroomHubPage() {
                         .map((member) => (
                           <div
                             key={member.id}
-                            className="p-3.5 flex items-center justify-between hover:bg-[#181922] transition"
+                            className="p-3.5 flex items-center justify-between hover:bg-[#212121] transition"
                           >
                             <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 rounded-full bg-[#1e212d] border border-[#2d3142] flex items-center justify-center font-bold text-cyan-400 text-xs">
+                              <div className="w-8 h-8 rounded-full bg-[#0A0A0A] border border-[#525252] flex items-center justify-center font-bold text-[#FFFFFF] text-xs">
                                 {member.userName.charAt(0)}
                               </div>
                               <div>
                                 <div className="text-xs font-semibold text-white">{member.userName}</div>
-                                <div className="text-[11px] text-gray-500">
+                                <div className="text-[11px] text-[#E5E5E5]">
                                   {member.userEmail || `${member.userId}@student.cortex.edu`}
                                 </div>
                               </div>
@@ -1606,27 +2319,36 @@ export default function ClassroomHubPage() {
                               {/* Presence Badge */}
                               <div className="flex items-center space-x-1.5">
                                 <div className={`w-2 h-2 rounded-full ${member.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
-                                <span className="text-xs text-gray-400">{member.isOnline ? 'Online now' : 'Offline'} {member.status === 'suspended' && <span className="text-amber-500 font-bold ml-2">(SUSPENDED)</span>}</span>
+                                <span className="text-xs text-[#E5E5E5]">{member.isOnline ? 'Online now' : 'Offline'} {member.status === 'suspended' && <span className="text-[#FFFFFF] font-bold ml-2">(SUSPENDED)</span>}</span>
                               </div>
 
-                              <span className="text-[11px] text-gray-500 font-mono">
+                              <span className="text-[11px] text-[#E5E5E5] font-mono">
                                 Joined {new Date(member.joinedAt).toLocaleDateString()}
                               </span>
 
-                              {/* Remove Student Action for Instructor */}
+                              {/* Actions for Instructor */}
                               {currentUserRole === 'teacher' && !isArchived && (
-                                
                                 <div className="flex items-center space-x-2 mt-2">
                                   <button
+                                    onClick={() => {
+                                      setActiveChatUserId(member.userId);
+                                      setActiveTab('stream');
+                                    }}
+                                    className="px-2 py-1 rounded-lg text-xs font-medium bg-[#212121] text-[#E5E5E5] hover:text-[#FFFFFF] transition"
+                                    title="Direct Message"
+                                  >
+                                    Message
+                                  </button>
+                                  <button
                                     onClick={() => handleSuspendMember(member, member.status === 'suspended' ? 'unsuspend' : 'suspend')}
-                                    className={`px-2 py-1 rounded-lg text-xs font-medium transition ${member.status === 'suspended' ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-gray-800 text-gray-400 hover:text-amber-500'}`}
+                                    className={`px-2 py-1 rounded-lg text-xs font-medium transition ${member.status === 'suspended' ? 'bg-amber-500/10 text-[#FFFFFF] hover:bg-amber-500/20' : 'bg-gray-800 text-[#E5E5E5] hover:text-[#FFFFFF]'}`}
                                     title={member.status === 'suspended' ? "Restore Access" : "Suspend student (Block for some days)"}
                                   >
                                     {member.status === 'suspended' ? 'Unsuspended' : 'Suspend'}
                                   </button>
                                   <button
                                     onClick={() => setMemberToRemove(member)}
-                                    className="p-1.5 rounded-lg hover:bg-rose-950/40 text-gray-500 hover:text-rose-400 border border-transparent hover:border-rose-800/40 transition flex items-center space-x-1 text-xs"
+                                    className="p-1.5 rounded-lg hover:bg-rose-950/40 text-[#E5E5E5] hover:text-[#FFFFFF] border border-transparent hover:border-rose-800/40 transition flex items-center space-x-1 text-xs"
                                     title="Remove student completely"
                                   >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1645,143 +2367,295 @@ export default function ClassroomHubPage() {
               </div>
             )}
 
-            {/* TAB 3: Assignments & Lab */}
+            {/* TAB 3: Assignments & Lab (LeetCode-style Clean Problemset Catalog) */}
             {activeTab === 'assignments' && (
-              <div className="flex-1 flex overflow-hidden p-6 gap-6">
-                {/* Left: Assignment List */}
-                <div className="w-80 bg-[#13141a] border border-[#20222d] rounded-xl flex flex-col overflow-hidden shrink-0 shadow-sm">
-                  <div className="p-3.5 border-b border-[#20222d] flex items-center justify-between bg-[#161720]">
-                    <span className="text-sm font-bold text-white tracking-tight">Problem Sets</span>
+              <div className="flex-1 flex flex-col overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+                {/* Header & Controls Bar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#262626] pb-5">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-3">
+                      <h3 className="text-xl font-extrabold text-white tracking-tight flex items-center space-x-2">
+                        <Code2 className="w-5 h-5 text-emerald-400" />
+                        <span>Problem Sets & Challenges</span>
+                      </h3>
+                      <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-[#171717] border border-[#262626] text-zinc-300">
+                        {assignments.length} {assignments.length === 1 ? 'Problem' : 'Problems'}
+                      </span>
+                      {currentUserRole === 'student' && assignments.length > 0 && (
+                        <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center space-x-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Solved: {solvedCount} / {assignments.length}</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      Explore coding challenges, test your solutions against unit benchmarks, and submit for instant autograding.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
                     {currentUserRole === 'teacher' && !isArchived && (
                       <button
                         onClick={() => router.push(`/classroom/${selectedClassroom?.id}/assignments/builder/new`)}
-                        className="px-2 py-1 rounded bg-[#ff9100] text-black font-semibold text-[11px] hover:bg-[#e08000] transition flex items-center space-x-1"
+                        className="cyber-btn-ring cyber-btn-silver text-xs font-bold transition active:scale-95 cursor-pointer"
                       >
-                        <Plus className="w-3 h-3" />
-                        <span>New</span>
+                        <div className="cyber-btn-inner px-3.5 py-1.5 flex items-center space-x-1.5 font-mono">
+                          <Plus className="w-3.5 h-3.5 text-white" />
+                          <span className="tracking-wide">New Problem</span>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#0A0A0A]/90 backdrop-blur border border-[#262626] p-3 rounded-xl">
+                  {/* Search Input */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search questions by title, language, or keyword..."
+                      value={asgSearchQuery}
+                      onChange={(e) => setAsgSearchQuery(e.target.value)}
+                      className="w-full bg-[#121212] border border-[#262626] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+                    />
+                    {asgSearchQuery && (
+                      <button 
+                        onClick={() => setAsgSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                      >
+                        <X className="w-3 h-3" />
                       </button>
                     )}
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
-                    {assignments.map((asg) => {
-                      const isSel = selectedAssignment?.id === asg.id;
-                      return (
-                        <button
-                          key={asg.id}
-                          onClick={() => {
-                            setSelectedAssignment(asg);
-                            setStudentCodeInput(asg.startercode || '');
-                            setLastSubmissionResult(null);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg border transition space-y-1.5 ${
-                            isSel
-                              ? 'bg-[#1c1e28] border-[#ff9100]/60'
-                              : 'bg-[#15161f] border-[#222432] hover:border-[#323648]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#20232f] text-cyan-400">
-                              {asg.language.toUpperCase()}
-                            </span>
-                            <span className="text-[10px] text-gray-400 font-bold bg-[#1e202b] px-2 py-0.5 rounded-full">
-                              {asg.maxMarks} pts
-                            </span>
-                          </div>
-                          <h4 className="text-sm font-bold text-gray-100 line-clamp-1">{asg.title}</h4>
-                          <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1">
-                            <span>Due in {Math.round((asg.dueAt - Date.now()) / 86400000)}d</span>
-                            <span className="text-amber-400">{asg.difficulty}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                  {/* Difficulty & Status Filters */}
+                  <div className="flex items-center space-x-1.5 overflow-x-auto text-xs">
+                    {(['all', 'easy', 'medium', 'hard'] as const).map((diff) => (
+                      <button
+                        key={diff}
+                        onClick={() => setAsgDifficultyFilter(diff)}
+                        className={`px-3 py-1 rounded-lg font-medium capitalize text-[11px] transition ${
+                          asgDifficultyFilter === diff
+                            ? 'bg-zinc-800 text-white font-semibold border border-zinc-700'
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                        }`}
+                      >
+                        {diff}
+                      </button>
+                    ))}
+                    {currentUserRole === 'student' && (
+                      <div className="border-l border-zinc-800 pl-2 ml-1 flex space-x-1">
+                        {(['all', 'solved', 'unsolved'] as const).map((st) => (
+                          <button
+                            key={st}
+                            onClick={() => setAsgStatusFilter(st)}
+                            className={`px-2.5 py-1 rounded-lg font-medium capitalize text-[11px] transition ${
+                              asgStatusFilter === st
+                                ? 'bg-zinc-800 text-white font-semibold border border-zinc-700'
+                                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                            }`}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Right: Active Assignment Solver */}
-                {selectedAssignment ? (
-                  <div className="flex-1 flex flex-col bg-[#13141a] border border-[#20222d] rounded-xl overflow-hidden">
-                    <div className="p-4 border-b border-[#20222d] bg-[#161720] flex items-center justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <h3 className="text-xl font-extrabold text-white tracking-tight">{selectedAssignment.title}</h3>
-                          <span className="text-xs px-3 py-1 rounded-full font-mono font-bold bg-[#ff9100]/10 border border-[#ff9100]/20 text-[#ff9100] shadow-sm">
-                            Max Marks: {selectedAssignment.maxMarks}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-400">{selectedAssignment.instructions}</p>
-                      </div>
+                {/* Problem Table / List (LeetCode Style with Seamless Swap) */}
+                <div className="bg-[#0A0A0A]/90 backdrop-blur border border-[#262626] rounded-xl overflow-hidden shadow-sm">
+                  {/* Table Column Headers */}
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-[#262626] text-[11px] font-bold text-zinc-400 uppercase tracking-wider bg-[#0f0f11]">
+                    <div className="flex items-center space-x-4">
+                      <span className="w-6 text-center">Status</span>
+                      <span>Question & Description</span>
+                    </div>
+                    <div className="flex items-center space-x-6 sm:space-x-8">
+                      <span>Difficulty</span>
+                      <span className="w-64 text-right pr-2 hidden sm:block">Language / Action</span>
+                    </div>
+                  </div>
 
-                      <div className="flex space-x-2">
-                        {currentUserRole === 'teacher' ? (
-                          <>
-                            <button
-                              onClick={() => router.push(`/classroom/${selectedClassroom?.id}/submissions`)}
-                              className="px-4 py-2 rounded-xl bg-[#1f212a] hover:bg-[#272a38] text-white font-semibold text-xs transition"
-                            >
-                              Submissions
-                            </button>
-                            <button
-                              onClick={() => router.push(`/classroom/${selectedClassroom?.id}/assignments/builder/${selectedAssignment.id}`)}
-                              className="px-4 py-2 rounded-xl bg-[#ff9100] hover:bg-[#e07f00] text-black font-bold text-xs transition"
-                            >
-                              Edit
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => router.push(`/classroom/${selectedClassroom?.id}/assignments/${selectedAssignment.id}/submissions`)}
-                            className="px-4 py-2 rounded-xl bg-[#1f212a] hover:bg-[#272a38] text-white font-semibold text-xs transition"
+                  {/* Empty State */}
+                  {filteredAssignments.length === 0 ? (
+                    <div className="py-16 text-center space-y-3">
+                      <Code2 className="w-10 h-10 text-zinc-600 mx-auto" />
+                      <p className="text-sm font-semibold text-zinc-300">No questions found</p>
+                      <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                        {assignments.length === 0
+                          ? 'No assignments have been published in this classroom yet.'
+                          : 'No questions match your current search and difficulty filters.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#1e1e1e]">
+                      {filteredAssignments.map((asg, idx) => {
+                        const mySub = submissions.find(
+                          (s) => s.assignmentId === asg.id && s.studentId === currentUserId
+                        );
+                        const isSolved = mySub ? (mySub.score >= 70 || mySub.status === 'completed') : false;
+                        const isAttempted = !!mySub;
+
+                        const diffLower = asg.difficulty?.toLowerCase();
+                        const diffBadgeClass =
+                          diffLower === 'easy'
+                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25'
+                            : diffLower === 'hard'
+                            ? 'text-rose-400 bg-rose-500/10 border-rose-500/25'
+                            : 'text-amber-400 bg-amber-500/10 border-amber-500/25';
+
+                        const daysLeft = Math.round((asg.dueAt - Date.now()) / 86400000);
+
+                        return (
+                          <div
+                            key={asg.id}
+                            onClick={() => router.push(`/classroom/${selectedClassroom?.id}/assignments/${asg.id}/solve`)}
+                            className="group flex items-center justify-between px-5 py-3.5 border-b border-[#1e1e1e] last:border-b-0 hover:bg-[#121316] transition-colors duration-150 cursor-pointer hover:border-l-4 hover:border-l-emerald-500"
                           >
-                            My Submissions
-                          </button>
-                        )}
-                        <button
-                          onClick={() => router.push(`/classroom/${selectedClassroom?.id}/assignments/${selectedAssignment.id}/solve`)}
-                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition flex items-center space-x-2"
-                        >
-                          <Play className="w-4 h-4 fill-current" />
-                          <span>Solve in Cortex IDE</span>
-                        </button>
-                      </div>
-                    </div>
+                            {/* Left: Status + Title & Description */}
+                            <div className="flex items-center space-x-4 min-w-0 pr-4 flex-1">
+                              {/* Status Icon */}
+                              <div className="w-6 flex items-center justify-center shrink-0">
+                                {isSolved ? (
+                                  <span title="Solved">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-400 fill-emerald-500/20" />
+                                  </span>
+                                ) : isAttempted ? (
+                                  <span title={`Attempted (${mySub?.score} pts)`}>
+                                    <Clock className="w-4 h-4 text-amber-400" />
+                                  </span>
+                                ) : (
+                                  <div className="w-2.5 h-2.5 rounded-full border border-zinc-600 group-hover:border-zinc-400 transition" />
+                                )}
+                              </div>
 
-                    <div className="flex-1 flex overflow-y-auto p-6 bg-[#0d0e12]">
-                      <div className="max-w-3xl w-full mx-auto space-y-6">
-                        <div>
-                          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Problem Statement</h4>
-                          <div className="prose prose-invert text-sm text-gray-300">
-                            {selectedAssignment.description}
+                              {/* Title & Description preview */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-zinc-500 font-mono text-xs font-semibold">
+                                    {idx + 1}.
+                                  </span>
+                                  <h4 className="text-sm font-bold text-white group-hover:text-emerald-400 transition truncate">
+                                    {asg.title}
+                                  </h4>
+                                </div>
+                                <p className="text-[11px] text-zinc-400 truncate mt-0.5 max-w-xl">
+                                  {asg.description || asg.instructions}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Right: Difficulty + Swap Container */}
+                            <div className="flex items-center space-x-6 shrink-0">
+                              {/* Difficulty */}
+                              <span
+                                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border capitalize ${diffBadgeClass}`}
+                              >
+                                {asg.difficulty || 'Medium'}
+                              </span>
+
+                              {/* Swap Container: Metadata when idle -> Buttons when hovering */}
+                              <div className="relative w-64 h-8 flex items-center justify-end">
+                                {/* Default State: Language, Points, Due Date */}
+                                <div className="flex items-center space-x-3 transition-opacity duration-200 group-hover:opacity-0 group-hover:pointer-events-none">
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700">
+                                    {asg.language.toUpperCase()}
+                                  </span>
+                                  <span className="text-xs font-mono font-bold text-zinc-300">
+                                    {asg.maxMarks} pts
+                                  </span>
+                                  <span className="text-[10px] text-zinc-500 whitespace-nowrap">
+                                    {daysLeft >= 0 ? `Due in ${daysLeft}d` : 'Past due'}
+                                  </span>
+                                </div>
+
+                                {/* Hover State: Action Buttons (Cortex Cyber Chamfer Style) */}
+                                <div className="absolute inset-y-0 right-0 flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-200 transform translate-x-2 group-hover:translate-x-0 pointer-events-none group-hover:pointer-events-auto">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(`/classroom/${selectedClassroom?.id}/assignments/${asg.id}/solve`);
+                                    }}
+                                    className="cyber-btn-ring cyber-btn-emerald cursor-pointer shrink-0 active:scale-95"
+                                    title="Solve Challenge in Cortex IDE"
+                                  >
+                                    <div className="cyber-btn-inner px-3 py-1 text-xs font-mono font-bold flex items-center space-x-1">
+                                      <Play className="w-3 h-3 fill-current" />
+                                      <span className="tracking-wider">SOLVE</span>
+                                    </div>
+                                  </button>
+
+                                  {currentUserRole === 'teacher' && (
+                                    <>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          router.push(`/classroom/${selectedClassroom?.id}/submissions`);
+                                        }}
+                                        className="cyber-btn-ring cyber-btn-silver cursor-pointer shrink-0"
+                                        title="Review Submissions"
+                                      >
+                                        <div className="cyber-btn-inner px-2.5 py-1 text-xs font-mono font-medium">
+                                          Submissions
+                                        </div>
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          router.push(`/classroom/${selectedClassroom?.id}/assignments/builder/${asg.id}`);
+                                        }}
+                                        className="cyber-btn-ring cyber-btn-silver cursor-pointer shrink-0"
+                                        title="Edit Assignment"
+                                      >
+                                        <div className="cyber-btn-inner px-2 py-1 text-xs font-mono">
+                                          <Edit3 className="w-3 h-3 text-zinc-300" />
+                                        </div>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="p-4 bg-[#1e2026] rounded-xl border border-[#2d313f]">
-                          <h4 className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">Instructions & Constraints</h4>
-                          <div className="text-sm font-mono text-emerald-400 whitespace-pre-wrap">
-                            {selectedAssignment.instructions}
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex-1 flex items-center justify-center text-xs text-gray-500">
-                    Select an assignment to inspect test suite.
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
 
-            {/* TAB 4: Arena (Placeholder) */}
-            {activeTab === 'arena' && (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center space-y-4">
-                <Terminal className="w-12 h-12 text-rose-500" />
-                <h3 className="text-lg font-bold text-white">Cortex Arena</h3>
-                <p className="text-xs max-w-md text-gray-500 leading-relaxed">
-                  The Arena is where coding battles and global challenges take place. Head over to the main Cortex Arena via the sidebar to compete globally.
-                </p>
+            {/* TAB: Online Examinations */}
+            {activeTab === 'examinations' && selectedClassroom && (
+              <ExaminationsTab
+                classroomId={selectedClassroom.id}
+                isTeacher={currentUserRole === 'teacher'}
+                currentUser={{
+                  id: currentUserId,
+                  name: currentUserName,
+                  email: currentUserEmail,
+                }}
+              />
+            )}
+
+            {/* TAB: Project Teams & Formation Studio */}
+            {activeTab === 'teams' && selectedClassroom && (
+              <div className="flex-1 flex flex-col overflow-y-auto p-4 sm:p-6 lg:p-8">
+                <TeamsTab
+                  classroomId={selectedClassroom.id}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
+                  currentUserName={currentUserName}
+                  currentUserEmail={currentUserEmail}
+                  getAuthHeaders={getAuthHeaders}
+                  showToast={showToast}
+                />
               </div>
             )}
+
 
             {/* TAB 5: Grades & Feedback */}
             {activeTab === 'grades' && (
@@ -1789,29 +2663,29 @@ export default function ClassroomHubPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-bold text-white">Submissions & Gradebook</h3>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-[#E5E5E5]">
                       Review automated test scores, adjust marks, write detailed student feedback, and release grades.
                     </p>
                   </div>
                   <div className="flex space-x-3">
                     <button 
                       onClick={() => router.push(`/classroom/${selectedClassroom?.id}/submissions`)}
-                      className="px-4 py-2 bg-[#1f212a] hover:bg-[#272a38] text-white text-xs font-semibold rounded transition"
+                      className="px-4 py-2 bg-[#0A0A0A] hover:bg-[#212121] text-white text-xs font-semibold rounded transition"
                     >
                       View All Submissions
                     </button>
                     <button 
                       onClick={() => router.push(`/classroom/${selectedClassroom?.id}/grades`)}
-                      className="px-4 py-2 bg-[#ff9100]/10 hover:bg-[#ff9100]/20 text-[#ff9100] text-xs font-bold rounded transition border border-[#ff9100]/30"
+                      className="px-4 py-2 bg-[#0A0A0A]/10 hover:bg-[#212121]/20 text-[#FFFFFF] text-xs font-bold rounded transition border border-[#525252]/30"
                     >
                       Open Gradebook Grid
                     </button>
                   </div>
                 </div>
 
-                <div className="bg-[#13141a] border border-[#20222d] rounded-xl overflow-hidden">
+                <div className="bg-[#000000] border border-[#525252] rounded-xl overflow-hidden">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#171821] border-b border-[#20222d] text-gray-400 uppercase tracking-wider text-[10px]">
+                    <thead className="bg-[#0A0A0A] border-b border-[#525252] text-[#E5E5E5] uppercase tracking-wider text-[10px]">
                       <tr>
                         <th className="px-4 py-3">Student</th>
                         <th className="px-4 py-3">Assignment</th>
@@ -1821,24 +2695,24 @@ export default function ClassroomHubPage() {
                         <th className="px-4 py-3">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#1e202b] text-gray-300">
+                    <tbody className="divide-y divide-[#1e202b] text-[#E5E5E5]">
                       {submissions.map((sub) => (
-                        <tr key={sub.id} className="hover:bg-[#181922] transition">
+                        <tr key={sub.id} className="hover:bg-[#212121] transition">
                           <td className="px-4 py-3 font-semibold text-white">{sub.studentName}</td>
-                          <td className="px-4 py-3 text-gray-300">{sub.assignmentTitle}</td>
-                          <td className="px-4 py-3 font-mono text-cyan-400 text-[11px]">{sub.language}</td>
-                          <td className="px-4 py-3 font-mono font-bold text-emerald-400">{sub.score} / {sub.maxScore}</td>
+                          <td className="px-4 py-3 text-[#E5E5E5]">{sub.assignmentTitle}</td>
+                          <td className="px-4 py-3 font-mono text-[#FFFFFF] text-[11px]">{sub.language}</td>
+                          <td className="px-4 py-3 font-mono font-bold text-[#FFFFFF]">{sub.score} / {sub.maxScore}</td>
                           <td className="px-4 py-3 font-mono font-bold text-white">{sub.grade ? `${sub.grade.finalScore} / ${sub.maxScore}` : 'Pending'}</td>
                           <td className="px-4 py-3">
                             {currentUserRole === 'teacher' ? (
                               <button
                                 onClick={() => router.push(`/classroom/${selectedClassroom?.id}/submissions/${sub.id}`)}
-                                className="px-3 py-1 rounded bg-[#ff9100]/20 hover:bg-[#ff9100] text-[#ff9100] hover:text-black font-semibold text-xs transition"
+                                className="px-3 py-1 rounded bg-[#0A0A0A]/20 hover:bg-[#212121] text-[#FFFFFF] hover:text-[#FFFFFF] font-semibold text-xs transition"
                               >
                                 Review & Grade
                               </button>
                             ) : (
-                              <span className="text-xs text-gray-400">Submitted</span>
+                              <span className="text-xs text-[#E5E5E5]">Submitted</span>
                             )}
                           </td>
                         </tr>
@@ -1856,14 +2730,14 @@ export default function ClassroomHubPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-base font-bold text-white">Course Materials & Handouts</h3>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-[#E5E5E5]">
                         Syllabus, starter code repositories, lecture slide decks, and reference guides.
                       </p>
                     </div>
                     {currentUserRole === 'teacher' && !isArchived && (
                       <button
                         onClick={() => setIsCreateResourceModalOpen(true)}
-                        className="px-4 py-2 rounded-xl bg-[#ff9100] text-black font-bold text-xs hover:bg-[#e08000] transition flex items-center space-x-1"
+                        className="px-4 py-2 rounded-xl bg-[#0A0A0A] text-[#FFFFFF] font-bold text-xs hover:bg-[#212121] transition flex items-center space-x-1"
                       >
                         <Plus className="w-4 h-4" />
                         <span>Add Resource</span>
@@ -1872,22 +2746,21 @@ export default function ClassroomHubPage() {
                   </div>
 
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {resources.map((res) => (
-                    <div
-                      key={res.id}
-                      className="p-4 rounded-xl bg-[#14151c] border border-[#212432] space-y-2 hover:border-[#33374d] transition"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#20232f] text-cyan-400">
-                          {res.type}
-                        </span>
-                        <span className="text-[10px] text-gray-500">{res.unit}</span>
-                      </div>
-                      <h4 className="text-sm font-semibold text-white">{res.name}</h4>
-                      <p className="text-xs text-gray-400">{res.description}</p>
+                <div className="flex flex-col space-y-4 max-w-2xl pb-24">
+                  {resources.length === 0 ? (
+                    <div className="p-8 text-center bg-[#0A0A0A] border border-[#525252] rounded-xl text-zinc-400 text-xs font-mono">
+                      No course resources uploaded yet.
                     </div>
-                  ))}
+                  ) : (
+                    resources.map((res) => (
+                      <ResourceBranchingCard
+                        key={res.id}
+                        resource={res}
+                        role={currentUserRole || 'viewer'}
+                        onDelete={handleDeleteResource}
+                      />
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -1895,16 +2768,16 @@ export default function ClassroomHubPage() {
             {/* TAB 7: Leaderboard */}
             {activeTab === 'leaderboard' && (
               <div className="flex-1 p-6 overflow-y-auto space-y-6">
-                <div className="bg-[#13141a] border border-[#20222d] rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-[#20222d] bg-[#161720] flex items-center justify-between">
+                <div className="bg-[#000000] border border-[#525252] rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-[#525252] bg-[#0A0A0A] flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <Award className="w-4 h-4 text-amber-400" />
+                      <Award className="w-4 h-4 text-[#FFFFFF]" />
                       <span className="text-xs font-bold text-white">Algorithm Mastery Leaderboard</span>
                     </div>
                   </div>
 
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#171821] border-b border-[#20222d] text-gray-400 uppercase tracking-wider text-[10px]">
+                    <thead className="bg-[#0A0A0A] border-b border-[#525252] text-[#E5E5E5] uppercase tracking-wider text-[10px]">
                       <tr>
                         <th className="px-4 py-3">Rank</th>
                         <th className="px-4 py-3">Student</th>
@@ -1912,13 +2785,13 @@ export default function ClassroomHubPage() {
                         <th className="px-4 py-3">Accuracy</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#1e202b] text-gray-300">
+                    <tbody className="divide-y divide-[#1e202b] text-[#E5E5E5]">
                       {leaderboard.map((entry) => (
-                        <tr key={entry.studentId} className="hover:bg-[#181922] transition">
+                        <tr key={entry.studentId} className="hover:bg-[#212121] transition">
                           <td className="px-4 py-3 font-bold font-mono">#{entry.rank}</td>
                           <td className="px-4 py-3 font-semibold text-white">{entry.studentName}</td>
-                          <td className="px-4 py-3 font-mono font-bold text-amber-400">{entry.points} pts</td>
-                          <td className="px-4 py-3 font-mono text-emerald-400">{entry.accuracy}%</td>
+                          <td className="px-4 py-3 font-mono font-bold text-[#FFFFFF]">{entry.points} pts</td>
+                          <td className="px-4 py-3 font-mono text-[#FFFFFF]">{entry.accuracy}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1931,12 +2804,12 @@ export default function ClassroomHubPage() {
             {/* TAB 9: Teacher Analytics */}
             {activeTab === 'analytics' && currentUserRole === 'teacher' && (
               <div className="flex-1 p-6 overflow-y-auto space-y-6">
-                <div className="flex items-center justify-between border-b border-[#20222d] pb-4">
+                <div className="flex items-center justify-between border-b border-[#525252] pb-4">
                   <div>
                     <h3 className="text-lg font-bold text-white tracking-tight">Classroom Analytics Overview</h3>
-                    <p className="text-xs text-gray-400 mt-1">High-level view of student engagement and performance</p>
+                    <p className="text-xs text-[#E5E5E5] mt-1">High-level view of student engagement and performance</p>
                   </div>
-                  <button className="px-3 py-1.5 bg-[#1d1f2a] hover:bg-[#282a38] text-gray-300 text-xs font-medium rounded-md border border-[#2d3142] transition shadow-sm">
+                  <button className="px-3 py-1.5 bg-[#0A0A0A] hover:bg-[#212121] text-[#E5E5E5] text-xs font-medium rounded-md border border-[#525252] transition shadow-sm">
                     Export CSV Report
                   </button>
                 </div>
@@ -1945,66 +2818,66 @@ export default function ClassroomHubPage() {
                   <div className="space-y-6">
                     {/* Top Level KPIs */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="bg-[#13141a] border border-[#20222d] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#323648] transition">
+                      <div className="bg-[#000000] border border-[#525252] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#525252] transition">
                         <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
-                          <Users className="w-12 h-12 text-[#ff9100]" />
+                          <Users className="w-12 h-12 text-[#FFFFFF]" />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 z-10">Active Students</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#E5E5E5] mb-1 z-10">Active Students</span>
                         <div className="flex items-end space-x-2 z-10">
                           <span className="text-3xl font-extrabold text-white tracking-tighter">{analytics.totalStudents}</span>
                         </div>
                       </div>
                       
-                      <div className="bg-[#13141a] border border-[#20222d] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#323648] transition">
+                      <div className="bg-[#000000] border border-[#525252] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#525252] transition">
                         <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
-                          <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+                          <CheckCircle2 className="w-12 h-12 text-[#FFFFFF]" />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 z-10">Average Score</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#E5E5E5] mb-1 z-10">Average Score</span>
                         <div className="flex items-end space-x-2 z-10">
                           <span className="text-3xl font-extrabold text-white tracking-tighter">{analytics.averageScore}%</span>
                         </div>
                       </div>
 
-                      <div className="bg-[#13141a] border border-[#20222d] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#323648] transition">
+                      <div className="bg-[#000000] border border-[#525252] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#525252] transition">
                         <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
                           <Activity className="w-12 h-12 text-blue-500" />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 z-10">Completion Rate</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#E5E5E5] mb-1 z-10">Completion Rate</span>
                         <div className="flex items-end space-x-2 z-10">
                           <span className="text-3xl font-extrabold text-white tracking-tighter">{analytics.completionRate}%</span>
                         </div>
                       </div>
 
-                      <div className="bg-[#13141a] border border-[#20222d] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#323648] transition">
+                      <div className="bg-[#000000] border border-[#525252] p-5 rounded-xl flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-[#525252] transition">
                         <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition">
-                          <AlertTriangle className="w-12 h-12 text-amber-500" />
+                          <AlertTriangle className="w-12 h-12 text-[#FFFFFF]" />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1 z-10">Students At Risk</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#E5E5E5] mb-1 z-10">Students At Risk</span>
                         <div className="flex items-end space-x-2 z-10">
-                          <span className="text-3xl font-extrabold text-amber-400 tracking-tighter">{analytics.atRiskCount}</span>
+                          <span className="text-3xl font-extrabold text-[#FFFFFF] tracking-tighter">{analytics.atRiskCount}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       {/* Submissions Trend */}
-                      <div className="bg-[#13141a] border border-[#20222d] rounded-xl overflow-hidden flex flex-col shadow-sm">
-                        <div className="p-4 border-b border-[#20222d] bg-[#161720]">
+                      <div className="bg-[#000000] border border-[#525252] rounded-xl overflow-hidden flex flex-col shadow-sm">
+                        <div className="p-4 border-b border-[#525252] bg-[#0A0A0A]">
                           <h4 className="text-xs font-bold text-white uppercase tracking-wider">Recent Submissions Trend</h4>
                         </div>
                         <div className="p-6 flex-1 flex flex-col items-center justify-center min-h-[250px]">
                           {/* Visualization stub */}
                           <div className="w-full flex items-end justify-between h-40 gap-2">
                             {(analytics.recentTrend || []).map((val, i) => (
-                              <div key={i} className="w-full bg-[#1e202b] rounded-t-sm relative group transition-all duration-300 hover:bg-[#2d3142]" style={{ height: '100%' }}>
+                              <div key={i} className="w-full bg-[#0A0A0A] rounded-t-sm relative group transition-all duration-300 hover:bg-[#212121]" style={{ height: '100%' }}>
                                 <div 
-                                  className="absolute bottom-0 w-full bg-[#ff9100] rounded-t-sm opacity-80 group-hover:opacity-100 transition-all duration-300"
+                                  className="absolute bottom-0 w-full bg-[#0A0A0A] rounded-t-sm opacity-80 group-hover:opacity-100 transition-all duration-300"
                                   style={{ height: `${val}%` }}
                                 ></div>
                               </div>
                             ))}
                           </div>
-                          <div className="w-full flex justify-between text-[10px] text-gray-500 font-mono mt-3 uppercase tracking-widest">
+                          <div className="w-full flex justify-between text-[10px] text-[#E5E5E5] font-mono mt-3 uppercase tracking-widest">
                             <span>2W Ago</span>
                             <span>Today</span>
                           </div>
@@ -2012,33 +2885,33 @@ export default function ClassroomHubPage() {
                       </div>
 
                       {/* Active Submissions List */}
-                      <div className="bg-[#13141a] border border-[#20222d] rounded-xl overflow-hidden flex flex-col shadow-sm">
-                        <div className="p-4 border-b border-[#20222d] bg-[#161720]">
+                      <div className="bg-[#000000] border border-[#525252] rounded-xl overflow-hidden flex flex-col shadow-sm">
+                        <div className="p-4 border-b border-[#525252] bg-[#0A0A0A]">
                           <h4 className="text-xs font-bold text-white uppercase tracking-wider">Top Performing Students</h4>
                         </div>
                         <div className="p-0 overflow-y-auto max-h-[300px]">
                           <table className="w-full text-left text-xs">
-                            <thead className="bg-[#171821] border-b border-[#20222d] text-gray-400 uppercase tracking-wider text-[10px] sticky top-0">
+                            <thead className="bg-[#0A0A0A] border-b border-[#525252] text-[#E5E5E5] uppercase tracking-wider text-[10px] sticky top-0">
                               <tr>
                                 <th className="px-5 py-3 font-semibold">Student Name</th>
                                 <th className="px-5 py-3 font-semibold text-right">Avg Score</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-[#1e202b] text-gray-300">
+                            <tbody className="divide-y divide-[#1e202b] text-[#E5E5E5]">
                               {leaderboard.slice(0, 5).map((l, i) => (
-                                <tr key={l.studentId} className="hover:bg-[#181922] transition group">
+                                <tr key={l.studentId} className="hover:bg-[#212121] transition group">
                                   <td className="px-5 py-3 font-medium flex items-center space-x-3">
-                                    <span className="w-5 h-5 rounded-full bg-[#1e202b] flex items-center justify-center text-[9px] font-bold text-gray-400 group-hover:text-[#ff9100] transition">
+                                    <span className="w-5 h-5 rounded-full bg-[#0A0A0A] flex items-center justify-center text-[9px] font-bold text-[#E5E5E5] group-hover:text-[#FFFFFF] transition">
                                       {i + 1}
                                     </span>
                                     <span>{l.studentName}</span>
                                   </td>
-                                  <td className="px-5 py-3 font-mono font-bold text-emerald-400 text-right">{l.accuracy}%</td>
+                                  <td className="px-5 py-3 font-mono font-bold text-[#FFFFFF] text-right">{l.accuracy}%</td>
                                 </tr>
                               ))}
                               {leaderboard.length === 0 && (
                                 <tr>
-                                  <td colSpan={2} className="px-5 py-8 text-center text-gray-500 italic">No student performance data available yet.</td>
+                                  <td colSpan={2} className="px-5 py-8 text-center text-[#E5E5E5] italic">No student performance data available yet.</td>
                                 </tr>
                               )}
                             </tbody>
@@ -2048,7 +2921,7 @@ export default function ClassroomHubPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                  <div className="flex flex-col items-center justify-center h-64 text-[#E5E5E5]">
                     <BarChart2 className="w-12 h-12 mb-4 opacity-20" />
                     <p>Analytics data is not yet available for this classroom.</p>
                   </div>
@@ -2059,93 +2932,93 @@ export default function ClassroomHubPage() {
             {/* TAB 8: Settings (Teacher only) */}
             {activeTab === 'settings' && currentUserRole === 'teacher' && (
               <div className="flex-1 p-6 overflow-y-auto space-y-6 max-w-4xl">
-                <div className="border-b border-[#20222d] pb-4">
+                <div className="border-b border-[#525252] pb-4">
                   <h3 className="text-base font-bold text-white">Classroom Settings & Governance</h3>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-[#E5E5E5]">
                     Configure classroom details, manage join codes, configure student interaction privileges, and manage lifecycle.
                   </p>
                 </div>
 
                 <form onSubmit={handleSaveSettings} className="space-y-6">
                   {/* General Configuration */}
-                  <div className="bg-[#14151c] border border-[#212330] rounded-2xl p-5 space-y-4">
+                  <div className="neon-glass rounded-2xl p-5 space-y-4">
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
-                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#ff9100]" />
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#FFFFFF]" />
                       <span>General Information</span>
                     </h4>
 
                     <div className="grid grid-cols-2 gap-4 text-xs">
                       <div className="space-y-1">
-                        <label className="text-gray-400 font-medium">Classroom Name:</label>
+                        <label className="text-[#E5E5E5] font-medium">Classroom Name:</label>
                         <input
                           type="text"
                           required
                           value={settingsForm.name}
                           onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })}
-                          className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-white"
+                          className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-gray-400 font-medium">Course Code:</label>
+                        <label className="text-[#E5E5E5] font-medium">Course Code:</label>
                         <input
                           type="text"
                           required
                           value={settingsForm.coursecode}
                           onChange={(e) => setSettingsForm({ ...settingsForm, coursecode: e.target.value })}
-                          className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-white font-mono"
+                          className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white font-mono"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-gray-400 font-medium">Section:</label>
+                        <label className="text-[#E5E5E5] font-medium">Section:</label>
                         <input
                           type="text"
                           value={settingsForm.section}
                           onChange={(e) => setSettingsForm({ ...settingsForm, section: e.target.value })}
-                          className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-white"
+                          className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-gray-400 font-medium">Subject / Department:</label>
+                        <label className="text-[#E5E5E5] font-medium">Subject / Department:</label>
                         <input
                           type="text"
                           value={settingsForm.subject}
                           onChange={(e) => setSettingsForm({ ...settingsForm, subject: e.target.value })}
-                          className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-white"
+                          className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-1 text-xs">
-                      <label className="text-gray-400 font-medium">Description:</label>
+                      <label className="text-[#E5E5E5] font-medium">Description:</label>
                       <textarea
                         rows={2}
                         value={settingsForm.description}
                         onChange={(e) => setSettingsForm({ ...settingsForm, description: e.target.value })}
-                        className="w-full bg-[#1b1d26] border border-[#292c3d] rounded-lg px-3 py-2 text-white resize-none"
+                        className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white resize-none"
                       />
                     </div>
                   </div>
 
                   {/* Enrollment & Code Controls */}
-                  <div className="bg-[#14151c] border border-[#212330] rounded-2xl p-5 space-y-4">
+                  <div className="neon-glass rounded-2xl p-5 space-y-4">
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
-                      <Users className="w-3.5 h-3.5 text-cyan-400" />
+                      <Users className="w-3.5 h-3.5 text-[#FFFFFF]" />
                       <span>Joining & Enrollment</span>
                     </h4>
 
-                    <div className="flex items-center justify-between p-3.5 bg-[#1a1c26] rounded-xl text-xs">
+                    <div className="flex items-center justify-between p-3.5 bg-[#0A0A0A] rounded-xl text-xs">
                       <div>
                         <div className="font-semibold text-white">Active Join Code</div>
-                        <div className="text-gray-400 text-[11px]">Students use this code to enroll in your class</div>
+                        <div className="text-[#E5E5E5] text-[11px]">Students use this code to enroll in your class</div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-mono text-base font-bold text-[#ff9100] px-3 py-1 bg-[#13141a] border border-[#252838] rounded-lg">
+                        <span className="font-mono text-base font-bold text-[#FFFFFF] px-3 py-1 bg-[#000000] border border-[#525252] rounded-lg">
                           {selectedClassroom.joincode}
                         </span>
                         <button
                           type="button"
                           onClick={handleRegenerateCode}
-                          className="px-3 py-1.5 rounded-lg bg-[#20232e] hover:bg-[#2a2e3f] text-gray-200 text-xs transition flex items-center space-x-1"
+                          className="px-3 py-1.5 rounded-lg bg-[#0A0A0A] hover:bg-[#212121] text-[#FFFFFF] text-xs transition flex items-center space-x-1"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
                           <span>Regenerate Code</span>
@@ -2153,77 +3026,77 @@ export default function ClassroomHubPage() {
                       </div>
                     </div>
 
-                    <label className="flex items-center justify-between p-3.5 bg-[#1a1c26] rounded-xl text-xs cursor-pointer">
+                    <label className="flex items-center justify-between p-3.5 bg-[#0A0A0A] rounded-xl text-xs cursor-pointer">
                       <div>
                         <div className="font-semibold text-white">Enable Student Self-Joining</div>
-                        <div className="text-gray-400 text-[11px]">When disabled, new students cannot join even with the code</div>
+                        <div className="text-[#E5E5E5] text-[11px]">When disabled, new students cannot join even with the code</div>
                       </div>
                       <input
                         type="checkbox"
                         checked={settingsForm.joinEnabled}
                         onChange={(e) => setSettingsForm({ ...settingsForm, joinEnabled: e.target.checked })}
-                        className="w-4 h-4 rounded bg-[#13141a] border-[#292c3d] text-[#ff9100] focus:ring-0"
+                        className="w-4 h-4 rounded bg-[#000000] border-[#525252] text-[#FFFFFF] focus:ring-0"
                       />
                     </label>
                   </div>
 
                   {/* Permissions & Communication Policy */}
-                  <div className="bg-[#14151c] border border-[#212330] rounded-2xl p-5 space-y-4">
+                  <div className="neon-glass rounded-2xl p-5 space-y-4">
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
-                      <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                      <Shield className="w-3.5 h-3.5 text-[#FFFFFF]" />
                       <span>Communication & Privacy Controls</span>
                     </h4>
 
                     <div className="space-y-2 text-xs">
-                      <label className="flex items-center justify-between p-3.5 bg-[#1a1c26] rounded-xl cursor-pointer">
+                      <label className="flex items-center justify-between p-3.5 bg-[#0A0A0A] rounded-xl cursor-pointer">
                         <div>
                           <div className="font-semibold text-white">Allow Student Announcements / Posting</div>
-                          <div className="text-gray-400 text-[11px]">Allow students to publish posts to the class stream</div>
+                          <div className="text-[#E5E5E5] text-[11px]">Allow students to publish posts to the class stream</div>
                         </div>
                         <input
                           type="checkbox"
                           checked={settingsForm.allowStudentPosting}
                           onChange={(e) => setSettingsForm({ ...settingsForm, allowStudentPosting: e.target.checked })}
-                          className="w-4 h-4 rounded bg-[#13141a] border-[#292c3d] text-[#ff9100] focus:ring-0"
+                          className="w-4 h-4 rounded bg-[#000000] border-[#525252] text-[#FFFFFF] focus:ring-0"
                         />
                       </label>
 
-                      <label className="flex items-center justify-between p-3.5 bg-[#1a1c26] rounded-xl cursor-pointer">
+                      <label className="flex items-center justify-between p-3.5 bg-[#0A0A0A] rounded-xl cursor-pointer">
                         <div>
                           <div className="font-semibold text-white">Allow Student-to-Student Direct Messaging</div>
-                          <div className="text-gray-400 text-[11px]">Enforce DM privacy while preserving teacher oversight</div>
+                          <div className="text-[#E5E5E5] text-[11px]">Enforce DM privacy while preserving teacher oversight</div>
                         </div>
                         <input
                           type="checkbox"
                           checked={settingsForm.allowStudentMessaging}
                           onChange={(e) => setSettingsForm({ ...settingsForm, allowStudentMessaging: e.target.checked })}
-                          className="w-4 h-4 rounded bg-[#13141a] border-[#292c3d] text-[#ff9100] focus:ring-0"
+                          className="w-4 h-4 rounded bg-[#000000] border-[#525252] text-[#FFFFFF] focus:ring-0"
                         />
                       </label>
 
-                      <label className="flex items-center justify-between p-3.5 bg-[#1a1c26] rounded-xl cursor-pointer">
+                      <label className="flex items-center justify-between p-3.5 bg-[#0A0A0A] rounded-xl cursor-pointer">
                         <div>
                           <div className="font-semibold text-white">Broadcast Real-time Presence Indicators</div>
-                          <div className="text-gray-400 text-[11px]">Show green active dots next to online classmates</div>
+                          <div className="text-[#E5E5E5] text-[11px]">Show green active dots next to online classmates</div>
                         </div>
                         <input
                           type="checkbox"
                           checked={settingsForm.presenceVisibility}
                           onChange={(e) => setSettingsForm({ ...settingsForm, presenceVisibility: e.target.checked })}
-                          className="w-4 h-4 rounded bg-[#13141a] border-[#292c3d] text-[#ff9100] focus:ring-0"
+                          className="w-4 h-4 rounded bg-[#000000] border-[#525252] text-[#FFFFFF] focus:ring-0"
                         />
                       </label>
 
-                      <label className="flex items-center justify-between p-3.5 bg-[#1a1c26] rounded-xl cursor-pointer">
+                      <label className="flex items-center justify-between p-3.5 bg-[#0A0A0A] rounded-xl cursor-pointer">
                         <div>
                           <div className="font-semibold text-white">Show Full Student Roster to Class</div>
-                          <div className="text-gray-400 text-[11px]">Students can browse other members in the People tab</div>
+                          <div className="text-[#E5E5E5] text-[11px]">Students can browse other members in the People tab</div>
                         </div>
                         <input
                           type="checkbox"
                           checked={settingsForm.memberVisibility}
                           onChange={(e) => setSettingsForm({ ...settingsForm, memberVisibility: e.target.checked })}
-                          className="w-4 h-4 rounded bg-[#13141a] border-[#292c3d] text-[#ff9100] focus:ring-0"
+                          className="w-4 h-4 rounded bg-[#000000] border-[#525252] text-[#FFFFFF] focus:ring-0"
                         />
                       </label>
                     </div>
@@ -2233,7 +3106,7 @@ export default function ClassroomHubPage() {
                     <button
                       type="submit"
                       disabled={isSavingSettings}
-                      className="px-6 py-2.5 rounded-xl bg-[#ff9100] hover:bg-[#e08000] text-black font-bold text-xs shadow-lg transition"
+                      className="px-6 py-2.5 rounded-xl bg-[#0A0A0A] hover:bg-[#212121] text-[#FFFFFF] font-bold text-xs shadow-lg transition"
                     >
                       {isSavingSettings ? 'Broadcasting Settings...' : 'Save & Broadcast Changes'}
                     </button>
@@ -2241,26 +3114,41 @@ export default function ClassroomHubPage() {
                 </form>
 
                 {/* Danger Zone: Archive Classroom */}
-                <div className="bg-rose-950/20 border border-rose-900/40 rounded-2xl p-5 space-y-3">
+                <div className="neon-glass rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider">Classroom Lifecycle & Archive</h4>
-                      <p className="text-xs text-gray-400">
+                      <h4 className="text-xs font-bold text-[#FFFFFF] uppercase tracking-wider">Classroom Lifecycle & Archive</h4>
+                      <p className="text-xs text-[#E5E5E5]">
                         Archiving freezes all student postings, messaging, and joins while keeping historical submissions and grades safe.
                       </p>
                     </div>
                     {!isArchived ? (
                       <button
                         onClick={() => setIsConfirmArchiveOpen(true)}
-                        className="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-black font-bold text-xs border border-rose-500/40 transition flex items-center space-x-2"
+                        className="silver-motion-ring rounded-xl text-rose-400 hover:text-white font-bold text-xs transition"
                       >
-                        <Archive className="w-3.5 h-3.5" />
-                        <span>Archive Classroom</span>
+                        <div className="silver-motion-inner px-4 py-2 space-x-2 flex items-center">
+                          <Archive className="w-3.5 h-3.5" />
+                          <span>Archive Classroom</span>
+                        </div>
                       </button>
                     ) : (
-                      <span className="px-3 py-1.5 rounded-xl bg-gray-800 text-gray-400 text-xs font-semibold">
-                        Already Archived
-                      </span>
+                      <div className="flex items-center space-x-3">
+                        <span className="px-3 py-1.5 rounded-xl bg-gray-800 text-[#E5E5E5] text-xs font-semibold">
+                          Already Archived
+                        </span>
+                        {currentUserRole === 'teacher' && (
+                          <button
+                            onClick={() => setIsConfirmDeleteOpen(true)}
+                            className="silver-motion-ring rounded-xl text-rose-400 hover:text-white font-bold text-xs transition"
+                          >
+                            <div className="silver-motion-inner px-4 py-2 space-x-2 flex items-center bg-rose-900/50">
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete Classroom</span>
+                            </div>
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -2268,10 +3156,10 @@ export default function ClassroomHubPage() {
             )}
           </main>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center space-y-4">
-            <Users className="w-12 h-12 text-[#ff9100]" />
+          <div className="flex-1 flex flex-col items-center justify-center text-[#E5E5E5] p-8 text-center space-y-4">
+            <Users className="w-12 h-12 text-[#FFFFFF]" />
             <h3 className="text-lg font-bold text-white">No Classroom Selected</h3>
-            <p className="text-xs max-w-sm text-gray-500 leading-relaxed">
+            <p className="text-xs max-w-sm text-[#E5E5E5] leading-relaxed">
               Select an existing classroom on the left sidebar, or create/join a new one to access assignments, real-time chats, and automated test grading.
             </p>
           </div>
@@ -2282,66 +3170,68 @@ export default function ClassroomHubPage() {
       {/* Modal: Create Classroom */}
       {isCreateClassModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#14151d] border border-[#272a39] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#222533] pb-3">
+          <div className="neon-glass rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Create New Classroom</h4>
-              <button onClick={() => setIsCreateClassModalOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+              <button onClick={() => setIsCreateClassModalOpen(false)} className="text-[#E5E5E5] hover:text-white">✕</button>
             </div>
             <form onSubmit={handleCreateClassroom} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="text-gray-400 font-medium">Classroom Name:</label>
+                <label className="text-[#E5E5E5] font-medium">Classroom Name:</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Distributed Systems & Concurrency"
                   value={createClassForm.name}
                   onChange={(e) => setCreateClassForm({ ...createClassForm, name: e.target.value })}
-                  className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-gray-400 font-medium">Course Code:</label>
+                  <label className="text-[#E5E5E5] font-medium">Course Code:</label>
                   <input
                     type="text"
                     value={createClassForm.coursecode}
                     onChange={(e) => setCreateClassForm({ ...createClassForm, coursecode: e.target.value })}
-                    className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white font-mono"
+                    className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white font-mono"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-gray-400 font-medium">Section:</label>
+                  <label className="text-[#E5E5E5] font-medium">Section:</label>
                   <input
                     type="text"
                     value={createClassForm.section}
                     onChange={(e) => setCreateClassForm({ ...createClassForm, section: e.target.value })}
-                    className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white"
+                    className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                   />
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-gray-400 font-medium">Description:</label>
+                <label className="text-[#E5E5E5] font-medium">Description:</label>
                 <textarea
                   rows={2}
                   value={createClassForm.description}
                   onChange={(e) => setCreateClassForm({ ...createClassForm, description: e.target.value })}
                   placeholder="Overview of syllabus, prerequisites, and goals..."
-                  className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white resize-none"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white resize-none"
                 />
               </div>
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsCreateClassModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-[#1e202c] text-gray-300 hover:bg-[#252837]"
+                  className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#ff9100] text-black font-bold hover:bg-[#e08000]"
+                  className="silver-motion-ring rounded-lg text-white font-bold transition"
                 >
-                  Create Classroom
+                  <div className="silver-motion-inner px-5 py-2">
+                    Create Classroom
+                  </div>
                 </button>
               </div>
             </form>
@@ -2352,39 +3242,41 @@ export default function ClassroomHubPage() {
       {/* Modal: Join Classroom with Code */}
       {isJoinClassModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#14151d] border border-[#272a39] rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#222533] pb-3">
+          <div className="neon-glass rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Join Classroom with Code</h4>
-              <button onClick={() => setIsJoinClassModalOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+              <button onClick={() => setIsJoinClassModalOpen(false)} className="text-[#E5E5E5] hover:text-white">✕</button>
             </div>
             <form onSubmit={handleJoinClassroom} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="text-gray-400 font-medium">Enter 6-8 digit Classroom Code:</label>
+                <label className="text-[#E5E5E5] font-medium">Enter 6-8 digit Classroom Code:</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. CS201-LIVE"
                   value={joincodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                  className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white font-mono text-center tracking-widest uppercase text-sm"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white font-mono text-center tracking-widest uppercase text-sm"
                 />
               </div>
-              <p className="text-[11px] text-gray-500">
+              <p className="text-[11px] text-[#E5E5E5]">
                 Ask your instructor for the classroom join code or link.
               </p>
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsJoinClassModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-[#1e202c] text-gray-300 hover:bg-[#252837]"
+                  className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-cyan-500 text-black font-bold hover:bg-cyan-400"
+                  className="silver-motion-ring rounded-lg text-cyan-300 hover:text-white font-bold transition"
                 >
-                  Join Class
+                  <div className="silver-motion-inner px-5 py-2">
+                    Join Class
+                  </div>
                 </button>
               </div>
             </form>
@@ -2395,38 +3287,38 @@ export default function ClassroomHubPage() {
       {/* Modal: Edit Announcement */}
       {editingAnnouncement && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#14151d] border border-[#272a39] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#222533] pb-3">
+          <div className="neon-glass rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Edit Announcement</h4>
-              <button onClick={() => setEditingAnnouncement(null)} className="text-gray-400 hover:text-white">✕</button>
+              <button onClick={() => setEditingAnnouncement(null)} className="text-[#E5E5E5] hover:text-white">✕</button>
             </div>
             <form onSubmit={handleSaveEditAnnouncement} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="text-gray-400 font-medium">Title:</label>
+                <label className="text-[#E5E5E5] font-medium">Title:</label>
                 <input
                   type="text"
                   required
                   value={editAnnTitle}
                   onChange={(e) => setEditAnnTitle(e.target.value)}
-                  className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-gray-400 font-medium">Content:</label>
+                <label className="text-[#E5E5E5] font-medium">Content:</label>
                 <textarea
                   rows={4}
                   required
                   value={editAnnContent}
                   onChange={(e) => setEditAnnContent(e.target.value)}
-                  className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white resize-none"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white resize-none"
                 />
               </div>
-              <label className="flex items-center space-x-2 text-xs text-gray-400 cursor-pointer">
+              <label className="flex items-center space-x-2 text-xs text-[#E5E5E5] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={editAnnPinned}
                   onChange={(e) => setEditAnnPinned(e.target.checked)}
-                  className="rounded bg-[#1b1d26] border-[#292c3d] text-[#ff9100] focus:ring-0"
+                  className="rounded bg-[#0A0A0A] border-[#525252] text-[#FFFFFF] focus:ring-0"
                 />
                 <span>Pin to top of stream</span>
               </label>
@@ -2434,13 +3326,13 @@ export default function ClassroomHubPage() {
                 <button
                   type="button"
                   onClick={() => setEditingAnnouncement(null)}
-                  className="px-4 py-2 rounded-lg bg-[#1e202c] text-gray-300 hover:bg-[#252837]"
+                  className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#ff9100] text-black font-bold hover:bg-[#e08000]"
+                  className="px-5 py-2 rounded-lg bg-[#0A0A0A] text-[#FFFFFF] font-bold hover:bg-[#212121]"
                 >
                   Save Changes
                 </button>
@@ -2453,26 +3345,28 @@ export default function ClassroomHubPage() {
       {/* Confirmation Modal: Delete Announcement */}
       {annToDelete && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#14151d] border border-[#272a39] rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center space-x-3 text-rose-400">
+          <div className="neon-glass rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center space-x-3 text-[#FFFFFF]">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <h4 className="text-sm font-bold text-white">Delete Announcement?</h4>
             </div>
-            <p className="text-xs text-gray-300">
+            <p className="text-xs text-[#E5E5E5]">
               Are you sure you want to delete &ldquo;{annToDelete.title}&rdquo;? This will be removed from all student streams immediately.
             </p>
             <div className="flex justify-end space-x-2 pt-2">
               <button
                 onClick={() => setAnnToDelete(null)}
-                className="px-4 py-2 rounded-lg bg-[#1e202c] text-gray-300 hover:bg-[#252837] text-xs"
+                className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121] text-xs"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteAnnouncement}
-                className="px-5 py-2 rounded-lg bg-rose-500 text-white font-bold hover:bg-rose-600 text-xs"
+                className="danger-motion-ring rounded-lg text-rose-400 hover:text-rose-200 font-bold text-xs"
               >
-                Delete
+                <div className="silver-motion-inner px-5 py-2">
+                  Delete
+                </div>
               </button>
             </div>
           </div>
@@ -2482,26 +3376,28 @@ export default function ClassroomHubPage() {
       {/* Confirmation Modal: Remove Student */}
       {memberToRemove && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#14151d] border border-[#272a39] rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center space-x-3 text-rose-400">
+          <div className="neon-glass rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center space-x-3 text-[#FFFFFF]">
               <UserMinus className="w-5 h-5 shrink-0" />
               <h4 className="text-sm font-bold text-white">Remove Student?</h4>
             </div>
-            <p className="text-xs text-gray-300 leading-relaxed">
+            <p className="text-xs text-[#E5E5E5] leading-relaxed">
               Are you sure you want to remove <strong className="text-white">{memberToRemove.userName}</strong> from {selectedClassroom?.name}? Their access will be revoked immediately.
             </p>
             <div className="flex justify-end space-x-2 pt-2">
               <button
                 onClick={() => setMemberToRemove(null)}
-                className="px-4 py-2 rounded-lg bg-[#1e202c] text-gray-300 hover:bg-[#252837] text-xs"
+                className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121] text-xs"
               >
                 Cancel
               </button>
               <button
                 onClick={handleRemoveMember}
-                className="px-5 py-2 rounded-lg bg-rose-500 text-white font-bold hover:bg-rose-600 text-xs"
+                className="danger-motion-ring rounded-lg text-rose-400 hover:text-rose-200 font-bold text-xs"
               >
-                Confirm Removal
+                <div className="silver-motion-inner px-5 py-2">
+                  Confirm Removal
+                </div>
               </button>
             </div>
           </div>
@@ -2511,26 +3407,59 @@ export default function ClassroomHubPage() {
       {/* Confirmation Modal: Archive Classroom */}
       {isConfirmArchiveOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#14151d] border border-[#272a39] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-            <div className="flex items-center space-x-3 text-rose-400">
+          <div className="neon-glass rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center space-x-3 text-[#FFFFFF]">
               <Archive className="w-5 h-5 shrink-0" />
               <h4 className="text-sm font-bold text-white">Archive &ldquo;{selectedClassroom?.name}&rdquo;?</h4>
             </div>
-            <p className="text-xs text-gray-300 leading-relaxed">
+            <p className="text-xs text-[#E5E5E5] leading-relaxed">
               Archiving locks the classroom into permanent read-only mode. Students can view historical grades and assignments, but no new posts, messages, or enrollments will be accepted.
             </p>
             <div className="flex justify-end space-x-2 pt-2">
               <button
                 onClick={() => setIsConfirmArchiveOpen(false)}
-                className="px-4 py-2 rounded-lg bg-[#1e202c] text-gray-300 hover:bg-[#252837] text-xs"
+                className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121] text-xs"
               >
                 Cancel
               </button>
               <button
                 onClick={handleArchiveClassroom}
-                className="px-5 py-2 rounded-lg bg-rose-500 text-white font-bold hover:bg-rose-600 text-xs"
+                className="danger-motion-ring rounded-lg text-rose-400 hover:text-rose-200 font-bold text-xs"
               >
-                Confirm Archive
+                <div className="silver-motion-inner px-5 py-2">
+                  Confirm Archive
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Delete Classroom */}
+      {isConfirmDeleteOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="neon-glass rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center space-x-3 text-rose-500">
+              <Trash2 className="w-5 h-5 shrink-0" />
+              <h4 className="text-sm font-bold">Permanently Delete &ldquo;{selectedClassroom?.name}&rdquo;?</h4>
+            </div>
+            <p className="text-xs text-[#E5E5E5] leading-relaxed">
+              This action is <span className="font-bold text-rose-400">irreversible</span>. It will permanently delete this classroom, all its assignments, student submissions, grades, and resources. You cannot undo this.
+            </p>
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setIsConfirmDeleteOpen(false)}
+                className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121] text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteClassroom}
+                className="danger-motion-ring rounded-lg text-rose-500 hover:text-white font-bold text-xs"
+              >
+                <div className="silver-motion-inner px-5 py-2 bg-rose-900/50">
+                  Delete Permanently
+                </div>
               </button>
             </div>
           </div>
@@ -2540,30 +3469,30 @@ export default function ClassroomHubPage() {
       {/* Modal: Publish Assignment */}
       {isCreateAsgModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#14151d] border border-[#272a39] rounded-2xl p-6 max-w-xl w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[#222533] pb-3">
+          <div className="neon-glass rounded-2xl p-6 max-w-xl w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Publish New Assignment</h4>
-              <button onClick={() => setIsCreateAsgModalOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+              <button onClick={() => setIsCreateAsgModalOpen(false)} className="text-[#E5E5E5] hover:text-white">✕</button>
             </div>
             <form onSubmit={handleCreateAssignment} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="text-gray-400 font-medium">Assignment Title:</label>
+                <label className="text-[#E5E5E5] font-medium">Assignment Title:</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Dynamic Programming: Coin Change Problem"
                   value={createAsgForm.title}
                   onChange={(e) => setCreateAsgForm({ ...createAsgForm, title: e.target.value })}
-                  className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-gray-400 font-medium">Language:</label>
+                  <label className="text-[#E5E5E5] font-medium">Language:</label>
                   <select
                     value={createAsgForm.language}
                     onChange={(e) => setCreateAsgForm({ ...createAsgForm, language: e.target.value })}
-                    className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white"
+                    className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                   >
                     <option value="python">Python 3.12</option>
                     <option value="cpp">C++ 20</option>
@@ -2571,11 +3500,11 @@ export default function ClassroomHubPage() {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-gray-400 font-medium">Difficulty:</label>
+                  <label className="text-[#E5E5E5] font-medium">Difficulty:</label>
                   <select
                     value={createAsgForm.difficulty}
                     onChange={(e) => setCreateAsgForm({ ...createAsgForm, difficulty: e.target.value })}
-                    className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white"
+                    className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white"
                   >
                     <option value="Beginner">Beginner</option>
                     <option value="Intermediate">Intermediate</option>
@@ -2584,26 +3513,26 @@ export default function ClassroomHubPage() {
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-gray-400 font-medium">Instructions & Constraints:</label>
+                <label className="text-[#E5E5E5] font-medium">Instructions & Constraints:</label>
                 <textarea
                   rows={3}
                   value={createAsgForm.instructions}
                   onChange={(e) => setCreateAsgForm({ ...createAsgForm, instructions: e.target.value })}
                   placeholder="Explain requirements, time complexity O(N), etc..."
-                  className="w-full bg-[#1c1e28] border border-[#2b2e40] rounded-lg px-3 py-2 text-white resize-none"
+                  className="w-full bg-[#0A0A0A] border border-[#525252] rounded-lg px-3 py-2 text-white resize-none"
                 />
               </div>
               <div className="flex justify-end space-x-2 pt-3">
                 <button
                   type="button"
                   onClick={() => setIsCreateAsgModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-[#1e202c] text-gray-300 hover:bg-[#252837]"
+                  className="px-4 py-2 rounded-lg bg-[#0A0A0A] text-[#E5E5E5] hover:bg-[#212121]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-[#ff9100] text-black font-bold hover:bg-[#e08000]"
+                  className="px-5 py-2 rounded-lg bg-[#0A0A0A] text-[#FFFFFF] font-bold hover:bg-[#212121]"
                 >
                   Publish Assignment
                 </button>
@@ -2615,11 +3544,13 @@ export default function ClassroomHubPage() {
 
       {/* Global Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-[#1d1f2b] border border-[#ff9100]/50 text-white text-xs shadow-2xl flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <Sparkles className="w-3.5 h-3.5 text-[#ff9100]" />
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-[#0A0A0A] border border-[#525252]/50 text-white text-xs shadow-2xl flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <Sparkles className="w-3.5 h-3.5 text-[#FFFFFF]" />
           <span>{toastMessage}</span>
         </div>
       )}
+      </div>
     </div>
   );
 }
+

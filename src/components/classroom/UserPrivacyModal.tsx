@@ -40,7 +40,7 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
               Workspace Privacy Settings
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-[#1e202c] transition">
+          <button onClick={onClose} className="p-1 rounded-lg text-[#737373] hover:text-white hover:bg-[#111111] transition">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -50,10 +50,10 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
           {/* Workspace Visibility */}
           <div className="p-3.5 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
             <div className="space-y-0.5 pr-3">
-              <span className="font-semibold text-gray-200 block">
+              <span className="font-semibold text-[#E5E5E5] block">
                 {isPublic ? 'Public Workspace' : 'Private Workspace'}
               </span>
-              <span className="text-gray-400 text-[11px] block">
+              <span className="text-[#737373] text-[11px] block">
                 {isPublic ? 'Classroom participants can inspect your code' : 'Other users must ask permission to view your code'}
               </span>
             </div>
@@ -74,8 +74,8 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
           {/* Incoming Collaboration */}
           <div className="p-3.5 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
             <div className="space-y-0.5 pr-3">
-              <span className="font-semibold text-gray-200 block">Allow Collaboration Requests</span>
-              <span className="text-gray-400 text-[11px] block">Let other students request to pair code with you</span>
+              <span className="font-semibold text-[#E5E5E5] block">Allow Collaboration Requests</span>
+              <span className="text-[#737373] text-[11px] block">Let other students request to pair code with you</span>
             </div>
             <button
               type="button"
@@ -93,8 +93,8 @@ export const UserPrivacyModal: React.FC<UserPrivacyModalProps> = ({
           {/* Download Permission */}
           <div className="p-3.5 bg-[#191b24] border border-[#262834] rounded-xl flex items-center justify-between">
             <div className="space-y-0.5 pr-3">
-              <span className="font-semibold text-gray-200 block">Require Download Approval</span>
-              <span className="text-gray-400 text-[11px] block">Require your consent before anyone downloads your file</span>
+              <span className="font-semibold text-[#E5E5E5] block">Require Download Approval</span>
+              <span className="text-[#737373] text-[11px] block">Require your consent before anyone downloads your file</span>
             </div>
             <button
               type="button"

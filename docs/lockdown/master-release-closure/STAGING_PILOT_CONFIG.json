@@ -1,0 +1,57 @@
+{
+  "pilotProgram": "Cortex Lockdown v1.0 Institutional Staging Pilot",
+  "baseline": "v1.0.0-rc3",
+  "generatedAt": "2026-11-01T15:38:00Z",
+  "infrastructure": {
+    "targetEnvironment": "staging",
+    "worker": "cortex-code-platform-staging",
+    "database": "cortex-staging-db",
+    "databaseUuid": "e6375738-d9b2-4c5a-a3e5-3a34e892f49d"
+  },
+  "classroom": {
+    "roomId": "STAGING-ROOM-302",
+    "name": "Institutional Computer Lab 302",
+    "building": "Turing Science Center",
+    "allocatedSeats": 30,
+    "leadProctor": {
+      "id": "usr_proctor_lead",
+      "name": "Lead Proctor",
+      "email": "proctor_lead@cortex.edu",
+      "role": "teacher"
+    },
+    "assistantProctor": {
+      "id": "usr_proctor_asst",
+      "name": "Assistant Proctor",
+      "email": "proctor_asst@cortex.edu",
+      "role": "teacher"
+    }
+  },
+  "examination": {
+    "examId": "EXAM-STAGING-CS101",
+    "title": "Computer Systems Architecture & Security Midterm",
+    "durationMinutes": 180,
+    "securityLevel": "lockdown_kiosk",
+    "allowedPlatforms": ["windows", "macos"],
+    "requiresLaunchGrant": true,
+    "requiresHardwareReadiness": true,
+    "maxAttempts": 1
+  },
+  "securityPolicies": {
+    "singleDisplayEnforced": true,
+    "displayAffinityExclusion": true,
+    "lowLevelKeyboardInterception": true,
+    "processWatchdogPollingMs": 1500,
+    "processWatchdogMode": "ClassC_Alerting",
+    "zeroRawMediaStreaming": true,
+    "volatileRamVisionAnalysis": true,
+    "spectralAcousticAnalysis": true,
+    "explicitSensorShutdownOnSubmit": true,
+    "autosaveIntervalMs": 3000,
+    "emergencyOtpTtlSeconds": 180,
+    "emergencyOtpMaxFailedAttempts": 3
+  },
+  "retentionPolicies": {
+    "telemetryRetentionDays": 90,
+    "emergencyAuthorizationRetentionDays": 30
+  }
+}

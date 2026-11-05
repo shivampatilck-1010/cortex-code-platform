@@ -24,7 +24,7 @@ interface ClassroomChatDrawerProps {
   onSendMessage: (text: string, isAnnouncement?: boolean) => void;
 }
 
-const QUICK_EMOJIS = ['👍', '🔥', '🚀', '❤️', '👏', '💡', '❓', '🎉'];
+const QUICK_EMOJIS = ['+1', 'Ack', 'Help', 'Question', 'Done', 'Check', 'Note', 'Idea'];
 
 export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
   isOpen,
@@ -89,7 +89,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
           <div>
             <div className="flex items-center space-x-1.5">
               <span className="font-heading font-bold text-xs text-gray-100">Classroom Chat</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-[#1b1d25] text-[10px] font-mono text-gray-400 border border-[#272935]">
+              <span className="px-1.5 py-0.2 rounded-full bg-[#1b1d25] text-[10px] font-mono text-[#737373] border border-[#272935]">
                 {messages.length}
               </span>
             </div>
@@ -98,7 +98,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
 
         <button 
           onClick={onClose} 
-          className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-[#1a1c24] transition"
+          className="p-1 rounded-md text-[#737373] hover:text-white hover:bg-[#1a1c24] transition"
           title="Close Chat"
         >
           <X className="w-4 h-4" />
@@ -113,7 +113,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
           className={`flex-1 py-2 text-center transition flex items-center justify-center space-x-1 ${
             activeTab === 'all'
               ? 'text-[#ff9100] border-b-2 border-[#ff9100] bg-[#15161c] font-bold'
-              : 'text-gray-400 hover:text-gray-200'
+              : 'text-[#737373] hover:text-[#E5E5E5]'
           }`}
         >
           <span>All Messages</span>
@@ -126,7 +126,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
           className={`flex-1 py-2 text-center transition flex items-center justify-center space-x-1.5 ${
             activeTab === 'announcements'
               ? 'text-amber-400 border-b-2 border-amber-400 bg-[#15161c] font-bold'
-              : 'text-gray-400 hover:text-gray-200'
+              : 'text-[#737373] hover:text-[#E5E5E5]'
           }`}
         >
           <Megaphone className="w-3 h-3 text-amber-400" />
@@ -143,10 +143,10 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3.5 space-y-3 text-xs custom-scrollbar">
         {filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-2 text-gray-500">
-            <div className="w-10 h-10 rounded-full bg-[#181920] border border-[#262834] flex items-center justify-center text-gray-400">
+            <div className="w-10 h-10 rounded-full bg-[#181920] border border-[#262834] flex items-center justify-center text-[#737373]">
               <MessageSquare className="w-5 h-5 opacity-40" />
             </div>
-            <p className="text-xs font-medium text-gray-400">
+            <p className="text-xs font-medium text-[#737373]">
               {activeTab === 'announcements' ? 'No announcements posted yet.' : 'No messages yet.'}
             </p>
             <p className="text-[11px] text-gray-600">
@@ -212,8 +212,8 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
 
                 <div className={`space-y-1 max-w-[85%] ${isSelf ? 'items-end' : 'items-start'}`}>
                   {/* Sender Header */}
-                  <div className={`flex items-center space-x-1.5 text-[10px] ${isSelf ? 'justify-end text-gray-400' : 'text-gray-400'}`}>
-                    <span className="font-heading font-semibold text-gray-300 flex items-center space-x-1">
+                  <div className={`flex items-center space-x-1.5 text-[10px] ${isSelf ? 'justify-end text-[#737373]' : 'text-[#737373]'}`}>
+                    <span className="font-heading font-semibold text-[#A3A3A3] flex items-center space-x-1">
                       <span>{msg.senderName}</span>
                       {isAdmin && <Crown className="w-2.5 h-2.5 text-amber-400" />}
                       {isSelf && (
@@ -232,7 +232,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
                     className={`p-2.5 rounded-xl leading-relaxed whitespace-pre-wrap select-text text-xs ${
                       isSelf
                         ? 'bg-[#1e2330] border border-[#2f3547] text-gray-100 rounded-tr-none shadow-sm'
-                        : 'bg-[#15171e] border border-[#21242e] text-gray-200 rounded-tl-none'
+                        : 'bg-[#15171e] border border-[#21242e] text-[#E5E5E5] rounded-tl-none'
                     }`}
                   >
                     {msg.text}
@@ -315,7 +315,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
 
         <div className="flex items-center justify-between text-[10px] text-gray-500 px-0.5">
           <span>
-            Chatting as <strong className="text-gray-300 font-medium">{currentUserName || 'You'}</strong>
+            Chatting as <strong className="text-[#A3A3A3] font-medium">{currentUserName || 'You'}</strong>
             {currentUserRole === 'admin' ? ' (Admin)' : ' (Student)'}
           </span>
           <span className="hidden sm:inline text-gray-600">Shift+Enter for new line</span>

@@ -85,7 +85,8 @@ export async function bindMonacoToYDoc(
   ydoc: Y.Doc,
   ytext: Y.Text,
   awareness: Awareness,
-  canEdit: boolean = true
+  canEdit: boolean = true,
+  isOwner: boolean = false
 ): Promise<ActiveBinding | null> {
   if (typeof window === 'undefined' || !editor) return null;
 
@@ -96,20 +97,13 @@ export async function bindMonacoToYDoc(
   const model = editor.getModel();
   if (!model) return null;
 
-  // If the Yjs text is empty but the model has initial code, seed Yjs text
-  if (ytext.length === 0) {
-    const initial = model.getValue();
-    if (initial) {
-      ydoc.transact(() => {
-        ytext.insert(0, initial);
-      }, 'init');
-    }
-  } else {
-    const currentModelVal = model.getValue();
-    const yStr = ytext.toString();
-    if (currentModelVal !== yStr) {
-      model.setValue(yStr);
-    }
+  // We rely on the Server (Durable Object) to seed the initial text if the doc is truly empty.
+  // We do NOT seed it locally because if we do, and the server also has state, they will merge and duplicate.
+  
+  const currentModelVal = model.getValue();
+  const yStr = ytext.toString();
+  if (ytext.length > 0 && currentModelVal !== yStr) {
+    model.setValue(yStr);
   }
 
   const monacoBinding = new BindingClass(

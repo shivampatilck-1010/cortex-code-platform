@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomRoomManager } from '@/lib/classroom/room-manager';
 import { ClassroomAuth } from '@/lib/classroom/auth';
+import { classroomDb } from '@/lib/classroom/db';
 
 export async function GET(
   req: NextRequest,
@@ -27,6 +28,44 @@ export async function GET(
         clientParticipants = JSON.parse(clientParticipantsRaw);
       } catch {}
     }
+
+    // Edge & Multi-Isolate Hydration: Populate participants from durable D1 database
+    try {
+      const dbMembers = await classroomDb.listMembers(roomId);
+      if (dbMembers && dbMembers.length > 0) {
+        for (const m of dbMembers) {
+          const isTeacher = m.role === 'teacher' || (m.role as any) === 'admin';
+          if (!room.participants[m.userId]) {
+            room.participants[m.userId] = {
+              id: m.userId,
+              name: m.userName,
+              role: isTeacher ? 'admin' : 'user',
+              joinedAt: m.joinedAt || Date.now(),
+              lastActive: m.lastActiveAt || Date.now(),
+              status: m.isOnline ? 'idle' : 'offline',
+              online: Boolean(m.isOnline),
+              currentLanguage: 'python',
+              activeFileName: 'main.py',
+              activeCode: '',
+              files: [],
+              canRun: true,
+              isLocked: false,
+              privacy: {
+                workspaceVisibility: isTeacher ? 'public' : 'private',
+                allowCollaboration: true,
+                requireDownloadPermission: !isTeacher,
+              },
+            };
+          }
+          if (isTeacher && (!room.admin.id || room.admin.name === 'Classroom Host')) {
+            room.admin.id = m.userId;
+            room.admin.name = m.userName;
+            room.admin.enteredArena = true;
+            room.state = 'active';
+          }
+        }
+      }
+    } catch {}
 
     // Edge Self-Healing: if participant is known by client but missing in this worker isolate, auto-register
     if (requesterId && !room.participants[requesterId]) {

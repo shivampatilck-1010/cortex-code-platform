@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\cortex-lockdown]
+@="URL:Cortex Lockdown Secure Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\cortex-lockdown\DefaultIcon]
+@="\"%~dp0CortexLockdown.exe\",0"
+
+[HKEY_CURRENT_USER\Software\Classes\cortex-lockdown\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\cortex-lockdown\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\cortex-lockdown\shell\open\command]
+@="\"%~dp0CortexLockdown.exe\" \"%1\""

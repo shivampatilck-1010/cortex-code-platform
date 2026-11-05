@@ -2,8 +2,12 @@ import { ClassroomEventMessage } from './types';
 
 export type ClassroomEventType =
   | 'classroom.updated'
+  | 'classroom.archived'
+  | 'classroom.deleted'
+  | 'classroom.code_regenerated'
   | 'student.joined'
   | 'student.left'
+  | 'student.removed'
   | 'student.presence.updated'
   | 'announcement.created'
   | 'announcement.updated'
@@ -42,7 +46,17 @@ export type ClassroomEventType =
   | 'student.code_share.revoked'
   | 'question.created'
   | 'question.answered'
-  | 'question.pinned';
+  | 'question.pinned'
+  | 'workspace.broadcast.start'
+  | 'workspace.broadcast.pause'
+  | 'workspace.broadcast.resume'
+  | 'workspace.broadcast.stop'
+  | 'workspace.broadcast.code'
+  | 'workspace.broadcast.output'
+  | 'workspace.observe.subscribe'
+  | 'workspace.observe.unsubscribe'
+  | 'workspace.student.update'
+  | 'workspace.state.query';
 
 
 export interface ClassroomRealtimeEvent {

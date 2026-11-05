@@ -197,6 +197,24 @@ npm run start
 | **Accept AI Fix** | <kbd>Enter</kbd> *(in diff)* | <kbd>Enter</kbd> *(in diff)* | Applies suggested code repair |
 | **Discard AI Fix** | <kbd>Esc</kbd> | <kbd>Esc</kbd> | Closes AI auto-fix review |
 
+## 🎓 Cortex Online Examination System
+
+Cortex features an enterprise-grade university examination platform engineered for high-stakes academic testing on Cloudflare Edge:
+- **5 Comprehensive Question Types**: Single-select MCQ, Multi-select MCQ (partial credit), True/False, Numerical (configurable tolerance delta), and Subjective Short Answer.
+- **Server-Authoritative Timing**: Strict 30-second post-expiry network delivery grace period that rejects post-deadline answer mutations while protecting buffered submissions.
+- **Offline Network Resilience**: Monotonic timestamp versioning rejects delayed or out-of-order writes, preventing stale offline packets from overwriting newer answers.
+- **Safe Exam Browser (SEB) Cryptographic Verification**: Native integration with SEB protocols via SHA-256 Request Hash and Config Key verification, complete with automated `.seb` Apple Plist profile generation.
+- **Mathematical Analytics & Reporting**: Server-authoritative grade calculation, cohort score distributions, percentile ranking, and instant CSV/JSON data export.
+- **Proctor Telemetry & Audit Logs**: High-resolution tracking of window blurs, tab switches, and fullscreen exits without automated punitive terminations.
+
+---
+
+## 🏛️ Live Classroom & Collaborative Studio
+
+- **Real-Time Collaboration**: Cloudflare Durable Objects coordinate state across teacher and student workspaces.
+- **Multi-Modal Instruction**: Integrated Monaco code editor, interactive digital whiteboard, synchronized slide decks, and P2P WebRTC audio/video signaling.
+- **Project Teams & Arenas**: Dynamic breakout groups, live pair programming, and automated compiler verification across 16 language runtimes.
+
 ---
 
 ## 📂 Project Structure

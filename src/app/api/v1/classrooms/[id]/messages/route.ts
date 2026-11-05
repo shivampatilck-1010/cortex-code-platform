@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
-import { realtimeCoordinator } from '@/lib/classroom/realtime';
 import { ClassroomMessage, ClassroomMemberRole } from '@/lib/classroom/models';
 
 export async function GET(
@@ -77,7 +76,7 @@ export async function POST(
       senderId: user.id,
       senderName: user.name,
       senderRole: role,
-      recipientType: recipientType === 'direct' ? 'direct' : (recipientType === 'teacher' ? 'teacher' : 'class'),
+      recipientType: recipientType === 'direct' ? 'direct' : (recipientType === 'teacher' ? 'teacher' : (recipientType === 'announcement' ? 'announcement' : 'class')),
       recipientId: recipientId || undefined,
       content: content.trim(),
       createdAt: Date.now(),
@@ -86,13 +85,8 @@ export async function POST(
 
     await classroomDb.createMessage(message);
 
-    // Broadcast authoritative message.created event
-    realtimeCoordinator.broadcast(
-      id,
-      'message.created',
-      { message },
-      { id: user.id, name: user.name }
-    );
+    // Real-time delivery is handled by the Durable Object WebSocket broadcast.
+    // This API route only needs to persist the message to D1.
 
     return NextResponse.json({ success: true, message });
   } catch (err: any) {

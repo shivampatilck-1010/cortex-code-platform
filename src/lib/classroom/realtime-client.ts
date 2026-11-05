@@ -421,7 +421,7 @@ export class ClassroomRealtimeClient {
     });
   }
 
-  public sendMessage(content: string) {
+  public sendMessage(content: string, recipientType: 'class' | 'teacher' | 'direct' | 'announcement' = 'class', recipientId?: string) {
     this.sendEvent('message.created', {
       message: {
         id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -429,7 +429,8 @@ export class ClassroomRealtimeClient {
         senderId: this.userId,
         senderName: this.userName,
         senderRole: this.role,
-        recipientType: 'all',
+        recipientType,
+        recipientId,
         content,
         createdAt: Date.now(),
         updatedAt: Date.now(),

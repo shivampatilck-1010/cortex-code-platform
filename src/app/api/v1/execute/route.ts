@@ -7,6 +7,8 @@ import { getLanguageConfig } from '@/config/languages';
 import { ALLOWED_LANGUAGES, getExecutionMode, SAFE_SYSTEM_ERROR_MESSAGE } from '@/lib/execution/config';
 import { validateProjectFiles } from '@/lib/execution/path-sanitizer';
 import { executionRateLimiter } from '@/lib/execution/rate-limiter';
+import { getAdapter, hasTracingSupport } from '@/lib/visualization/registry';
+import '@/lib/visualization/adapters';
 
 function getClientIdentifier(req: NextRequest): string {
   const forwarded = req.headers.get('x-forwarded-for');
@@ -61,28 +63,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Malformed JSON payload' }, { status: 400 });
     }
 
-    const { projectId, language, stdin, args, version, entrypoint } = body || {};
+    const { projectId, language, stdin, args, version, entrypoint, files: bodyFiles, trace: shouldTrace } = body || {};
 
-    if (!projectId) {
-      return NextResponse.json({ error: 'projectId is required for execution' }, { status: 400 });
-    }
+    let rawFiles: any[] = [];
 
-    // 2.5 Auth & Ownership Verification
-    const user = await ClassroomAuth.authenticateRequest(req);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (projectId) {
+      // 2.5 Auth & Ownership Verification
+      const user = await ClassroomAuth.authenticateRequest(req);
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-    const project = await projectDb.getProject(projectId);
-    if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-    }
-    
-    if (project.ownerId !== user.id) {
-      return NextResponse.json({ error: 'Forbidden: You do not own this project' }, { status: 403 });
-    }
+      const project = await projectDb.getProject(projectId);
+      if (!project) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      }
+      
+      if (project.ownerId !== user.id) {
+        return NextResponse.json({ error: 'Forbidden: You do not own this project' }, { status: 403 });
+      }
 
-    const dbFiles = await projectDb.listFilesForProject(projectId);
+      const dbFiles = await projectDb.listFilesForProject(projectId);
+      rawFiles = dbFiles.map(f => ({
+        id: f.id,
+        name: f.name,
+        path: f.path,
+        content: f.content,
+        isFolder: f.isFolder
+      }));
+    } else if (bodyFiles && Array.isArray(bodyFiles)) {
+      rawFiles = bodyFiles;
+    } else {
+      return NextResponse.json({ error: 'Either projectId or files array is required for execution' }, { status: 400 });
+    }
 
     if (!language || typeof language !== 'string') {
       return NextResponse.json({ error: 'Language is required and must be a string' }, { status: 400 });
@@ -97,15 +110,6 @@ export async function POST(req: NextRequest) {
     }
 
     const langConfig = getLanguageConfig(normalizedLang);
-
-    // Normalize files from DB
-    let rawFiles = dbFiles.map(f => ({
-      id: f.id,
-      name: f.name,
-      path: f.path,
-      content: f.content,
-      isFolder: f.isFolder
-    }));
     
     if (rawFiles.length === 0) {
       return NextResponse.json({ error: 'Project has no files' }, { status: 400 });
@@ -123,13 +127,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const adapter = shouldTrace && hasTracingSupport(normalizedLang) ? getAdapter(normalizedLang) : undefined;
+    let filesToExec = validation.sanitizedFiles!;
+    let entryToExec = entrypoint || langConfig.defaultFileName;
+
+    if (adapter) {
+      const tracedSetup = adapter.prepareTracedExecution(
+        validation.sanitizedFiles!,
+        entryToExec,
+        stdin
+      );
+      filesToExec = tracedSetup.tracedFiles;
+      entryToExec = tracedSetup.entrypoint;
+    }
+
     const execReq: ExecutionRequest = {
       language: langConfig.id,
       version: version || langConfig.version,
-      files: validation.sanitizedFiles!,
+      files: filesToExec,
       stdin: typeof stdin === 'string' ? stdin : '',
       args: Array.isArray(args) ? args.filter((a) => typeof a === 'string').slice(0, 10) : [],
-      entrypoint: entrypoint || langConfig.defaultFileName,
+      entrypoint: entryToExec,
     };
 
     // 4. Resolve Execution Mode
@@ -159,12 +177,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    let traceSession: any = undefined;
+    if (adapter) {
+      traceSession = adapter.parseTraceOutput(
+        result.stdout || '',
+        result.stderr || '',
+        result.exitCode,
+        result.executionTimeMs
+      );
+    }
+
     return NextResponse.json(
       {
         status: result.status,
         exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
+        stdout: traceSession ? traceSession.stdout : result.stdout,
+        stderr: traceSession ? traceSession.stderr : result.stderr,
+        trace: traceSession,
         execution_time: result.executionTimeMs,
         memory: result.memoryUsageMb,
         diagnostics: result.diagnostics,

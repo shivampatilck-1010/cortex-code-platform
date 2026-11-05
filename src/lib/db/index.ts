@@ -1,4 +1,16 @@
 import { createRequire } from 'module';
+export interface DatabaseProviderCapabilities {
+  providerName: 'sqlite_local' | 'cloudflare_d1' | 'mock_d1' | 'unsupported';
+  supportsImmediateTransactions: boolean;
+  supportsWalSharedMemory: boolean;
+  supportsCrossProcessSameHostLocking: boolean;
+  supportsDistributedCrossHostLocking: boolean;
+  supportsSavepoints: boolean;
+  supportsAtomicCasUpdates: boolean;
+  supportsUniqueConstraintRejections: boolean;
+  concurrencyModelDescription: string;
+}
+
 export interface DBInstance {
   exec(sql: string): Promise<void>;
   prepare(sql: string): {
@@ -6,6 +18,7 @@ export interface DBInstance {
     get: (...params: any[]) => Promise<any>;
     all: (...params: any[]) => Promise<any[]>;
   };
+  getProviderCapabilities?(): DatabaseProviderCapabilities;
 }
 
 export class D1Wrapper implements DBInstance {
@@ -47,6 +60,19 @@ export class D1Wrapper implements DBInstance {
             throw e;
         }
       }
+    };
+  }
+  getProviderCapabilities(): DatabaseProviderCapabilities {
+    return {
+      providerName: 'cloudflare_d1',
+      supportsImmediateTransactions: false,
+      supportsWalSharedMemory: false,
+      supportsCrossProcessSameHostLocking: false,
+      supportsDistributedCrossHostLocking: true,
+      supportsSavepoints: false,
+      supportsAtomicCasUpdates: true,
+      supportsUniqueConstraintRejections: true,
+      concurrencyModelDescription: 'Cloudflare D1 edge database utilizing worker HTTP/RPC batch execution and distributed storage replication.'
     };
   }
 }
@@ -115,3 +141,46 @@ export async function getDbInstance(dbPath: string): Promise<DBInstance | null> 
 
 
 
+
+
+/**
+ * Mock D1 provider for local contract testing.
+ * Strictly labeled as a contract mock for verifying D1-compatible SQL semantics
+ * without claiming validation against a live Cloudflare edge environment.
+ */
+export class MockD1Wrapper implements DBInstance {
+  constructor(private underlyingDb: any) {}
+  async exec(sql: string): Promise<void> {
+    const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      if (stmt.toUpperCase().startsWith('BEGIN IMMEDIATE')) {
+        throw new Error('D1_UNSUPPORTED_OPERATION: Cloudflare D1 does not support BEGIN IMMEDIATE interactive transactions');
+      }
+      await this.underlyingDb.exec(stmt);
+    }
+  }
+  prepare(sql: string) {
+    if (sql.toUpperCase().includes('BEGIN IMMEDIATE')) {
+      throw new Error('D1_UNSUPPORTED_OPERATION: Cloudflare D1 does not support BEGIN IMMEDIATE interactive transactions');
+    }
+    const stmt = this.underlyingDb.prepare(sql);
+    return {
+      run: async (...params: any[]) => stmt.run(...params),
+      get: async (...params: any[]) => stmt.get(...params),
+      all: async (...params: any[]) => stmt.all(...params)
+    };
+  }
+  getProviderCapabilities(): DatabaseProviderCapabilities {
+    return {
+      providerName: 'mock_d1',
+      supportsImmediateTransactions: false,
+      supportsWalSharedMemory: false,
+      supportsCrossProcessSameHostLocking: false,
+      supportsDistributedCrossHostLocking: false,
+      supportsSavepoints: false,
+      supportsAtomicCasUpdates: true,
+      supportsUniqueConstraintRejections: true,
+      concurrencyModelDescription: 'Local contract mock simulating Cloudflare D1 batching semantics (Contract Test Only; NOT a live D1 cloud deployment).'
+    };
+  }
+}

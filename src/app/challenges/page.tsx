@@ -51,6 +51,9 @@ export default function ChallengesPage() {
             <Link href="/" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#252830] transition">
               IDE
             </Link>
+            <Link href="/classroom" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
+              Classroom
+            </Link>
             <Link href="/challenges" className="px-2.5 py-1 rounded text-xs bg-[#252830] text-[#ff9100] font-bold transition">
               Challenges
             </Link>

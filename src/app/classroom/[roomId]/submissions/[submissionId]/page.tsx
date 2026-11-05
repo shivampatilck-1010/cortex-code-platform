@@ -82,11 +82,11 @@ export default function SubmissionReviewPage() {
   if (error || !submission) return <div className="p-8 text-red-400">Error: {error}</div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-gray-200 flex flex-col">
+    <div className="min-h-screen bg-[#0a0a0f] text-[#E5E5E5] flex flex-col">
       <header className="h-14 border-b border-[#272a38] bg-[#13141a] px-6 flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-4">
           <button onClick={() => router.push(`/classroom/${roomId}/submissions`)} className="p-1.5 hover:bg-[#1f212a] rounded">
-            <ArrowLeft className="w-4 h-4 text-gray-400" />
+            <ArrowLeft className="w-4 h-4 text-[#737373]" />
           </button>
           <div>
             <h1 className="text-sm font-bold text-white">{submission.studentName}'s Submission</h1>
@@ -158,7 +158,7 @@ export default function SubmissionReviewPage() {
               </h2>
               <div className="flex items-center space-x-4 p-4 bg-[#0a0a0f] border border-[#272a38] rounded-lg">
                 <div className="flex-1">
-                  <div className="text-xs text-gray-400 mb-1">Auto-grader Score</div>
+                  <div className="text-xs text-[#737373] mb-1">Auto-grader Score</div>
                   <div className="font-mono text-emerald-400 font-bold">{submission.score}</div>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -181,7 +181,7 @@ export default function SubmissionReviewPage() {
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 placeholder="Visible to the student..."
-                className="w-full h-32 bg-[#0a0a0f] border border-[#272a38] rounded-lg p-3 text-sm text-gray-300 focus:outline-none focus:border-[#ff9100] resize-y"
+                className="w-full h-32 bg-[#0a0a0f] border border-[#272a38] rounded-lg p-3 text-sm text-[#A3A3A3] focus:outline-none focus:border-[#ff9100] resize-y"
               />
             </div>
 
@@ -205,7 +205,7 @@ export default function SubmissionReviewPage() {
                   {submission.testResults.map((tr, i) => (
                     <div key={tr.testCaseId} className="p-3 bg-[#0a0a0f] border border-[#272a38] rounded-lg">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-gray-300">
+                        <span className="text-xs font-bold text-[#A3A3A3]">
                           Test Case {i + 1}
                           {tr.visibility === 'hidden' && <span className="ml-2 text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">HIDDEN</span>}
                         </span>

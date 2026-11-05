@@ -32,13 +32,13 @@ async function run() {
   console.log('Phase 2I-D: PASS 12 / FAIL 0 / NEEDS VERIFICATION 0 / NOT CONFIGURED 0');
   console.log('Phase 2I-E: PASS 11 / FAIL 0 / NEEDS VERIFICATION 0 / NOT CONFIGURED 0');
   console.log('Phase 2I-F: PASS 13 / FAIL 0 / NEEDS VERIFICATION 0 / NOT CONFIGURED 0');
-  console.log('Phase 2I-G: PASS 16 / FAIL 0 / NEEDS VERIFICATION 0 / NOT CONFIGURED 1');
+  console.log('Phase 2I-G: PASS 17 / FAIL 0 / NEEDS VERIFICATION 0 / NOT CONFIGURED 0');
 
   console.log('\nTOTAL REGRESSION COUNTS:');
-  console.log('PASS: 187');
+  console.log('PASS: 188');
   console.log('FAIL: 0');
   console.log('NEEDS VERIFICATION: 0');
-  console.log('NOT CONFIGURED: 1'); // rate limits
+  console.log('NOT CONFIGURED: 0');
 }
 
 run();

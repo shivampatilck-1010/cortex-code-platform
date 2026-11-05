@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { 
   Play, 
@@ -200,6 +200,8 @@ export default function ComparePage() {
   const [langB, setLangB] = useState(PRESETS[0].langB);
   const [codeB, setCodeB] = useState(PRESETS[0].codeB);
   const [resultB, setResultB] = useState<ExecutionResult | null>(null);
+  const editorRefA = useRef<any>(null);
+  const editorRefB = useRef<any>(null);
 
   // Classroom integration state
   const [roomId, setRoomId] = useState('');
@@ -277,10 +279,12 @@ export default function ComparePage() {
     if (p) {
       setUserAName(p.name);
       if (p.language) setLangA(p.language);
-      if (p.isCodeHidden) {
-        setCodeA(`// [LOCKED] Workspace of ${p.name} is private.\n// The owner must set visibility to Public to benchmark.`);
-      } else {
-        setCodeA(p.activeCode || `// ${p.name}'s workspace is currently empty.`);
+      const newCode = p.isCodeHidden
+        ? `// [LOCKED] Workspace of ${p.name} is private.\n// The owner must set visibility to Public to benchmark.`
+        : (p.activeCode || `// ${p.name}'s workspace is currently empty.`);
+      setCodeA(newCode);
+      if (editorRefA.current && editorRefA.current.getValue() !== newCode) {
+        editorRefA.current.setValue(newCode);
       }
       setResultA(null);
     }
@@ -292,10 +296,12 @@ export default function ComparePage() {
     if (p) {
       setUserBName(p.name);
       if (p.language) setLangB(p.language);
-      if (p.isCodeHidden) {
-        setCodeB(`// [LOCKED] Workspace of ${p.name} is private.\n// The owner must set visibility to Public to benchmark.`);
-      } else {
-        setCodeB(p.activeCode || `// ${p.name}'s workspace is currently empty.`);
+      const newCode = p.isCodeHidden
+        ? `// [LOCKED] Workspace of ${p.name} is private.\n// The owner must set visibility to Public to benchmark.`
+        : (p.activeCode || `// ${p.name}'s workspace is currently empty.`);
+      setCodeB(newCode);
+      if (editorRefB.current && editorRefB.current.getValue() !== newCode) {
+        editorRefB.current.setValue(newCode);
       }
       setResultB(null);
     }
@@ -307,9 +313,15 @@ export default function ComparePage() {
     if (p) {
       setLangA(p.langA);
       setCodeA(p.codeA);
+      if (editorRefA.current && editorRefA.current.getValue() !== p.codeA) {
+        editorRefA.current.setValue(p.codeA);
+      }
       setResultA(null);
       setLangB(p.langB);
       setCodeB(p.codeB);
+      if (editorRefB.current && editorRefB.current.getValue() !== p.codeB) {
+        editorRefB.current.setValue(p.codeB);
+      }
       setResultB(null);
       setAiComparison(null);
     }
@@ -335,8 +347,10 @@ export default function ComparePage() {
 
     try {
       const benchmarkId = mode === 'presets' ? selectedPreset : roomId || 'custom';
-      const fileA = { id: 'solA', name: getLanguageConfig(langA).defaultFileName, path: '/a', content: codeA };
-      const fileB = { id: 'solB', name: getLanguageConfig(langB).defaultFileName, path: '/b', content: codeB };
+      const currentCodeA = editorRefA.current?.getValue() ?? codeA;
+      const currentCodeB = editorRefB.current?.getValue() ?? codeB;
+      const fileA = { id: 'solA', name: getLanguageConfig(langA).defaultFileName, path: '/a', content: currentCodeA };
+      const fileB = { id: 'solB', name: getLanguageConfig(langB).defaultFileName, path: '/b', content: currentCodeB };
 
       const res = await fetch('/api/v1/benchmark/run', {
          method: 'POST',
@@ -428,16 +442,21 @@ Please provide a concise, structured comparative analysis with:
   };
 
   // Keyboard shortcut: Ctrl + Enter / Cmd + Enter
+  const handleRunBenchmarkRef = useRef(handleRunBenchmark);
+  useEffect(() => {
+    handleRunBenchmarkRef.current = handleRunBenchmark;
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        handleRunBenchmark();
+        handleRunBenchmarkRef.current();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [langA, codeA, langB, codeB, customStdin, isComparing]);
+  }, []);
 
   const handleReset = () => {
     setResultA(null);
@@ -674,12 +693,14 @@ Please provide a concise, structured comparative analysis with:
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 relative">
+          <div className="flex-1 min-h-0 relative select-text" style={{ userSelect: 'text' }}>
             <Editor
+              key={langA}
               height="100%"
               language={getLanguageConfig(langA).monacoLang}
-              value={codeA}
+              defaultValue={codeA}
               theme="vs-dark"
+              onMount={(editor) => { editorRefA.current = editor; }}
               onChange={(v) => setCodeA(v || '')}
               options={{
                 fontSize: 13,
@@ -688,6 +709,18 @@ Please provide a concise, structured comparative analysis with:
                 lineNumbers: 'on',
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
+                selectOnLineNumbers: true,
+                dragAndDrop: true,
+                contextmenu: true,
+                multiCursorModifier: 'alt',
+                copyWithSyntaxHighlighting: true,
+                emptySelectionClipboard: false,
+                selectionHighlight: true,
+                autoClosingBrackets: 'always',
+                autoClosingQuotes: 'always',
+                autoSurround: 'languageDefined',
+                formatOnPaste: false,
+                formatOnType: false,
               }}
             />
           </div>
@@ -744,12 +777,14 @@ Please provide a concise, structured comparative analysis with:
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 relative">
+          <div className="flex-1 min-h-0 relative select-text" style={{ userSelect: 'text' }}>
             <Editor
+              key={langB}
               height="100%"
               language={getLanguageConfig(langB).monacoLang}
-              value={codeB}
+              defaultValue={codeB}
               theme="vs-dark"
+              onMount={(editor) => { editorRefB.current = editor; }}
               onChange={(v) => setCodeB(v || '')}
               options={{
                 fontSize: 13,
@@ -758,6 +793,18 @@ Please provide a concise, structured comparative analysis with:
                 lineNumbers: 'on',
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
+                selectOnLineNumbers: true,
+                dragAndDrop: true,
+                contextmenu: true,
+                multiCursorModifier: 'alt',
+                copyWithSyntaxHighlighting: true,
+                emptySelectionClipboard: false,
+                selectionHighlight: true,
+                autoClosingBrackets: 'always',
+                autoClosingQuotes: 'always',
+                autoSurround: 'languageDefined',
+                formatOnPaste: false,
+                formatOnType: false,
               }}
             />
           </div>
