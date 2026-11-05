@@ -37,7 +37,7 @@ namespace CortexLockdown
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string targetUrl = "https://cortex-code-platform.cortexbuild1.workers.dev/lockdown/workspace";
+            string targetUrl = "https://cortex-code-platform-staging.cortexbuild1.workers.dev/lockdown/workspace";
             string examId = "";
             string launchGrant = "";
 

@@ -1,0 +1,23 @@
+# CORTEX LOCKDOWN VERIFICATION CHECKSUMS (MD5 & SHA-256)
+# Platform: Windows 10 / Windows 11 x64
+# Generated: 2026-11-06T01:22:42+05:30
+
+=== MD5 HASHES ===
+714020b650b22a18a4569b370ccc515e  CORTEX_LOCKDOWN_BROWSER_REQUIREMENTS.md
+7e2fc03f20c7950f7e607f2acb789a4a  CortexLockdown-Setup.exe
+df9f291b945f1e2c951b90df8f44516e  CortexLockdown.exe
+
+=== SHA-256 HASHES ===
+a3eb3e05475ceda00eef4e5d4ee0b25e65439d5d573b0fd5fcfb6a73e57a0436  CORTEX_LOCKDOWN_BROWSER_REQUIREMENTS.md
+726e4618990c614df6af947f72167244bd51c37f21396d0889a3f0cd62fcf0c6  CortexLockdown-Setup.exe
+82518b2d6966e3fb358892a040f148e52aa5ecdf8cab92e0d93a2a22f3afc895  CortexLockdown.exe
+
+=== VERIFICATION INSTRUCTIONS ===
+Windows PowerShell MD5 Check:
+  Get-FileHash -Path <filename> -Algorithm MD5
+
+Windows PowerShell SHA-256 Check:
+  Get-FileHash -Path <filename> -Algorithm SHA256
+
+Linux / macOS MD5 Check:
+  md5sum -c CORTEX_LOCKDOWN_REQUIREMENTS.md5

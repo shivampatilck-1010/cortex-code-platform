@@ -1,0 +1,7 @@
+# MD5 Checksums for Cortex Lockdown Requirements & Installation Packages
+# Generated: 2026-11-06T01:22:42+05:30
+# Format: <md5_hash>  <filename>
+
+714020b650b22a18a4569b370ccc515e  CORTEX_LOCKDOWN_BROWSER_REQUIREMENTS.md
+7e2fc03f20c7950f7e607f2acb789a4a  CortexLockdown-Setup.exe
+df9f291b945f1e2c951b90df8f44516e  CortexLockdown.exe
