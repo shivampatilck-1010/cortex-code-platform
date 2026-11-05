@@ -229,15 +229,22 @@ cortex-code-platform/
 │   └── cortex_learn_preview.png
 ├── data/
 │   └── feedback.json        # Persistent feedback and error detection database
+├── reports/                 # Comprehensive architecture, security, and audit reports
+│   ├── classroom-phases/    # Phase 2, 3, and 4 classroom engineering and SEB reports
+│   ├── lockdown/            # Cortex Lockdown security audits and test registers
+│   ├── platform-milestones/ # Platform-wide acceptance and completion certificates
+│   └── README.md            # Master reports index and navigation
 ├── src/
 │   ├── app/
 │   │   ├── [compiler]/      # 16 SSG pre-rendered SEO landing routes
 │   │   ├── admin/           # Platform administration & telemetry
-│   │   ├── api/v1/          # REST APIs (execution, autofix, chat, terminal, feedback)
+│   │   ├── api/v1/          # REST APIs (execution, autofix, chat, lockdown, feedback)
 │   │   ├── challenges/      # Competitive problem sets & solver
+│   │   ├── classroom/       # Live classroom, collaborative IDE, whiteboard & exams
 │   │   ├── compare/         # Dual benchmark & language comparison
 │   │   ├── dashboard/       # Developer metrics dashboard
 │   │   ├── learn/           # Interactive courses & tutorials
+│   │   ├── lockdown/        # Cortex Lockdown download, setup & readiness portal
 │   │   ├── layout.tsx       # Root layout & global metadata
 │   │   ├── page.tsx         # Main IDE entrypoint
 │   │   ├── robots.ts        # Dynamic robots.txt
@@ -257,6 +264,17 @@ cortex-code-platform/
 ├── tailwind.config.ts
 └── tsconfig.json
 ```
+
+---
+
+## Architecture, Security & Milestone Reports
+
+All historical documentation, engineering phase audits, and release verification registers are organized inside the [`reports/`](reports/README.md) directory:
+
+- [Master Reports Index](reports/README.md)
+- [Cortex Lockdown Security & Verification](reports/lockdown/)
+- [Classroom & Real-Time Collaboration Phases](reports/classroom-phases/)
+- [Platform Acceptance Milestones & Handbooks](reports/platform-milestones/)
 
 ---
 
