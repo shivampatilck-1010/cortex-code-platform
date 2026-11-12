@@ -1,146 +1,147 @@
-# CORTEX LOCKDOWN — ANTIGRAVITY CLI HANDOVER SPECIFICATION
+# CORTEX PLATFORM — ANTIGRAVITY CLI HANDOVER SPECIFICATION
 
-Document Version: 1.0.0  
-Classification: Engineering Handover & Agent Continuity Guide  
-Date: 2026-11-06  
+Document Version: 2.0.0  
+Classification: Complete Engineering Handover & Agent Continuity Guide  
+Date: 2026-11-12  
 Repository: https://github.com/shivampatilck-1010/cortex-code-platform (Branch: `main`)  
-Active Workspace: `C:\Users\shiva\.gemini\antigravity\scratch\universal-code-platform`  
+Workspace Directory: `C:\Users\shiva\.gemini\antigravity\scratch\universal-code-platform`  
 Staging Platform URL: `https://cortex-code-platform-staging.cortexbuild1.workers.dev`  
-Target OS: Windows 10 / Windows 11 (64-bit Architecture)  
+Target Platform: Edge Web (Cloudflare Workers / D1) & Windows 10/11 x64 (Native Kiosk)  
 
 ---
 
 ## 1. PURPOSE & INTENT
 
-This document provides a complete technical handover for the Antigravity CLI, subagents, or engineers continuing development, testing, maintenance, or audit tasks for the **Cortex Lockdown Browser** and examination ecosystem.
+This document serves as the master engineering handover for the Antigravity CLI, autonomous agents, and developers picking up the Cortex platform from this point forward.
+
+It outlines the complete state of the repository, the architectural division of Cortex into **three distinct standalone products**, and the exact step-by-step execution plan for implementing the **Antigravity-inspired flagship production promotional website** on the root route (`/`).
 
 ---
 
-## 2. FILE LOCATION MAP & REPOSITORY STRUCTURE
+## 2. THE THREE DECOUPLED CORTEX PRODUCTS
 
-All Cortex Lockdown components are organized across native, web, backend, and documentation subsystems:
+The platform has evolved from a single monolithic compiler interface into **three decoupled, standalone product suites**:
 
-### 2.1 Native Windows Client (`apps/cortex-lockdown-windows`)
+```
+                                 +--------------------------------+
+                                 |         CORTEX COMPANY         |
+                                 |  Production Website (Route: /) |
+                                 |   [Inspired by Antigravity]    |
+                                 +---------------+----------------+
+                                                 |
+             +-----------------------------------+-----------------------------------+
+             |                                   |                                   |
+             v                                   v                                   v
++--------------------------+        +--------------------------+        +--------------------------+
+|       PRODUCT 01:        |        |       PRODUCT 02:        |        |       PRODUCT 03:        |
+|        CORTEX IDE        |        |     CORTEX CLASSROOM     |        |      CORTEX BROWSER      |
+|  (Developer Workspace)   |        |  (Academic Virtual Labs) |        |  (Lockdown Kiosk Engine) |
++--------------------------+        +--------------------------+        +--------------------------+
+| - Route: /ide            |        | - Route: /classroom      |        | - Route: /lockdown       |
+| - 16 Cloud Runtimes      |        | - Multi-tenant Courses   |        | - Status: In Development |
+| - Monaco Code Editor     |        | - Real-Time Code Sync    |        | - Win32 Display Affinity |
+| - Step Debugger          |        | - WebRTC AV Lecture Stage|        | - WH_KEYBOARD_LL Hooks   |
+| - Cloud Shell Terminal   |        | - Persistent Whiteboard  |        | - Process Watchdog       |
+| - Gemini 2.5 Flash AI    |        | - Project Teams Studio   |        | - 10s Auto-Save Engine   |
+| - Clean Dev-Only Navbar  |        | - Assignment Grading     |        | - Architecture Simulator |
++--------------------------+        +--------------------------+        +--------------------------+
+```
 
-| File / Directory | Purpose & Key Implementation Details |
+---
+
+## 3. FILE LOCATION ROADMAP
+
+### 3.1 Web Application & Modular UI (`src/`)
+
+| Path | Purpose & Status |
 | :--- | :--- |
-| `apps/cortex-lockdown-windows/src/Program.cs` | Application entry point. Parses CLI arguments (`--url=`, `--examId=`, `--grant=`). Configured to default to staging: `https://cortex-code-platform-staging.cortexbuild1.workers.dev/lockdown/workspace`. |
-| `apps/cortex-lockdown-windows/src/UI/MainWindow.cs` | Borderless top-most kiosk form (`FormBorderStyle.None`, `TopMost = true`, `WindowState = FormWindowState.Normal`). Bounded to `Screen.PrimaryScreen.Bounds`. Hosts Edge WebView2 control. |
-| `apps/cortex-lockdown-windows/src/Security/KeyboardHook.cs` | Low-level keyboard hook (`WH_KEYBOARD_LL`) via `SetWindowsHookEx`. Blocks WinKey (`VK_LWIN`/`VK_RWIN`), `Alt+Tab`, `Alt+Esc`, `Ctrl+Esc`, `Ctrl+Shift+Esc`, `Alt+Space`, `PrintScreen`, `Alt+F4`. Features proctor emergency exit: `Ctrl + Alt + F10`. |
-| `apps/cortex-lockdown-windows/src/Security/DisplayAffinity.cs` | Screen capture suppression via Win32 `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE / WDA_MONITOR)`. Renders black surfaces to OBS, Discord, Teams, Zoom, Snagit, Snipping Tool. |
-| `apps/cortex-lockdown-windows/src/Security/ProcessWatchdog.cs` | Background daemon thread polling active processes every 1,500ms against a 40+ entry blacklist (capture tools, remote desktop, secondary browsers, debuggers). |
+| `src/app/page.tsx` | **[NEXT TASK]** To be replaced with the flagship promotional website showcasing the 3 products. |
+| `src/app/ide/page.tsx` | **[NEXT TASK]** Move existing raw Monaco IDE code from `src/app/page.tsx` here to create the standalone IDE. |
+| `src/app/classroom/page.tsx` | Dedicated standalone **Cortex Classroom** hub (courses, assignments, live rooms). |
+| `src/app/classroom/[roomId]/live/` | Real-time virtual lab room (WebRTC AV stage, collaborative multi-cursor editor, whiteboard). |
+| `src/app/classroom/teams/` | Student Project Teams Studio (team formation, project gallery, activity timeline). |
+| `src/app/lockdown/` | Cortex Lockdown web landing, candidate onboarding, and secure examination workspace. |
+| `src/app/[compiler]/` | SEO-optimized compiler entry points for each of the 16 languages (`/cpp`, `/python`, etc.). |
+| `src/components/landing/` | **[NEXT TASK]** New directory for the modular Antigravity-style showcase components. |
+| `src/components/brand/CortexLogo.tsx` | Official brand logo component with SVG vector emblem and high-res transparent PNG fallback. |
+| `public/brand/cortex-logo-transparent.png` | Official high-resolution transparent Cortex emblem (1024x1024). |
+
+### 3.2 Native Windows Lockdown Client (`apps/cortex-lockdown-windows/`)
+
+| Path | Purpose & Key Implementation Details |
+| :--- | :--- |
+| `apps/cortex-lockdown-windows/src/Program.cs` | Native entry point. Defaults to staging: `https://cortex-code-platform-staging.cortexbuild1.workers.dev/lockdown/workspace`. |
+| `apps/cortex-lockdown-windows/src/UI/MainWindow.cs` | Borderless top-most kiosk form (`FormBorderStyle.None`, `TopMost = true`). Enforces full screen bounds. |
+| `apps/cortex-lockdown-windows/src/Security/KeyboardHook.cs` | Win32 `WH_KEYBOARD_LL` low-level hook suppressing WinKey, `Alt+Tab`, `Alt+Esc`, `Ctrl+Esc`, `Ctrl+Shift+Esc`, `Alt+Space`, `PrintScreen`. Supervisor emergency exit: `Ctrl + Alt + F10`. |
+| `apps/cortex-lockdown-windows/src/Security/DisplayAffinity.cs` | Win32 `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` rendering black frames to OBS, Discord, Teams, Zoom, Snagit, Snipping Tool. |
+| `apps/cortex-lockdown-windows/src/Security/ProcessWatchdog.cs` | Background daemon polling active processes every 1,500ms against a 40+ entry blacklist. |
 | `apps/cortex-lockdown-windows/src/Security/ClipboardGuard.cs` | Flushes clipboard upon launch (`Clipboard.Clear()`) and isolates internal clipboard state. |
-| `apps/cortex-lockdown-windows/src/Security/EnvironmentInspector.cs` | WMI query inspector detecting hypervisors and VMs (VMware, VirtualBox, QEMU, Hyper-V). |
-| `apps/cortex-lockdown-windows/src/Security/TelemetryDispatcher.cs` | WebSocket / HTTP dispatcher streaming security violation events in real time to the server. |
-| `apps/cortex-lockdown-windows/src/app.manifest` | Declares DPI awareness (`PerMonitorV2`) and Windows 10/11 compatibility GUIDs. |
-| `apps/cortex-lockdown-windows/installer/SetupProgram.cs` | Standalone C# bootstrap installer script compiling `CortexLockdown-Setup.exe`. |
 
-### 2.2 Web Examination Workspace (`src/app/lockdown` & `src/components/lockdown`)
+### 3.3 Database & Cloudflare Edge Infrastructure
 
-| File / Directory | Purpose & Key Implementation Details |
+| Path | Purpose & Key Details |
 | :--- | :--- |
-| `src/app/lockdown/workspace/page.tsx` | Route: `/lockdown/workspace`. Entry page for the embedded WebView2 browser. |
-| `src/components/lockdown/CortexLockdownApp.tsx` | 10-stage onboarding & exam runner: Welcome -> Device Security -> Lobby -> Hardware Readiness -> Instructions -> Secure Workspace -> Confirm Submission -> Results -> Settings -> Error Recovery. |
-| `src/lib/lockdown/answer-store.ts` | Client-side encrypted response caching (IndexedDB + AES-GCM). Powers offline resilience and the 10-second transactional auto-save state machine. |
-| `src/lib/lockdown/proctoring-engine.ts` | Video frame and audio spectrum analyzer for focus loss, multi-face detection, and audio anomalies. |
-
-### 2.3 Backend API & Cloudflare D1 Relational Storage
-
-| File / Directory | Purpose & Key Implementation Details |
-| :--- | :--- |
-| `src/app/api/v1/exams/[id]/sync/route.ts` | Delta auto-save sync endpoint handling the 10-second client flush. |
-| `src/app/api/v1/exams/[id]/submit/route.ts` | Final exam submission and automated isolate scoring pipeline. |
 | `migrations/0004_online_examination_system.sql` | Relational tables: `exams`, `exam_sections`, `exam_questions`, `exam_sessions`, `exam_question_responses`, `exam_integrity_events`. |
-| `migrations/0008_examination_phase3_schema_completion.sql` | Extended verification indices and exam status constraints. |
 | `wrangler.jsonc` | Cloudflare Workers configuration binding staging D1 database (`cortex-staging-db`) and environment variables. |
 
-### 2.4 Verification Scripts & Release Packages
-
-| File / Directory | Purpose & Key Implementation Details |
-| :--- | :--- |
-| `scripts/test-lockdown-college-demonstration.ts` | Automated end-to-end test suite (22/22 checks passing). Validates exam initialization, D1 state, auto-save, question bank, and proctoring. |
-| `release/windows/CortexLockdown-Setup.exe` | Single-file zero-elevation installer (60,928 bytes, SHA-256: `726e4618990c614df6af947f72167244bd51c37f21396d0889a3f0cd62fcf0c6`). |
-| `public/downloads/CortexLockdown-Requirements-Bundle.zip` | Packaged documentation bundle containing requirements, checksums, and architecture. |
-| `docs/lockdown/CORTEX_LOCKDOWN_BROWSER_REQUIREMENTS.md` | Exhaustive requirements specification from scratch. |
-| `docs/lockdown/CHECKSUMS.txt` | Cryptographic hash index (MD5 & SHA-256) for all released binaries and documents. |
-
 ---
 
-## 3. INSTALLED CLIENT & DESKTOP ASSETS
+## 4. IMMEDIATE TASK FOR ANTIGRAVITY CLI: IMPLEMENTING THE PRODUCTION WEBSITE
 
-The following assets are installed and verified on the local host machine:
+The Antigravity CLI should execute the approved implementation plan:
 
-- **Installed Binary:**  
-  `C:\Users\shiva\AppData\Local\CortexLockdown\CortexLockdown.exe` (35,840 bytes, SHA-256 `82518B2D6966E3FB358892A040F148E52AA5ECDF8CAB92E0D93A2A22F3AFC895`)
-- **Desktop Shortcut:**  
-  `C:\Users\shiva\OneDrive\Desktop\Cortex Lockdown.lnk`  
-  *Target argument:* `--url=https://cortex-code-platform-staging.cortexbuild1.workers.dev/lockdown/workspace`
-- **Credentials & Access File:**  
-  `C:\Users\shiva\OneDrive\Desktop\CORTEX_CREDENTIALS.txt`
-- **Standalone Offline GitHub HTML Preview:**  
-  `C:\Users\shiva\OneDrive\Desktop\CORTEX_README_GITHUB_PREVIEW.html`
-- **Full Documentation Bundle:**  
-  `C:\Users\shiva\OneDrive\Desktop\Cortex-README-Documentation-Package.zip`
+### Step 1: Relocate Raw IDE to `/ide`
+1. Create `src/app/ide/page.tsx` copying the full interactive Monaco Cloud IDE logic from `src/app/page.tsx`.
+2. Ensure `/ide` functions standalone without academic classroom dependencies.
 
----
+### Step 2: Build the Antigravity-Style Showcase Suite (`src/components/landing/`)
+Create the following modular components adhering to the design language of `https://antigravity.google/` (deep obsidian black `#08090A`, frosted glass, subtle orange radiance `#FF9100`, monospace micro-badges, clean sans typography, zero emojis):
 
-## 4. STAGING DEMO CREDENTIALS & ACTIVE EXAM
+1. **`LandingHeaderNav.tsx`**: Minimalist frosted glass navbar with official Cortex logo, Product dropdown (`Cortex IDE`, `Cortex Classroom`, `Cortex Browser`), and glowing `Launch IDE` button.
+2. **`LandingHero.tsx`**: Hero section with centered transparent emblem, announcement pill `CORTEX PLATFORM v1.0 // THREE PRODUCTION SUITES`, headline **CODE BEYOND LIMITS**, and 3 quick launch cards.
+3. **`LandingStickyNav.tsx`**: Sticky pill progress bar tracking scroll position:
+   - `01 // CORTEX IDE`
+   - `02 // CORTEX CLASSROOM`
+   - `03 // CORTEX BROWSER (IN DEVELOPMENT)`
+4. **`IdeProductShowcase.tsx`**: Dedicated showcase for **Product 1 (IDE)** with 16 runtimes, Monaco editor mockup, terminal drawer simulation, and `Launch Standalone IDE &rarr;` CTA linking to `/ide`.
+5. **`ClassroomProductShowcase.tsx`**: Dedicated showcase for **Product 2 (Classroom)** with multi-cursor coding preview, WebRTC AV stage, interactive whiteboard, assignment grading, and `Enter Classroom Suite &rarr;` CTA linking to `/classroom`.
+6. **`LockdownProductShowcase.tsx`**: Dedicated showcase for **Product 3 (Browser)**:
+   - Status badge: `BUILDING BY TEAM // COMING SOON // PLACEHOLDER`.
+   - Explanatory note: "Our engineering team is actively building the final release of the Cortex Lockdown client. Explore the architectural preview and interactive security simulation below."
+   - Interactive Anti-Cheat Simulator Card with simulation buttons (OBS capture blackout, Alt+Tab hook drop, Process watchdog detection).
+   - Actions: `View Complete Requirements Specification`, `Download Documentation Bundle`, `Request Early Access`.
+7. **`TechnicalArchitectureGrid.tsx`**: Edge platform architecture specs, latency benchmarks, and performance metrics.
+8. **`LandingFooter.tsx`**: Minimalist enterprise footer, status beacon, and site directory.
 
-- **Staging Platform URL:**  
-  `https://cortex-code-platform-staging.cortexbuild1.workers.dev`
-- **Faculty / Proctor Login:**  
-  Email: `prof.sharma@cortex.internal` | Password: `Password@Demo2026`  
-  Role: Course Professor (Course `CSE276`: Advanced Systems Programming)
-- **Student Candidate Login:**  
-  Email: `student1@cortex.internal` | Password: `Password@Demo2026`  
-  Role: Enrolled Student in `CSE276`
-- **Active Demo Exam:**  
-  ID: `EXAM_CSE276_ACTIVE_MIDTERM`  
-  Title: *Midterm Exam: Multithreading, Memory Models & Lock-Free Structures*  
-  Duration: 60 mins | Total Points: 100  
-  Sections: Single MCQ, Multi MCQ, Numerical Calculation, Monaco Coding Sandbox (live test runner), Descriptive Theory Essay.
-- **Emergency Supervisor Exit Hotkey:** `Ctrl + Alt + F10`
+### Step 3: Replace `src/app/page.tsx`
+Assemble the landing components into `src/app/page.tsx` so the root domain hosts the production website.
 
----
-
-## 5. ESSENTIAL BUILD & TEST COMMANDS
-
-Execute these commands from `C:\Users\shiva\.gemini\antigravity\scratch\universal-code-platform`:
-
-### 5.1 Recompiling the Native C# Client
+### Step 4: Verification
 ```powershell
-# Using 64-bit .NET Framework 4.8 CSC compiler
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe `
-    /target:winexe `
-    /out:bin\CortexLockdown.exe `
-    /win32manifest:apps\cortex-lockdown-windows\src\app.manifest `
-    /reference:System.Windows.Forms.dll `
-    /reference:System.Drawing.dll `
-    /reference:System.Management.dll `
-    /recurse:apps\cortex-lockdown-windows\src\*.cs
+npm run lint
+npm run build
 ```
 
-### 5.2 Building the Standalone Setup Installer
-```powershell
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe `
-    /target:winexe `
-    /out:release\windows\CortexLockdown-Setup.exe `
-    /win32manifest:apps\cortex-lockdown-windows\installer\setup.manifest `
-    /reference:System.Windows.Forms.dll `
-    /reference:System.Drawing.dll `
-    /reference:System.IO.Compression.dll `
-    /reference:System.IO.Compression.FileSystem.dll `
-    apps\cortex-lockdown-windows\installer\SetupAssemblyInfo.cs `
-    apps\cortex-lockdown-windows\installer\SetupProgram.cs
-```
+---
 
-### 5.3 Running the College Demonstration Verification Suite
+## 5. ESSENTIAL COMMANDS & WORKFLOWS
+
+Run from `C:\Users\shiva\.gemini\antigravity\scratch\universal-code-platform`:
+
 ```powershell
+# Start local development server
+npm run dev
+
+# Run TypeScript lint check
+npm run lint
+
+# Production Next.js build verification
+npm run build
+
+# Run automated college demo test suite (22/22 checks)
 npx tsx scripts/test-lockdown-college-demonstration.ts
-```
 
-### 5.4 Regenerating Documentation HTML Preview
-```powershell
+# Regenerate offline HTML preview for Desktop
 node scripts/maintenance/generate_readme_preview.cjs
 ```
 
@@ -150,34 +151,33 @@ node scripts/maintenance/generate_readme_preview.cjs
 
 Any subsequent agent or Antigravity CLI invocation must strictly adhere to these immutable rules:
 
-1. **Zero Emojis:** Strictly NO emojis across all source code, comments, commit messages, documentation files, and terminal/chat outputs.
-2. **English Language Only:** All documentation, logs, code, and commit messages must be strictly in English (zero Hindi or other languages in git history).
+1. **Strictly Zero Emojis:** Strictly NO emojis across all source code, comments, commit messages, documentation files, and terminal/chat outputs.
+2. **Strictly English Language:** All documentation, logs, code, and commit messages must be strictly in English (zero Hindi or other languages in git history).
 3. **Zero Budget Guarantee (₹0):** Maintain ₹0 additional cost. Use only existing Cloudflare free tiers, native Win32 APIs, and open-source tooling.
 4. **Preserve Production:** Never alter or push unverified changes to production workers or databases (`cortex-code-platform`, `cortex-db`). Test strictly against staging (`cortex-code-platform-staging.cortexbuild1.workers.dev`, `cortex-staging-db`).
 
 ---
 
-## 7. PROMPT TEMPLATE FOR ANTIGRAVITY CLI CONTINUATION
+## 7. READY-TO-USE PROMPT FOR ANTIGRAVITY CLI
 
-Copy and use this prompt in the Antigravity CLI to immediately continue work:
+Copy and paste this prompt directly into Antigravity CLI:
 
-```
-You are continuing development on the Cortex Universal Code Platform and Cortex Lockdown Browser.
+```text
+You are continuing development on the Cortex Universal Code Platform.
 Read the handover document at docs/lockdown/HANDOVER_ANTIGRAVITY_CLI.md and README.md.
 
-Workspace Root: C:\Users\shiva\.gemini\antigravity\scratch\universal-code-platform
-Key Subsystems:
-- Native Windows Kiosk: apps/cortex-lockdown-windows/src/
-- Web Lockdown Workspace: src/app/lockdown/ and src/components/lockdown/
-- Exam APIs & D1 Database: src/app/api/v1/exams/ and migrations/
-- Staging URL: https://cortex-code-platform-staging.cortexbuild1.workers.dev
-- Emergency Exit Hotkey: Ctrl + Alt + F10
+Task:
+Implement the flagship promotional website on the root domain (/) inspired by https://antigravity.google/, decoupling Cortex into 3 distinct standalone products:
+1. Product 1: Cortex IDE -> Move raw IDE from src/app/page.tsx to src/app/ide/page.tsx.
+2. Product 2: Cortex Classroom -> Standalone academic collaboration platform at /classroom.
+3. Product 3: Cortex Browser -> Lockdown browser placeholder at /lockdown with interactive security simulation ("Building by Team // Coming Soon").
+4. Root Route (src/app/page.tsx) -> Assemble the 3-product scrollytelling showcase using src/components/landing/*.
 
 Constraints:
 - Strictly ZERO emojis in any code, commit message, or output.
 - Strictly English technical language.
-- Zero budget (₹0).
-- Keep production isolated; use staging environment.
+- ₹0 budget.
+- Verify with npm run lint and npm run build.
 
-Proceed with the requested task following these specifications.
+Proceed with the implementation following the handover specification.
 ```
