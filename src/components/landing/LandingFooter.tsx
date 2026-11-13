@@ -37,15 +37,6 @@ export const LandingFooter: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const LETTERS = [
-    { char: 'C', factor: 0.95, delay: '0s' },
-    { char: 'O', factor: 1.05, delay: '0.4s' },
-    { char: 'R', factor: 1.15, delay: '0.8s' },
-    { char: 'T', factor: 1.10, delay: '0.2s' },
-    { char: 'E', factor: 1.35, delay: '0.6s' },
-    { char: 'X', factor: 1.50, delay: '1.0s' },
-  ];
-
   return (
     <footer 
       ref={footerRef}
@@ -54,12 +45,20 @@ export const LandingFooter: React.FC = () => {
       }`}
     >
       <style>{`
-        @keyframes antigravity-bob {
+        @keyframes antigravity-bob-e {
           0%, 100% {
-            transform: translateY(0px) rotate(0deg);
+            transform: translateY(0px);
           }
           50% {
-            transform: translateY(-12px) rotate(0.4deg);
+            transform: translateY(-8px);
+          }
+        }
+        @keyframes antigravity-bob-x {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-14px);
           }
         }
       `}</style>
@@ -229,29 +228,51 @@ export const LandingFooter: React.FC = () => {
           </div>
         </div>
 
-        {/* Giant Architectural Wordmark with Anti-Gravity Floating Scroll */}
-        <div className="relative w-full overflow-hidden select-none border-t border-zinc-200/80 dark:border-white/[0.08] pt-8 pb-4 sm:pt-16 sm:pb-8 my-4">
-          <div className="w-full flex items-center justify-center font-black tracking-tighter text-[19vw] leading-[0.8] text-zinc-950 dark:text-white select-none transition-colors duration-300">
-            {LETTERS.map((item, idx) => (
+        {/* Giant Architectural Wordmark: 'EX' Floating Only */}
+        <div className="relative w-full overflow-hidden select-none border-t border-zinc-200/80 dark:border-white/[0.08] pt-12 pb-6 sm:pt-20 sm:pb-12 my-4">
+          <div className="w-full flex items-baseline justify-center font-black tracking-tighter text-[19vw] leading-[0.82] text-zinc-950 dark:text-white select-none transition-colors duration-300">
+            {/* Grounded letters: C - O - R - T */}
+            <span className="inline-block">C</span>
+            <span className="inline-block">O</span>
+            <span className="inline-block">R</span>
+            <span className="inline-block">T</span>
+
+            {/* Only last two letters float: E (modeled after 't' in Antigravity) */}
+            <span
+              style={{
+                transform: `translateY(-${Math.round(20 + scrollProgress * 18)}px) rotate(-4deg)`,
+                transition: 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)',
+              }}
+              className="inline-block transform-gpu hover:-translate-y-10 hover:rotate-[-6deg] hover:text-[#FF9100] transition-all duration-300 cursor-default"
+            >
               <span
-                key={idx}
+                className="inline-block"
                 style={{
-                  transform: `translateY(${Math.round((1 - scrollProgress) * 120 * item.factor)}px)`,
-                  transition: 'transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                  animation: 'antigravity-bob-e 4s ease-in-out infinite',
                 }}
-                className="inline-block transform-gpu hover:-translate-y-6 hover:text-[#FF9100] transition-all duration-300 cursor-default"
               >
-                <span
-                  className="inline-block"
-                  style={{
-                    animation: 'antigravity-bob 4s ease-in-out infinite',
-                    animationDelay: item.delay,
-                  }}
-                >
-                  {item.char}
-                </span>
+                E
               </span>
-            ))}
+            </span>
+
+            {/* Only last two letters float: X (modeled after 'Y' in Antigravity) */}
+            <span
+              style={{
+                transform: `translateY(-${Math.round(45 + scrollProgress * 25)}px) rotate(8deg)`,
+                transition: 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)',
+              }}
+              className="inline-block transform-gpu hover:-translate-y-14 hover:rotate-[12deg] hover:text-[#FF9100] transition-all duration-300 cursor-default"
+            >
+              <span
+                className="inline-block"
+                style={{
+                  animation: 'antigravity-bob-x 3.6s ease-in-out infinite',
+                  animationDelay: '0.4s',
+                }}
+              >
+                X
+              </span>
+            </span>
           </div>
         </div>
 
