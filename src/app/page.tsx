@@ -786,33 +786,24 @@ export default function CortexLandingPage() {
                         top: `${96 + idx * 28}px`,
                         zIndex: 10 + idx * 10,
                       }}
-                      className={`sticky rounded-2xl border transition-all duration-300 overflow-hidden ${
-                        isDark
-                          ? 'border-white/10 bg-[#1A1A1B] shadow-[0_0_40px_rgba(0,0,0,0.4)] text-white'
-                          : 'border-zinc-300 bg-white/95 shadow-[0_20px_50px_rgba(0,0,0,0.1)] text-zinc-950'
-                      }`}
+                      className="sticky rounded-2xl border border-white/15 bg-[#070708] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.6)] text-white transition-all duration-300 overflow-hidden"
                     >
-                      {/* Dark Mode ONLY: Aurora WebGL + Gradient Overlay + Glowing Blurs */}
-                      {isDark && (
-                        <>
-                          {/* Background Gradient to blend with Aurora */}
-                          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/40 z-10 pointer-events-none" />
+                      {/* Aurora WebGL + Gradient Overlay + Glowing Blurs inside #070708 Card */}
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 z-10 pointer-events-none" />
 
-                          {/* Aurora WebGL Component */}
-                          <div className="absolute inset-0 z-0">
-                            <Aurora
-                              colorStops={['#3A29FF', '#FF94B4', '#FF3232']}
-                              blend={0.5}
-                              amplitude={1.0}
-                              speed={0.5}
-                            />
-                          </div>
+                      {/* Aurora WebGL Component */}
+                      <div className="absolute inset-0 z-0">
+                        <Aurora
+                          colorStops={['#3A29FF', '#FF94B4', '#FF3232']}
+                          blend={0.5}
+                          amplitude={1.0}
+                          speed={0.5}
+                        />
+                      </div>
 
-                          {/* Decorative ambient blurs */}
-                          <div className="absolute -top-12 -left-12 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
-                          <div className="absolute -bottom-12 -right-12 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
-                        </>
-                      )}
+                      {/* Decorative ambient blurs */}
+                      <div className="absolute -top-12 -left-12 w-64 h-64 bg-blue-500/15 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
+                      <div className="absolute -bottom-12 -right-12 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
 
                       {/* Foreground Content */}
                       <div className="relative z-20 p-6 sm:p-8 flex flex-col justify-between min-h-[290px]">
@@ -820,17 +811,17 @@ export default function CortexLandingPage() {
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div>
                             <div className="flex items-center gap-2 font-mono text-xs">
-                              <span className="font-bold tracking-widest text-[#EA580C] dark:text-[#FF94B4]">
+                              <span className="font-bold tracking-widest text-[#FF94B4]">
                                 {card.index} //
                               </span>
-                              <span className="font-semibold text-zinc-600 dark:text-white/60">
+                              <span className="font-semibold text-white/60">
                                 {card.subsystem}
                               </span>
                             </div>
-                            <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-black dark:text-white">
+                            <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
                               {card.file}
                             </h3>
-                            <p className="mt-2 text-xs sm:text-sm max-w-md leading-relaxed font-medium text-zinc-800 dark:text-white/70">
+                            <p className="mt-2 text-xs sm:text-sm max-w-md leading-relaxed font-medium text-white/80">
                               {card.desc}
                             </p>
                           </div>
@@ -839,11 +830,7 @@ export default function CortexLandingPage() {
                             {card.badges.map((badge) => (
                               <span
                                 key={badge}
-                                className={`px-3 py-1 rounded-full text-xs font-mono font-semibold ${
-                                  isDark
-                                    ? 'bg-white/10 text-white/90 border border-white/10 backdrop-blur-sm'
-                                    : 'bg-zinc-100 text-zinc-900 border border-zinc-300 shadow-sm'
-                                }`}
+                                className="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-white/10 text-white/90 border border-white/10 backdrop-blur-sm"
                               >
                                 {badge}
                               </span>
@@ -852,40 +839,22 @@ export default function CortexLandingPage() {
                         </div>
 
                         {/* API Banner */}
-                        <div
-                          className={`my-5 rounded-xl border p-3.5 ${
-                            isDark
-                              ? 'border-white/10 bg-black/40 backdrop-blur-md text-amber-300'
-                              : 'border-zinc-200 bg-zinc-50 shadow-sm text-black'
-                          }`}
-                        >
+                        <div className="my-5 rounded-xl border border-white/10 bg-black/50 backdrop-blur-md p-3.5 text-amber-300">
                           <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-                            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            <div className="flex items-center gap-2 font-bold text-amber-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                               <span>{card.api}</span>
                             </div>
-                            <span
-                              className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
-                                isDark
-                                  ? 'bg-white/10 text-zinc-300'
-                                  : 'bg-zinc-200 text-zinc-800'
-                              }`}
-                            >
+                            <span className="rounded px-2 py-0.5 text-[10px] font-semibold bg-white/10 text-zinc-200">
                               {card.spec}
                             </span>
                           </div>
                         </div>
 
                         {/* Card Footer / Telemetry */}
-                        <div
-                          className={`flex flex-wrap items-center justify-between gap-2 border-t pt-4 font-mono text-[11px] font-semibold ${
-                            isDark
-                              ? 'border-white/10 text-white/60'
-                              : 'border-zinc-200 text-zinc-700'
-                          }`}
-                        >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 font-mono text-[11px] font-semibold text-white/70">
                           <div>{card.metric}</div>
-                          <div className="font-bold text-emerald-700 dark:text-emerald-400">
+                          <div className="font-bold text-emerald-400">
                             {card.status}
                           </div>
                         </div>
