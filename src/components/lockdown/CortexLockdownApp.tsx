@@ -7,6 +7,20 @@ function formatTimer(totalSeconds: number): string {
 }
 
 import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+
+// Dynamic Monaco editor import to avoid SSR issues
+const MonacoEditor = dynamic(
+  () => import('@monaco-editor/react').then((m) => m.default),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full min-h-[280px] flex items-center justify-center bg-[#090A0D] text-xs font-mono text-gray-500 border border-[#202228] rounded-xl">
+        Loading secure code editor...
+      </div>
+    ),
+  }
+);
 import {
   Shield,
   Monitor,
@@ -116,6 +130,11 @@ export function CortexLockdownApp() {
     q5: '#include <atomic>\nclass SafeCounter {\n  std::atomic<int> count{0};\npublic:\n  void increment() { count.fetch_add(1); }\n  int get() const { return count.load(); }\n};'
   });
   const [markedForReview, setMarkedForReview] = useState<Record<string, boolean>>({});
+  const [editorLanguage, setEditorLanguage] = useState<string>('cpp');
+  const answersRef = useRef(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(3540); // 59 minutes
   const [autosaveTimestamp, setAutosaveTimestamp] = useState<number>(Date.now());
   const [isAutosaving, setIsAutosaving] = useState(false);
@@ -162,8 +181,28 @@ export function CortexLockdownApp() {
   // Global Keyboard Navigation (Arrows to cycle questions, Escape to close modals)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Suppress browser devtools key shortcuts (F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U)
+      const isF12 = e.key === 'F12' || e.keyCode === 123;
+      const isDevToolsCombination =
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === 'u' || e.key === 'U' || (e.shiftKey && (e.key === 'i' || e.key === 'I' || e.key === 'j' || e.key === 'J' || e.key === 'c' || e.key === 'C')));
+
+      if (isF12 || isDevToolsCombination) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (currentScreen === 'workspace') {
+          dispatchTelemetryEvent('hotkey_violation', {
+            action: 'devtools_blocked',
+            key: e.key,
+            ctrl: e.ctrlKey,
+            shift: e.shiftKey,
+          });
+        }
+        return;
+      }
+
       const target = e.target as HTMLElement;
-      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest?.('.monaco-editor'));
 
       if (e.key === 'Escape') {
         setShowAccommodationModal(false);
@@ -178,8 +217,8 @@ export function CortexLockdownApp() {
         }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [currentScreen]);
 
   // Read URL search parameters on mount
@@ -228,26 +267,113 @@ export function CortexLockdownApp() {
     };
   }, [selectedExam.id, studentId, sessionId, launchGrant]);
 
+  // Core encrypted answer persistence and cloud synchronization handler
+  const performAnswerSync = async (
+    answersToSync: Record<string, any>,
+    seqNum: number,
+    isBackgroundInterval: boolean = false
+  ) => {
+    if (!isBackgroundInterval) {
+      setIsAutosaving(true);
+      setSyncStatus('saving');
+    }
+    setAutosaveTimestamp(Date.now());
+
+    try {
+      // 1. Authenticated local persistence (AES-256-GCM encrypted disk/localStorage)
+      await saveEncryptedAnswers({
+        examId: selectedExam.id,
+        studentId,
+        sessionId,
+        answers: answersToSync,
+        sequenceNumber: seqNum,
+        clientSecret: launchGrant || undefined,
+      });
+
+      // 2. Cloud synchronization with server endpoint
+      const res = await fetch('/api/v1/lockdown/sync-answers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(launchGrant ? { 'x-cortex-lockdown-grant': launchGrant } : {}),
+        },
+        body: JSON.stringify({
+          examId: selectedExam.id,
+          sessionId,
+          studentId,
+          answers: answersToSync,
+          sequenceNumber: seqNum,
+          clientTimestamp: Date.now(),
+          launchGrant,
+        }),
+      });
+
+      if (res && res.ok) {
+        setSyncStatus('synced');
+        return true;
+      } else {
+        setSyncStatus('offline_buffered');
+        return false;
+      }
+    } catch {
+      setSyncStatus('offline_buffered');
+      return false;
+    } finally {
+      if (!isBackgroundInterval) {
+        setIsAutosaving(false);
+      }
+    }
+  };
+
   // Answer modification with immediate authenticated local persistence and cloud sync
   const updateAnswer = (questionId: string, val: any) => {
     const updated = { ...answers, [questionId]: val };
     setAnswers(updated);
+    answersRef.current = updated;
     sequenceNumberRef.current += 1;
     const currentSeq = sequenceNumberRef.current;
-    setAutosaveTimestamp(Date.now());
-    setIsAutosaving(true);
-    setSyncStatus('saving');
+    performAnswerSync(updated, currentSeq, false);
+  };
 
-    saveEncryptedAnswers({
-      examId: selectedExam.id,
-      studentId,
-      sessionId,
-      answers: updated,
-      sequenceNumber: currentSeq,
-      clientSecret: launchGrant || undefined,
-    })
-      .then(() => {
-        return fetch('/api/v1/lockdown/sync-answers', {
+  // 10-Second Auto-Save Persistence Loop
+  // Recurring useEffect interval running every 10,000 ms during active exam workspace session
+  useEffect(() => {
+    if (currentScreen !== 'workspace') return;
+
+    const autosaveInterval = setInterval(() => {
+      performAnswerSync(answersRef.current, sequenceNumberRef.current, true);
+    }, 10000);
+
+    return () => clearInterval(autosaveInterval);
+  }, [currentScreen, selectedExam.id, studentId, sessionId, launchGrant]);
+
+  // Automatic Reconnection Sync
+  // When browser comes back online from an offline state, automatically read pending/buffered answers
+  // and dispatch a re-synchronization request to /api/v1/lockdown/sync-answers without data loss
+  useEffect(() => {
+    const handleReconnectSync = async () => {
+      try {
+        setSyncStatus('saving');
+        let targetAnswers = answersRef.current;
+        let targetSeq = sequenceNumberRef.current;
+
+        try {
+          const loadedRecord = await loadEncryptedAnswers({
+            examId: selectedExam.id,
+            studentId,
+            sessionId,
+            clientSecret: launchGrant || undefined,
+          });
+          if (loadedRecord && loadedRecord.answers && loadedRecord.sequenceNumber >= sequenceNumberRef.current) {
+            targetAnswers = loadedRecord.answers;
+            targetSeq = loadedRecord.sequenceNumber;
+            sequenceNumberRef.current = targetSeq;
+          }
+        } catch (readErr: any) {
+          console.warn('[CortexLockdownApp] Fallback to in-memory answers during reconnect sync:', readErr?.message || readErr);
+        }
+
+        const res = await fetch('/api/v1/lockdown/sync-answers', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -257,27 +383,41 @@ export function CortexLockdownApp() {
             examId: selectedExam.id,
             sessionId,
             studentId,
-            answers: updated,
-            sequenceNumber: currentSeq,
+            answers: targetAnswers,
+            sequenceNumber: targetSeq,
             clientTimestamp: Date.now(),
             launchGrant,
           }),
         });
-      })
-      .then((res) => {
+
         if (res && res.ok) {
           setSyncStatus('synced');
+          setAutosaveTimestamp(Date.now());
+          if (currentScreen === 'workspace') {
+            dispatchTelemetryEvent('network_status', {
+              action: 'reconnected_sync_success',
+              sequenceNumber: targetSeq,
+            });
+          }
         } else {
           setSyncStatus('offline_buffered');
         }
-      })
-      .catch(() => {
+      } catch {
         setSyncStatus('offline_buffered');
-      })
-      .finally(() => {
-        setIsAutosaving(false);
-      });
-  };
+      }
+    };
+
+    const handleOfflineNotice = () => {
+      setSyncStatus('offline_buffered');
+    };
+
+    window.addEventListener('online', handleReconnectSync);
+    window.addEventListener('offline', handleOfflineNotice);
+    return () => {
+      window.removeEventListener('online', handleReconnectSync);
+      window.removeEventListener('offline', handleOfflineNotice);
+    };
+  }, [selectedExam.id, studentId, sessionId, launchGrant, currentScreen]);
 
   // Proctoring & Media Stream State
   const [cameraActive, setCameraActive] = useState(true);
@@ -466,11 +606,17 @@ export function CortexLockdownApp() {
       dispatchTelemetryEvent('clipboard_tamper', { action: 'copy_blocked' });
     };
     const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      // Ensure clipboard paste outside the editor is restricted while Monaco editor retains its internal editing clipboard
+      if (target && (target.closest('.monaco-editor') || target.classList?.contains('inputarea'))) {
+        return;
+      }
       e.preventDefault();
       dispatchTelemetryEvent('paste_attempt', { action: 'paste_blocked' });
     };
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
+      dispatchTelemetryEvent('right_click_attempt', { action: 'context_menu_blocked' });
     };
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
@@ -489,8 +635,8 @@ export function CortexLockdownApp() {
     };
 
     window.addEventListener('copy', handleCopy);
-    window.addEventListener('paste', handlePaste);
-    window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('paste', handlePaste, true);
+    window.addEventListener('contextmenu', handleContextMenu, true);
     window.addEventListener('dragover', handleDragOver);
     window.addEventListener('drop', handleDrop);
     window.addEventListener('blur', handleBlur);
@@ -557,8 +703,8 @@ export function CortexLockdownApp() {
 
     return () => {
       window.removeEventListener('copy', handleCopy);
-      window.removeEventListener('paste', handlePaste);
-      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('paste', handlePaste, true);
+      window.removeEventListener('contextmenu', handleContextMenu, true);
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
       window.removeEventListener('blur', handleBlur);
@@ -649,6 +795,7 @@ export function CortexLockdownApp() {
 
   return (
     <div
+      onContextMenu={(e) => e.preventDefault()}
       className={`flex flex-col h-screen w-screen font-sans select-none overflow-hidden border ${
         highContrastMode === 'high-contrast-dark'
           ? 'bg-black text-white border-yellow-400'
@@ -663,6 +810,7 @@ export function CortexLockdownApp() {
           : 'text-base'
       } ${reducedMotion ? 'motion-reduce' : ''}`}
     >
+
       {/* Skip to Main Examination Content Link (WCAG 2.4.1) */}
       <a
         href="#exam-questions-main"
@@ -1449,6 +1597,7 @@ export function CortexLockdownApp() {
                   </div>
                 </div>
 
+
                 {/* Live Candidate Proctoring PIP Stream */}
                 <div className="bg-[#121316] border border-[#22242a] rounded-xl p-2.5 space-y-2 mt-4">
                   <div className="flex items-center justify-between text-[10px]">
@@ -1654,20 +1803,39 @@ export function CortexLockdownApp() {
                         <h3 className="text-base font-semibold text-white">
                           C++ Systems Programming: Atomic SafeCounter
                         </h3>
-                        <span className="text-xs font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/60">
-                          Language: C++ (GCC 14)
-                        </span>
+
+                        <div className="flex items-center gap-2">
+                          <label htmlFor="editor-lang-select" className="text-xs text-gray-400 sr-only">Editor Language</label>
+                          <select
+                            id="editor-lang-select"
+                            value={editorLanguage}
+                            onChange={(e) => setEditorLanguage(e.target.value)}
+                            className="text-xs font-mono bg-cyan-950/60 text-cyan-400 px-2 py-0.5 rounded border border-cyan-800/60 focus:outline-none focus:border-cyan-400 cursor-pointer"
+                          >
+                            <option value="cpp">Language: C++ (GCC 14)</option>
+                            <option value="c">Language: C (GCC 14)</option>
+                            <option value="rust">Language: Rust (1.78)</option>
+                            <option value="python">Language: Python (3.12)</option>
+                          </select>
+                        </div>
                       </div>
 
-                      <div className="pt-1">
-                        <textarea
-                          rows={10}
-                          value={answers.q5}
-                          onChange={(e) => updateAnswer('q5', e.target.value)}
-                          className="w-full p-4 rounded-xl bg-[#090A0D] border border-[#202228] text-xs text-emerald-400 font-mono leading-relaxed focus:outline-none focus:border-[#FF9100]"
+                      <div className="pt-1 h-80 rounded-xl border border-[#202228] overflow-hidden bg-[#090A0D]">
+                        <MonacoEditor
+                          height="100%"
+                          theme="vs-dark"
+                          language={editorLanguage}
+                          value={answers.q5 || ''}
+                          onChange={(value) => updateAnswer('q5', value || '')}
+                          options={{
+                            minimap: { enabled: false },
+                            lineNumbers: 'on',
+                            fontSize: 13,
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                          }}
                         />
                       </div>
-                    </div>
                   )}
                 </div>
 
@@ -1878,6 +2046,7 @@ export function CortexLockdownApp() {
                 <span>Application Settings & Diagnostics</span>
               </h1>
               <p className="text-xs text-gray-400 mt-1">Configure client preferences, display zoom, and network diagnostics.</p>
+
             </div>
 
             <div className="space-y-4">
@@ -2003,7 +2172,7 @@ export function CortexLockdownApp() {
                   </div>
                 </div>
 
-                {/* Assistive Technology Recognitions */}
+                {/* Assistive Technology Integration */}
                 <div className="space-y-2 pt-2">
                   <label className="text-xs font-bold text-gray-300 block">
                     Assistive Technology Integration

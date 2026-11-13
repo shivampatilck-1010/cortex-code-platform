@@ -1,0 +1,26 @@
+{
+  "name": "cortex-lockdown-desktop",
+  "version": "1.0.0",
+  "description": "Unified Cross-Platform Desktop Kiosk Application for Cortex Lockdown Browser",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').cpSync('src/renderer', 'dist/renderer', {recursive: true})\"",
+    "watch": "tsc -w",
+    "start": "electron .",
+    "start:windowed": "electron . --windowed",
+    "lint": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "author": "Cortex Security Platform",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "electron": "^30.0.0",
+    "typescript": "^5.5.0"
+  }
+}

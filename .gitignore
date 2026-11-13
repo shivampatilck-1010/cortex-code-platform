@@ -1,5 +1,5 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.js
 
@@ -12,10 +12,14 @@
 
 # production
 /build
+dist/
 
 # misc
 .DS_Store
 *.pem
+launcher_output.txt
+app_err.txt
+app_out.txt
 
 # debug
 npm-debug.log*
@@ -34,7 +38,6 @@ next-env.d.ts
 *.log
 .vscode/
 .idea/
-/dist/
 .vinext/
 .wrangler/
 *.db-shm

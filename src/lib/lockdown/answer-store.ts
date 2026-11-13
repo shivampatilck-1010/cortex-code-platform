@@ -6,12 +6,18 @@
  * 1. Authenticated Encryption: AES-256-GCM (128-bit authentication tag, 12-byte IV).
  * 2. Strict Session Binding: Additional Authenticated Data (AAD) cryptographically
  *    binds ciphertext to (studentId, examId, sessionId, sequenceNumber).
- * 3. Genuine Disk Persistence:
- *    - In browser / WebView2: Backed by persistent localStorage (LevelDB on disk).
- *    - In Node.js / CLI: Written directly to physical disk using atomic file write semantics (.tmp + rename).
- * 4. Interrupted Write & Crash Safety: Two-phase commit prevents corrupt partial writes.
- * 5. Tamper Detection: Any alteration of ciphertext, metadata, IV, or binding fails decryption.
- * 6. Monotonic Sequence Validation: Prevents out-of-order write regression.
+ * 3. IndexedDB Local Buffering Engine:
+ *    - In browser / WebView2: Primary storage in IndexedDB (CortexLockdownDB -> encrypted_answers),
+ *      with indexed sequence numbers and timestamps, keyed by ${studentId}:${examId}.
+ *    - Seamless automatic fallback to localStorage when IndexedDB is unavailable.
+ * 4. Genuine Physical Disk Persistence:
+ *    - In Node.js / CLI / Desktop: Written directly to physical disk using atomic
+ *      file write semantics (.tmp + fsync + retryable renameSync).
+ * 5. Interrupted Write & Crash Safety: ACID transactions in IndexedDB, two-phase staging
+ *    in localStorage, atomic temp writes on physical disk.
+ * 6. Tamper Detection: Any alteration of ciphertext, metadata, IV, or binding fails decryption.
+ * 7. Monotonic Sequence Validation: Prevents out-of-order write regression.
+ * 8. Cryptographic Zero-Fill Shredding: Physical disk zero-filled before unlink upon confirmed receipt.
  *
  * Strictly zero emojis.
  */
@@ -19,6 +25,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+
+export const CORTEX_LOCKDOWN_DB_NAME = 'CortexLockdownDB';
+export const ENCRYPTED_ANSWERS_STORE_NAME = 'encrypted_answers';
+export const CORTEX_LOCKDOWN_DB_VERSION = 1;
 
 export interface EncryptedAnswerEnvelope {
   version: number;
@@ -33,7 +43,11 @@ export interface EncryptedAnswerEnvelope {
   ciphertextHex: string;
   tagHex: string;
   checksum: string;
+  key?: string;
+  storageKey?: string;
 }
+
+export type AnswerEnvelope = EncryptedAnswerEnvelope;
 
 export interface AnswerStoreRecord {
   answers: Record<string, any>;
@@ -70,6 +84,9 @@ export interface ClearAnswerOptions {
 
 // Memory cache for active session sequence tracking
 const activeSequenceMap = new Map<string, number>();
+
+// Cached IndexedDB connection
+let cachedDb: IDBDatabase | null = null;
 
 function getSessionKey(studentId: string, examId: string, sessionId: string): string {
   return `${studentId.trim()}::${examId.trim()}::${sessionId.trim()}`;
@@ -115,6 +132,240 @@ function getClientEntropy(): string {
   return 'cortex_universal_client';
 }
 
+function getIndexedDB(): IDBFactory | null {
+  if (typeof globalThis !== 'undefined' && (globalThis as any).indexedDB) {
+    return (globalThis as any).indexedDB as IDBFactory;
+  }
+  if (typeof window !== 'undefined' && window.indexedDB) {
+    return window.indexedDB;
+  }
+  return null;
+}
+
+export function closeDatabase(): void {
+  if (cachedDb) {
+    try {
+      cachedDb.close();
+    } catch (_) {}
+    cachedDb = null;
+  }
+}
+
+export function openDatabase(): Promise<IDBDatabase | null> {
+  const idb = getIndexedDB();
+  if (!idb) return Promise.resolve(null);
+
+  if (cachedDb) {
+    try {
+      if (cachedDb.name) {
+        return Promise.resolve(cachedDb);
+      }
+    } catch (_) {
+      cachedDb = null;
+    }
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const request = idb.open(CORTEX_LOCKDOWN_DB_NAME, CORTEX_LOCKDOWN_DB_VERSION);
+
+      request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains(ENCRYPTED_ANSWERS_STORE_NAME)) {
+          const store = db.createObjectStore(ENCRYPTED_ANSWERS_STORE_NAME);
+          store.createIndex('sequenceNumber', 'sequenceNumber', { unique: false });
+          store.createIndex('updatedAt', 'updatedAt', { unique: false });
+          store.createIndex('studentExam', ['studentId', 'examId'], { unique: false });
+          store.createIndex('studentId', 'studentId', { unique: false });
+          store.createIndex('examId', 'examId', { unique: false });
+        }
+      };
+
+      request.onsuccess = (event: Event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        cachedDb = db;
+        db.onclose = () => { cachedDb = null; };
+        db.onerror = () => { cachedDb = null; };
+        resolve(db);
+      };
+
+      request.onerror = () => {
+        resolve(null);
+      };
+
+      request.onblocked = () => {
+        resolve(null);
+      };
+    } catch (err) {
+      resolve(null);
+    }
+  });
+}
+
+function putToStore(store: IDBObjectStore, value: any, key: string): IDBRequest {
+  if (store.keyPath) {
+    const keyProp = Array.isArray(store.keyPath) ? store.keyPath[0] : store.keyPath;
+    value[keyProp] = key;
+    return store.put(value);
+  }
+  return store.put(value, key);
+}
+
+function saveEnvelopeToIndexedDB(
+  db: IDBDatabase,
+  key: string,
+  envelope: EncryptedAnswerEnvelope
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(ENCRYPTED_ANSWERS_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(ENCRYPTED_ANSWERS_STORE_NAME);
+      putToStore(store, envelope, key);
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => reject(tx.error || e);
+      tx.onabort = () => reject(new Error('IndexedDB transaction aborted'));
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function getEnvelopeFromIndexedDB(
+  db: IDBDatabase,
+  studentId: string,
+  examId: string
+): Promise<EncryptedAnswerEnvelope | null> {
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(ENCRYPTED_ANSWERS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(ENCRYPTED_ANSWERS_STORE_NAME);
+      const key = `${studentId}:${examId}`;
+      const req = store.get(key);
+
+      req.onsuccess = () => {
+        if (!req.result) {
+          resolve(null);
+          return;
+        }
+        let env = req.result;
+        if (typeof env === 'string') {
+          try {
+            env = JSON.parse(env);
+          } catch (_) {
+            resolve(null);
+            return;
+          }
+        }
+        resolve(env as EncryptedAnswerEnvelope);
+      };
+
+      req.onerror = () => {
+        reject(req.error || new Error('IndexedDB get failed'));
+      };
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function deleteEnvelopeFromIndexedDB(
+  db: IDBDatabase,
+  studentId: string,
+  examId: string
+): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(ENCRYPTED_ANSWERS_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(ENCRYPTED_ANSWERS_STORE_NAME);
+      const key = `${studentId}:${examId}`;
+      store.delete(key);
+
+      // Clean up any other records indexed under this studentId and examId
+      if (store.indexNames && store.indexNames.contains('studentExam')) {
+        try {
+          const index = store.index('studentExam');
+          const range = IDBKeyRange.only([studentId, examId]);
+          const cursorReq = index.openCursor(range);
+          cursorReq.onsuccess = (e: any) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              cursor.delete();
+              cursor.continue();
+            }
+          };
+        } catch (_) {}
+      }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch (_) {
+      resolve();
+    }
+  });
+}
+
+function getAllEnvelopesFromIndexedDB(
+  db: IDBDatabase,
+  studentId: string,
+  examId: string
+): Promise<AnswerEnvelope[]> {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(ENCRYPTED_ANSWERS_STORE_NAME, 'readonly');
+      const store = tx.objectStore(ENCRYPTED_ANSWERS_STORE_NAME);
+      const items: AnswerEnvelope[] = [];
+      const key = `${studentId}:${examId}`;
+
+      const getReq = store.get(key);
+      getReq.onsuccess = () => {
+        if (getReq.result) {
+          let env = getReq.result;
+          if (typeof env === 'string') {
+            try { env = JSON.parse(env); } catch (_) { env = null; }
+          }
+          if (env && env.studentId === studentId && env.examId === examId) {
+            items.push(env as AnswerEnvelope);
+          }
+        }
+
+        // Query index if available to find all buffered sequence records
+        if (store.indexNames && store.indexNames.contains('studentExam')) {
+          try {
+            const index = store.index('studentExam');
+            const range = IDBKeyRange.only([studentId, examId]);
+            const cursorReq = index.openCursor(range);
+            cursorReq.onsuccess = (e: any) => {
+              const cursor = e.target.result;
+              if (cursor) {
+                let val = cursor.value;
+                if (typeof val === 'string') {
+                  try { val = JSON.parse(val); } catch (_) { val = null; }
+                }
+                if (val && !items.some((x) => x.sequenceNumber === val.sequenceNumber)) {
+                  items.push(val as AnswerEnvelope);
+                }
+                cursor.continue();
+              } else {
+                resolve(items);
+              }
+            };
+            cursorReq.onerror = () => resolve(items);
+            return;
+          } catch (_) {}
+        }
+
+        resolve(items);
+      };
+
+      getReq.onerror = () => resolve(items);
+    } catch (_) {
+      resolve([]);
+    }
+  });
+}
+
 function readExistingEnvelopeMetadata(studentId: string, examId: string, customDir?: string): { sequenceNumber: number } | null {
   if (typeof window !== 'undefined' && window.localStorage) {
     const primaryKey = `cortex_answers_${sanitizeKey(studentId)}_${sanitizeKey(examId)}`;
@@ -137,6 +388,32 @@ function readExistingEnvelopeMetadata(studentId: string, examId: string, customD
     }
   }
   return null;
+}
+
+async function readExistingEnvelopeMetadataAsync(
+  studentId: string,
+  examId: string,
+  customDir?: string
+): Promise<{ sequenceNumber: number } | null> {
+  // If customDir is specified, prioritize physical disk
+  if (customDir && typeof process !== 'undefined' && process.versions?.node) {
+    const fromDisk = readExistingEnvelopeMetadata(studentId, examId, customDir);
+    if (fromDisk) return fromDisk;
+  }
+
+  // 1. Try IndexedDB
+  try {
+    const db = await openDatabase();
+    if (db) {
+      const idbEnv = await getEnvelopeFromIndexedDB(db, studentId, examId);
+      if (idbEnv && typeof idbEnv.sequenceNumber === 'number') {
+        return { sequenceNumber: idbEnv.sequenceNumber };
+      }
+    }
+  } catch (_) {}
+
+  // 2. Fall back to synchronous metadata reader (localStorage & physical disk)
+  return readExistingEnvelopeMetadata(studentId, examId, customDir);
 }
 
 /**
@@ -190,7 +467,7 @@ async function computeSha256(text: string): Promise<string> {
 
 /**
  * Persists candidate answers to authenticated encrypted local storage.
- * Enforces atomic commit semantics to prevent corrupted partial writes.
+ * Enforces atomic commit semantics across IndexedDB, localStorage, and physical disk.
  */
 export async function saveEncryptedAnswers(options: SaveAnswerOptions): Promise<EncryptedAnswerEnvelope> {
   const { examId, studentId, sessionId, answers, customStorageDir } = options;
@@ -201,7 +478,7 @@ export async function saveEncryptedAnswers(options: SaveAnswerOptions): Promise<
   const sessionKey = getSessionKey(studentId, examId, sessionId);
   let currentSeq = activeSequenceMap.get(sessionKey);
   if (currentSeq === undefined) {
-    const existing = readExistingEnvelopeMetadata(studentId, examId, customStorageDir);
+    const existing = await readExistingEnvelopeMetadataAsync(studentId, examId, customStorageDir);
     currentSeq = existing ? existing.sequenceNumber : 0;
     activeSequenceMap.set(sessionKey, currentSeq);
   }
@@ -243,6 +520,8 @@ export async function saveEncryptedAnswers(options: SaveAnswerOptions): Promise<
   const tagBytes = encArray.slice(encArray.length - 16);
   const cipherBytes = encArray.slice(0, encArray.length - 16);
 
+  const storageKey = `${studentId}:${examId}`;
+
   const envelope: EncryptedAnswerEnvelope = {
     version: 2,
     algorithm: 'AES-256-GCM',
@@ -256,12 +535,26 @@ export async function saveEncryptedAnswers(options: SaveAnswerOptions): Promise<
     ciphertextHex: toHex(cipherBytes),
     tagHex: toHex(tagBytes),
     checksum,
+    key: storageKey,
+    storageKey,
   };
 
   const envelopeJson = JSON.stringify(envelope);
 
   // ATOMIC PERSISTENCE LAYER:
-  // 1. Browser / WebView2 localStorage with draft staging key
+  // 1. IndexedDB Local Buffering Engine (Primary browser offline store)
+  let idbSuccess = false;
+  try {
+    const db = await openDatabase();
+    if (db) {
+      await saveEnvelopeToIndexedDB(db, storageKey, envelope);
+      idbSuccess = true;
+    }
+  } catch (idbErr: any) {
+    console.warn('[AnswerStore] IndexedDB persistence warning (falling back to localStorage):', idbErr?.message || idbErr);
+  }
+
+  // 2. Browser / WebView2 localStorage with draft staging key (fallback & dual redundancy)
   if (typeof window !== 'undefined' && window.localStorage) {
     const primaryKey = `cortex_answers_${sanitizeKey(studentId)}_${sanitizeKey(examId)}`;
     const stagingKey = `${primaryKey}_staging`;
@@ -271,11 +564,13 @@ export async function saveEncryptedAnswers(options: SaveAnswerOptions): Promise<
       window.localStorage.removeItem(stagingKey);
     } catch (err: any) {
       console.error('[AnswerStore] Browser local storage write error:', err);
-      throw new Error(`Browser local storage write failed: ${err.message}`);
+      if (!idbSuccess && !(typeof process !== 'undefined' && process.versions?.node)) {
+        throw new Error(`Browser local storage write failed: ${err.message}`);
+      }
     }
   }
 
-  // 2. Physical Disk Write (Node.js / desktop / test environment)
+  // 3. Physical Disk Write (Node.js / desktop / test environment)
   if (typeof process !== 'undefined' && process.versions?.node) {
     const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
     const nonce = Math.random().toString(36).substring(2, 8);
@@ -317,6 +612,7 @@ export async function saveEncryptedAnswers(options: SaveAnswerOptions): Promise<
 
 /**
  * Loads, verifies, and decrypts candidate answers from local encrypted persistence.
+ * Checks physical disk (if customStorageDir specified), IndexedDB, localStorage, and default disk.
  * Enforces cryptographic authenticity, checksum validity, and session binding.
  */
 export async function loadEncryptedAnswers(options: LoadAnswerOptions): Promise<AnswerStoreRecord | null> {
@@ -325,10 +621,39 @@ export async function loadEncryptedAnswers(options: LoadAnswerOptions): Promise<
     throw new Error('examId, studentId, and sessionId are strictly required for answer recovery');
   }
 
+  let envelope: EncryptedAnswerEnvelope | null = null;
   let envelopeJson: string | null = null;
 
-  // 1. Check Browser / WebView2 localStorage
-  if (typeof window !== 'undefined' && window.localStorage) {
+  // If customStorageDir is explicitly provided (e.g. in test suites), check physical disk first
+  if (customStorageDir && typeof process !== 'undefined' && process.versions?.node) {
+    const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
+    if (fs.existsSync(diskPath)) {
+      envelopeJson = fs.readFileSync(diskPath, 'utf8');
+      try {
+        envelope = JSON.parse(envelopeJson);
+      } catch (err) {
+        throw new Error('Corrupted storage envelope: Invalid JSON');
+      }
+    }
+  }
+
+  // 1. Check IndexedDB Local Buffering Engine (if not already loaded from customStorageDir)
+  if (!envelope) {
+    try {
+      const db = await openDatabase();
+      if (db) {
+        const idbEnv = await getEnvelopeFromIndexedDB(db, studentId, examId);
+        if (idbEnv) {
+          envelope = idbEnv;
+        }
+      }
+    } catch (idbErr) {
+      console.warn('[AnswerStore] IndexedDB load warning (falling back):', idbErr);
+    }
+  }
+
+  // 2. Check Browser / WebView2 localStorage (fallback or primary when IndexedDB unavailable)
+  if (!envelope && typeof window !== 'undefined' && window.localStorage) {
     const primaryKey = `cortex_answers_${sanitizeKey(studentId)}_${sanitizeKey(examId)}`;
     envelopeJson = window.localStorage.getItem(primaryKey);
     if (!envelopeJson) {
@@ -336,25 +661,30 @@ export async function loadEncryptedAnswers(options: LoadAnswerOptions): Promise<
       const stagingKey = `${primaryKey}_staging`;
       envelopeJson = window.localStorage.getItem(stagingKey);
     }
-  }
-
-  // 2. Fall back to Physical Disk File (Node.js / desktop / test environment)
-  if (!envelopeJson && typeof process !== 'undefined' && process.versions?.node) {
-    const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
-    if (fs.existsSync(diskPath)) {
-      envelopeJson = fs.readFileSync(diskPath, 'utf8');
+    if (envelopeJson) {
+      try {
+        envelope = JSON.parse(envelopeJson);
+      } catch (err) {
+        throw new Error('Corrupted storage envelope: Invalid JSON');
+      }
     }
   }
 
-  if (!envelopeJson) {
-    return null;
+  // 3. Fall back to Physical Disk File (Node.js / desktop / test environment without customDir)
+  if (!envelope && typeof process !== 'undefined' && process.versions?.node) {
+    const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
+    if (fs.existsSync(diskPath)) {
+      envelopeJson = fs.readFileSync(diskPath, 'utf8');
+      try {
+        envelope = JSON.parse(envelopeJson);
+      } catch (err) {
+        throw new Error('Corrupted storage envelope: Invalid JSON');
+      }
+    }
   }
 
-  let envelope: EncryptedAnswerEnvelope;
-  try {
-    envelope = JSON.parse(envelopeJson);
-  } catch (err) {
-    throw new Error('Corrupted storage envelope: Invalid JSON');
+  if (!envelope) {
+    return null;
   }
 
   // 1. Validate Session Binding
@@ -446,7 +776,82 @@ export async function loadEncryptedAnswers(options: LoadAnswerOptions): Promise<
 }
 
 /**
+ * Lists buffered offline answers across IndexedDB, localStorage, and physical disk.
+ * Used for offline recovery and bulk synchronization upon network reconnection.
+ */
+export async function listBufferedOfflineAnswers(
+  studentId: string,
+  examId: string,
+  customStorageDir?: string
+): Promise<AnswerEnvelope[]> {
+  const results: AnswerEnvelope[] = [];
+  const seenSequences = new Set<number>();
+
+  // 1. Check IndexedDB Local Buffering Engine
+  try {
+    const db = await openDatabase();
+    if (db) {
+      const idbEnvelopes = await getAllEnvelopesFromIndexedDB(db, studentId, examId);
+      for (const env of idbEnvelopes) {
+        if (!seenSequences.has(env.sequenceNumber)) {
+          seenSequences.add(env.sequenceNumber);
+          results.push(env);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[AnswerStore] Error listing offline answers from IndexedDB:', err);
+  }
+
+  // 2. Check Browser localStorage fallback if empty or offline
+  if (results.length === 0 && typeof window !== 'undefined' && window.localStorage) {
+    const primaryKey = `cortex_answers_${sanitizeKey(studentId)}_${sanitizeKey(examId)}`;
+    const raw = window.localStorage.getItem(primaryKey);
+    if (raw) {
+      try {
+        const env = JSON.parse(raw) as AnswerEnvelope;
+        if (env.studentId === studentId && env.examId === examId && !seenSequences.has(env.sequenceNumber)) {
+          seenSequences.add(env.sequenceNumber);
+          results.push(env);
+        }
+      } catch (_) {}
+    }
+    const stagingKey = `${primaryKey}_staging`;
+    const stagingRaw = window.localStorage.getItem(stagingKey);
+    if (stagingRaw) {
+      try {
+        const stagingEnv = JSON.parse(stagingRaw) as AnswerEnvelope;
+        if (stagingEnv.studentId === studentId && stagingEnv.examId === examId && !seenSequences.has(stagingEnv.sequenceNumber)) {
+          seenSequences.add(stagingEnv.sequenceNumber);
+          results.push(stagingEnv);
+        }
+      } catch (_) {}
+    }
+  }
+
+  // 3. Check Physical Disk fallback (Node.js / desktop / test harnesses)
+  if (results.length === 0 && typeof process !== 'undefined' && process.versions?.node) {
+    const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
+    if (fs.existsSync(diskPath)) {
+      try {
+        const raw = fs.readFileSync(diskPath, 'utf8');
+        const env = JSON.parse(raw) as AnswerEnvelope;
+        if (env.studentId === studentId && env.examId === examId && !seenSequences.has(env.sequenceNumber)) {
+          seenSequences.add(env.sequenceNumber);
+          results.push(env);
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Sort by sequence number ascending
+  results.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+  return results;
+}
+
+/**
  * Securely clears local encrypted answer cache after verified server-side submission.
+ * Purges IndexedDB records, localStorage keys, and securely shreds physical disk file.
  */
 export async function clearEncryptedAnswers(options: ClearAnswerOptions): Promise<boolean> {
   const { examId, studentId, sessionId, customStorageDir } = options;
@@ -455,7 +860,18 @@ export async function clearEncryptedAnswers(options: ClearAnswerOptions): Promis
 
   let cleared = false;
 
-  // Clear browser storage
+  // 1. Clear IndexedDB storage
+  try {
+    const db = await openDatabase();
+    if (db) {
+      await deleteEnvelopeFromIndexedDB(db, studentId, examId);
+      cleared = true;
+    }
+  } catch (idbErr) {
+    console.warn('[AnswerStore] IndexedDB clear warning:', idbErr);
+  }
+
+  // 2. Clear browser localStorage
   if (typeof window !== 'undefined' && window.localStorage) {
     const primaryKey = `cortex_answers_${sanitizeKey(studentId)}_${sanitizeKey(examId)}`;
     const stagingKey = `${primaryKey}_staging`;
@@ -464,7 +880,7 @@ export async function clearEncryptedAnswers(options: ClearAnswerOptions): Promis
     cleared = true;
   }
 
-  // Clear physical disk file with cryptographic overwrite (secure shredding)
+  // 3. Clear physical disk file with cryptographic overwrite (secure shredding)
   if (typeof process !== 'undefined' && process.versions?.node) {
     const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
     if (fs.existsSync(diskPath)) {
@@ -483,8 +899,9 @@ export async function clearEncryptedAnswers(options: ClearAnswerOptions): Promis
 }
 
 /**
- * Simulates an application crash by terminating memory state, leaving on-disk storage intact.
+ * Simulates an application crash by terminating memory state and closing cached db connections.
  */
 export function simulateMemoryCrash(): void {
   activeSequenceMap.clear();
+  closeDatabase();
 }

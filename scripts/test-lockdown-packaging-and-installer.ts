@@ -92,7 +92,9 @@ const tempExtractDir = path.join(process.env.TEMP || 'C:\\Windows\\Temp', `corte
 fs.mkdirSync(tempExtractDir, { recursive: true });
 
 try {
-  execSync(`powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempExtractDir}' -Force"`);
+  const safeZip = zipPath.replace(/'/g, "''");
+  const safeDest = tempExtractDir.replace(/'/g, "''");
+  execSync(`powershell -NoProfile -Command "Expand-Archive -Path '${safeZip}' -DestinationPath '${safeDest}' -Force"`);
   const extractedExe = path.join(tempExtractDir, 'CortexLockdown.exe');
   const extractedInstallBat = path.join(tempExtractDir, 'install.bat');
   const extractedUninstallBat = path.join(tempExtractDir, 'uninstall.bat');

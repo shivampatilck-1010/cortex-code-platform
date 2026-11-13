@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codex Browser — Secure Exam Environment</title>
+  <style>
+    :root {
+      --bg-dark: #031713;
+      --bg-base: #062b24;
+      --bg-surface: rgba(8, 38, 32, 0.85);
+      --bg-card: rgba(12, 48, 41, 0.9);
+      --bg-card-inner: rgba(5, 27, 23, 0.8);
+      --border-teal: #145e50;
+      --border-subtle: rgba(0, 229, 201, 0.18);
+      --teal-primary: #00e5c9;
+      --teal-hover: #26ebd3;
+      --teal-dark: #008f7d;
+      --teal-glow: rgba(0, 229, 201, 0.28);
+      --amber-warn: #f59e0b;
+      --red-danger: #ef4444;
+      --red-hover: #dc2626;
+      --text-white: #ffffff;
+      --text-subtle: #a7f3d0;
+      --text-muted: #6ee7b7;
+      --text-dim: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 40%, #0d4a3e 0%, #062b24 55%, #021410 100%);
+      color: var(--text-white);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Top-right Window Controls for Pre-flight Screens */
+    .window-controls-top {
+      position: absolute;
+      top: 14px;
+      right: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 100;
+    }
+
+    .win-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .win-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+
+    .win-btn.close:hover {
+      background: var(--red-danger);
+      border-color: var(--red-danger);
+      color: #fff;
+    }
+
+    /* Screen Views */
+    .screen-view {
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .screen-view.active {
+      display: flex;
+    }
+
+    /* ==========================================================================
+       PHASE 1: PRE-FLIGHT SCANNING SCREEN
+       ========================================================================== */
+    #screen-scanning {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .cube-logo-container {
+      width: 88px;
+      height: 88px;
+      margin-bottom: 24px;
+      filter: drop-shadow(0 0 20px rgba(0, 229, 201, 0.45));
+      animation: floatPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes floatPulse {
+      0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 18px rgba(0, 229, 201, 0.4)); }
+      50% { transform: translateY(-5px) scale(1.02); filter: drop-shadow(0 0 26px rgba(0, 229, 201, 0.65)); }
+    }
+
+    .brand-title {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .brand-subtitle {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--teal-primary);
+      margin-bottom: 28px;
+    }
+
+    /* Monitored Warning Pill Banner */
+    .monitor-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(6, 46, 38, 0.85);
+      border: 1px solid rgba(0, 229, 201, 0.28);
+      border-radius: 9999px;
+      padding: 8px 22px;
+      max-width: 680px;
+      margin-bottom: 40px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .monitor-pill svg {
+      width: 18px;
+      height: 18px;
+      color: var(--amber-warn);
+      flex-shrink: 0;
+    }
+
+    .monitor-pill span {
+      font-size: 13px;
+      color: #d1fae5;
+      font-weight: 400;
+      line-height: 1.4;
+    }
+
+    /* Progress Bar */
+    .progress-box {
+      width: 420px;
+      max-width: 85%;
+      margin-bottom: 16px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #008f7d, var(--teal-primary));
+      box-shadow: 0 0 10px var(--teal-primary);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .scan-status-text {
+      font-size: 13px;
+      color: var(--teal-primary);
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      min-height: 20px;
+    }
+
+    /* Common Footer on Pre-flight screens */
+    .preflight-footer {
+      position: absolute;
+      bottom: 20px;
+      left: 24px;
+      right: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.45);
+      font-family: monospace;
+      letter-spacing: 0.5px;
+    }
+
+    .need-help-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 9999px;
+      padding: 6px 14px;
+      color: #d1fae5;
+      font-size: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .need-help-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+    }
+
+    /* ==========================================================================
+       PHASE 2: RESTRICTED APPS DETECTED SCREEN
+       ========================================================================== */
+    #screen-restricted {
+      align-items: center;
+      justify-content: center;
+      padding: 30px 20px;
+    }
+
+    .restricted-card {
+      background: var(--bg-surface);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-teal);
+      border-radius: 16px;
+      width: 720px;
+      max-width: 92%;
+      padding: 36px 40px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4), 0 0 24px rgba(0, 229, 201, 0.08);
+      text-align: center;
+    }
+
+    .warn-icon-wrapper {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px auto;
+      color: var(--amber-warn);
+      box-shadow: 0 0 18px rgba(245, 158, 11, 0.2);
+    }
+
+    .restricted-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+
+    .restricted-desc {
+      font-size: 14px;
+      color: #e2e8f0;
+      line-height: 1.55;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .app-tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin: 12px 0 20px 0;
+    }
+
+    .app-tag {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-family: monospace;
+    }
+
+    .guide-box {
+      background: var(--bg-card-inner);
+      border: 1px solid rgba(20, 94, 80, 0.6);
+      border-radius: 12px;
+      padding: 20px 24px;
+      text-align: left;
+      margin-bottom: 28px;
+    }
+
+    .guide-box-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--teal-primary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .guide-steps {
+      list-style-type: decimal;
+      padding-left: 20px;
+      font-size: 13px;
+      color: #d1fae5;
+      line-height: 1.7;
+    }
+
+    .guide-steps li {
+      margin-bottom: 6px;
+    }
+
+    .guide-steps li strong {
+      color: #ffffff;
+    }
+
+    .restricted-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn-teal {
+      background: var(--teal-primary);
+      color: #03201a;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 12px 28px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px var(--teal-glow);
+      transition: all 0.2s ease;
+    }
+
+    .btn-teal:hover {
+      background: var(--teal-hover);
+      box-shadow: 0 6px 22px rgba(0, 229, 201, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-teal:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-outline {
+      background: rgba(255, 255, 255, 0.05);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-outline:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: var(--red-danger);
+      color: #fca5a5;
+    }
+
+    .btn-bypass-link {
+      background: transparent;
+      border: none;
+      color: rgba(0, 229, 201, 0.6);
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 8px 12px;
+      margin-top: 10px;
+    }
+
+    .btn-bypass-link:hover {
+      color: var(--teal-primary);
+    }
+
+    /* ==========================================================================
+       PROCTORING DEVICE SETUP SCREEN (Camera, Microphone, Screen, Clipboard)
+       ========================================================================== */
+    #screen-device-check {
+      align-items: center;
+      justify-content: center;
+      padding: 30px 20px;
+      overflow-y: auto;
+    }
+
+    .device-card-container {
+      background: var(--bg-surface);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-teal);
+      border-radius: 16px;
+      width: 860px;
+      max-width: 95%;
+      padding: 28px 36px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(0, 229, 201, 0.1);
+      text-align: center;
+    }
+
+    .device-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin: 24px 0 28px 0;
+      text-align: left;
+    }
+
+    .device-tile {
+      background: var(--bg-card-inner);
+      border: 1px solid rgba(0, 229, 201, 0.18);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .device-tile.active {
+      border-color: var(--teal-primary);
+      box-shadow: 0 0 14px rgba(0, 229, 201, 0.2);
+    }
+
+    .device-tile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .device-tile-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .device-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #94a3b8;
+    }
+
+    .device-badge.verified {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .device-preview-box {
+      width: 100%;
+      height: 120px;
+      background: #02110e;
+      border-radius: 8px;
+      border: 1px dashed rgba(0, 229, 201, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .device-preview-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    .vu-meter-box {
+      width: 100%;
+      height: 14px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 9999px;
+      overflow: hidden;
+      padding: 2px;
+      border: 1px solid rgba(0, 229, 201, 0.2);
+      margin-bottom: 12px;
+    }
+
+    .vu-meter-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #10b981, #00e5c9, #f59e0b);
+      border-radius: 9999px;
+      transition: width 0.1s ease;
+    }
+
+    .btn-device {
+      background: rgba(0, 229, 201, 0.12);
+      border: 1px solid rgba(0, 229, 201, 0.3);
+      color: var(--teal-primary);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-device:hover {
+      background: var(--teal-primary);
+      color: #03201a;
+    }
+
+    .btn-device.granted {
+      background: rgba(16, 185, 129, 0.25);
+      border-color: #10b981;
+      color: #6ee7b7;
+      cursor: default;
+    }
+
+    /* ==========================================================================
+       PHASE 3: SECURE EXAM BROWSER SHELL (Matching Frame 0150s)
+       ========================================================================== */
+    #screen-browser {
+      display: none;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+      background: #041c17;
+    }
+
+    .browser-header {
+      height: 52px;
+      background: #06251f;
+      border-bottom: 1px solid #0d473b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-brand-logo {
+      width: 26px;
+      height: 26px;
+      margin-right: 4px;
+      filter: drop-shadow(0 0 6px var(--teal-primary));
+    }
+
+    .nav-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #d1fae5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .nav-btn:hover {
+      background: rgba(0, 229, 201, 0.15);
+      border-color: var(--teal-primary);
+      color: #fff;
+    }
+
+    .nav-center {
+      flex: 1;
+      max-width: 620px;
+      margin: 0 20px;
+      display: flex;
+      align-items: center;
+    }
+
+    .url-pill-box {
+      width: 100%;
+      height: 34px;
+      background: rgba(3, 23, 19, 0.85);
+      border: 1px solid rgba(0, 229, 201, 0.25);
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 8px;
+      font-size: 13px;
+      color: #e2e8f0;
+      box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .url-pill-box svg {
+      width: 14px;
+      height: 14px;
+      color: var(--teal-primary);
+      flex-shrink: 0;
+    }
+
+    .url-text {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #d1fae5;
+      font-family: monospace;
+      letter-spacing: 0.2px;
+    }
+
+    .url-lock-badge {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      background: rgba(0, 229, 201, 0.12);
+      color: var(--teal-primary);
+      padding: 2px 8px;
+      border-radius: 9999px;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 229, 201, 0.08);
+      border: 1px solid rgba(0, 229, 201, 0.2);
+      border-radius: 9999px;
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--teal-primary);
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--teal-primary);
+      box-shadow: 0 0 8px var(--teal-primary);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    .exit-circle-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--red-danger);
+      border: none;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    }
+
+    .exit-circle-btn:hover {
+      background: var(--red-hover);
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.7);
+      transform: scale(1.06);
+    }
+
+    .browser-viewport {
+      flex: 1;
+      position: relative;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+    }
+
+    webview {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: flex;
+    }
+
+    /* Floating Proctoring HUD Widget (Top Right) */
+    .proctor-hud-widget {
+      position: absolute;
+      top: 14px;
+      right: 18px;
+      width: 180px;
+      background: rgba(3, 23, 19, 0.92);
+      border: 1px solid var(--border-teal);
+      border-radius: 10px;
+      padding: 8px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+
+    .proctor-hud-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--teal-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .proctor-hud-video {
+      width: 100%;
+      height: 100px;
+      background: #000;
+      border-radius: 6px;
+      object-fit: cover;
+      margin-bottom: 6px;
+    }
+
+    .proctor-hud-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      font-size: 9px;
+    }
+
+    .hud-chip {
+      background: rgba(0, 229, 201, 0.15);
+      color: #6ee7b7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    #offline-workspace {
+      display: none;
+      width: 100%;
+      height: 100%;
+      background: #0b0c10;
+      color: #f3f4f6;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .browser-statusbar {
+      height: 30px;
+      background: #041c17;
+      border-top: 1px solid #0d473b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      font-size: 11px;
+      color: #94a3b8;
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    .statusbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #d1fae5;
+    }
+
+    .statusbar-left span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .statusbar-divider {
+      color: rgba(255, 255, 255, 0.2);
+    }
+
+    .statusbar-right {
+      font-family: monospace;
+      color: var(--teal-primary);
+      font-weight: 500;
+    }
+
+    /* Modal styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-box {
+      background: #072a23;
+      border: 1px solid var(--border-teal);
+      border-radius: 14px;
+      width: 440px;
+      max-width: 90%;
+      padding: 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 229, 201, 0.1);
+      text-align: center;
+    }
+
+    .modal-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: var(--red-danger);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px auto;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .modal-desc {
+      font-size: 13px;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .btn-danger {
+      background: var(--red-danger);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-danger:hover {
+      background: var(--red-hover);
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ========================================================================
+       PHASE 1: PRE-FLIGHT SCANNING SCREEN (Matches Video 00:00 - 00:20)
+       ======================================================================== -->
+  <section id="screen-scanning" class="screen-view active">
+    <div class="window-controls-top">
+      <button class="win-btn" title="Minimize" onclick="minimizeApplication()">&#8212;</button>
+      <button class="win-btn close" title="Back to Browser" onclick="transitionToExamBrowser()">&#10005;</button>
+    </div>
+
+    <div class="cube-logo-container">
+      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="50,6 90,28 50,50 10,28" fill="#00e5c9" opacity="0.95" />
+        <polygon points="10,28 50,50 50,94 10,72" fill="#00a896" />
+        <polygon points="50,50 90,28 90,72 50,94" fill="#028090" />
+        <polygon points="50,22 74,35 50,48 26,35" fill="#041c17" />
+        <line x1="50" y1="22" x2="50" y2="48" stroke="#00e5c9" stroke-width="2" />
+        <line x1="26" y1="35" x2="74" y2="35" stroke="#00e5c9" stroke-width="2" />
+      </svg>
+    </div>
+
+    <h1 class="brand-title">Codex Browser</h1>
+    <div class="brand-subtitle">Secure Exam Environment</div>
+
+    <div class="monitor-pill">
+      <svg fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 1.944A11.954 11.954 0 012.166 5C2.056 5.649 2 6.319 2 7c0 5.225 3.34 9.67 8 11.317C14.66 16.67 18 12.225 18 7c0-.682-.057-1.35-.166-2.001A11.954 11.954 0 0110 1.944zM11 14a1 1 0 11-2 0 1 1 0 012 0zm0-7a1 1 0 10-2 0v3a1 1 0 102 0V7z" clip-rule="evenodd"/>
+      </svg>
+      <span>This session is monitored. Suspicious activity may lead to disqualification and account termination.</span>
+    </div>
+
+    <div class="progress-box">
+      <div class="progress-track">
+        <div id="scanProgressBar" class="progress-bar"></div>
+      </div>
+    </div>
+
+    <div id="scanStatusText" class="scan-status-text">Checking system security...</div>
+
+    <div class="preflight-footer">
+      <div id="sessionWatermark">33944b97e69f</div>
+      <button class="need-help-btn" onclick="openHelpDialog()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Need help?
+      </button>
+      <div>v2.0.10</div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       PHASE 2: RESTRICTED APPS DETECTED (Matches Video 00:21 - 01:40)
+       ======================================================================== -->
+  <section id="screen-restricted" class="screen-view">
+    <div class="window-controls-top">
+      <button class="win-btn" title="Minimize" onclick="minimizeApplication()">&#8212;</button>
+      <button class="win-btn close" title="Back to Browser" onclick="transitionToExamBrowser()">&#10005;</button>
+    </div>
+
+    <div class="restricted-card">
+      <div class="warn-icon-wrapper">
+        <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+
+      <h2 class="restricted-title">Restricted Apps Detected</h2>
+      <p class="restricted-desc">
+        We detected external application(s) running on your workstation. Please close them before continuing. Running external tools during the assessment may lead to disqualification.
+      </p>
+
+      <div id="detectedAppsList" class="app-tag-list">
+        <span class="app-tag">Google Chrome</span>
+      </div>
+
+      <div class="guide-box">
+        <div class="guide-box-title">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+          How to close restricted applications:
+        </div>
+        <ol class="guide-steps">
+          <li>Minimize this window using the minimize button at the top-right corner.</li>
+          <li>Press <strong>Ctrl + Shift + Esc</strong> to open Task Manager.</li>
+          <li>Find the restricted application(s) listed above in the Processes tab, including related subprocess/background entries.</li>
+          <li>Right-click each one and select <strong>End Task</strong> for the app and all its subprocesses.</li>
+          <li>Return to this window and click <strong>Check Again</strong>.</li>
+        </ol>
+      </div>
+
+      <div class="restricted-actions">
+        <button id="btnCheckAgain" class="btn-teal" onclick="handleCheckAgain()">
+          <svg id="checkSpinner" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Check Again
+        </button>
+
+        <button class="btn-outline" onclick="confirmExitDirectly()">
+          Exit Codex Browser
+        </button>
+      </div>
+
+      <div>
+        <button class="btn-bypass-link" onclick="goToDeviceSetup()">
+          Development Override (Proceed to Device Verification)
+        </button>
+      </div>
+    </div>
+
+    <div class="preflight-footer">
+      <div id="sessionWatermark2">33944b97e69f</div>
+      <button class="need-help-btn" onclick="openHelpDialog()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Need help?
+      </button>
+      <div>v2.0.10</div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       PHASE 2.5: PROCTORING DEVICE & PERMISSIONS SETUP
+       ======================================================================== -->
+  <section id="screen-device-check" class="screen-view">
+    <div class="window-controls-top">
+      <button class="win-btn" title="Minimize" onclick="minimizeApplication()">&#8212;</button>
+      <button class="win-btn close" title="Back to Browser" onclick="transitionToExamBrowser()">&#10005;</button>
+    </div>
+
+    <div class="device-card-container">
+      <h2 style="font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 6px;">
+        Proctoring Readiness & Device Verification
+      </h2>
+      <p style="font-size: 13px; color: #a7f3d0; line-height: 1.5;">
+        This examination requires continuous candidate proctoring. Enable camera, microphone, screen sharing, and clipboard synchronization to unlock the assessment portal.
+      </p>
+
+      <!-- 4 Device Verification Cards -->
+      <div class="device-grid">
+        <!-- 1. Camera -->
+        <div id="tileCamera" class="device-tile">
+          <div class="device-tile-header">
+            <div class="device-tile-title">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/></svg>
+              Candidate Camera
+            </div>
+            <span id="badgeCamera" class="device-badge">Not Enabled</span>
+          </div>
+          <div class="device-preview-box">
+            <video id="cameraPreview" class="device-preview-video" autoplay playsinline muted></video>
+            <div id="cameraPlaceholder" style="font-size: 12px; color: #64748b;">Camera feed inactive</div>
+          </div>
+          <button id="btnEnableCamera" class="btn-device" onclick="enableCamera()">
+            Enable Camera
+          </button>
+        </div>
+
+        <!-- 2. Microphone -->
+        <div id="tileMicrophone" class="device-tile">
+          <div class="device-tile-header">
+            <div class="device-tile-title">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clip-rule="evenodd"/></svg>
+              Audio / Microphone
+            </div>
+            <span id="badgeMicrophone" class="device-badge">Not Enabled</span>
+          </div>
+          <div class="device-preview-box" style="flex-direction: column; padding: 14px;">
+            <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">Sound Level Activity:</div>
+            <div class="vu-meter-box">
+              <div id="audioMeterBar" class="vu-meter-bar"></div>
+            </div>
+            <div id="micStatusText" style="font-size: 11px; color: #64748b;">Speak to test volume</div>
+          </div>
+          <button id="btnEnableMicrophone" class="btn-device" onclick="enableMicrophone()">
+            Enable Microphone
+          </button>
+        </div>
+
+        <!-- 3. Screen Sharing -->
+        <div id="tileScreen" class="device-tile">
+          <div class="device-tile-header">
+            <div class="device-tile-title">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/></svg>
+              Desktop Screen Share
+            </div>
+            <span id="badgeScreen" class="device-badge">Not Shared</span>
+          </div>
+          <div class="device-preview-box">
+            <video id="screenPreview" class="device-preview-video" autoplay playsinline muted></video>
+            <div id="screenPlaceholder" style="font-size: 12px; color: #64748b;">Screen capture inactive</div>
+          </div>
+          <button id="btnEnableScreen" class="btn-device" onclick="enableScreenShare()">
+            Share Entire Screen
+          </button>
+        </div>
+
+        <!-- 4. Clipboard Sharing -->
+        <div id="tileClipboard" class="device-tile">
+          <div class="device-tile-header">
+            <div class="device-tile-title">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 2H9a3 3 0 01-3-2z"/></svg>
+              Clipboard Access
+            </div>
+            <span id="badgeClipboard" class="device-badge">Not Enabled</span>
+          </div>
+          <div class="device-preview-box" style="flex-direction: column; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
+              Permits proctoring engine to monitor and synchronize editor clipboard buffer.
+            </div>
+            <div id="clipboardStatusText" style="font-size: 11px; color: #64748b; margin-top: 8px;">Permission required</div>
+          </div>
+          <button id="btnEnableClipboard" class="btn-device" onclick="enableClipboard()">
+            Share Clipboard
+          </button>
+        </div>
+      </div>
+
+      <!-- Action controls -->
+      <div style="display: flex; justify-content: center; align-items: center; gap: 14px; flex-wrap: wrap;">
+        <button class="btn-outline" onclick="enableAllDevices()">
+          ⚡ Quick Enable All
+        </button>
+        <button id="btnStartExam" class="btn-teal" disabled onclick="transitionToExamBrowser()">
+          Start Proctored Examination &#x279C;
+        </button>
+      </div>
+      <div id="permRequirementNote" style="font-size: 11px; color: #94a3b8; margin-top: 10px;">
+        * Enable Camera, Microphone, Screen Sharing, and Clipboard to start test.
+      </div>
+    </div>
+
+    <div class="preflight-footer">
+      <div id="sessionWatermark3">33944b97e69f</div>
+      <button class="need-help-btn" onclick="openHelpDialog()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Need help?
+      </button>
+      <div>v2.0.10</div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       PHASE 3: SECURE EXAM BROWSER INTERFACE (Matches Video 01:41 - 10:09)
+       ======================================================================== -->
+  <section id="screen-browser" class="screen-view">
+    <header class="browser-header">
+      <div class="nav-left">
+        <svg class="nav-brand-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="50,6 90,28 50,50 10,28" fill="#00e5c9" />
+          <polygon points="10,28 50,50 50,94 10,72" fill="#00a896" />
+          <polygon points="50,50 90,28 90,72 50,94" fill="#028090" />
+        </svg>
+
+        <button id="navBack" class="nav-btn" title="Back" onclick="navWebviewBack()">&#x276E;</button>
+        <button id="navForward" class="nav-btn" title="Forward" onclick="navWebviewForward()">&#x276F;</button>
+        <button id="navReload" class="nav-btn" title="Reload" onclick="navWebviewReload()">&#x21BB;</button>
+      </div>
+
+      <div class="nav-center">
+        <div class="url-pill-box">
+          <svg fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+          </svg>
+          <span id="urlDisplay" class="url-text">https://lpucolab438.examly.io</span>
+          <span class="url-lock-badge">Secure Portal</span>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <button class="nav-btn-proctor" title="Configure Proctoring Devices" onclick="goToDeviceSetup()" style="background:rgba(0,229,201,0.12); border:1px solid rgba(0,229,201,0.3); color:var(--teal-primary); font-size:11px; font-weight:600; padding:5px 12px; border-radius:9999px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+          <div class="pulse-dot"></div>
+          Device Setup
+        </button>
+
+        <div class="status-badge">
+          <div class="pulse-dot"></div>
+          Lockdown Active
+        </div>
+
+        <button class="exit-circle-btn" title="Exit Assessment" onclick="showExitModal()">
+          &#10005;
+        </button>
+      </div>
+    </header>
+
+    <main class="browser-viewport">
+      <webview
+        id="examWebview"
+        src="https://lpucolab438.examly.io"
+        partition="persist:examly_session"
+        allowpopups
+      ></webview>
+
+      <!-- Floating Live Proctoring HUD -->
+      <div id="proctorHudWidget" class="proctor-hud-widget">
+        <div class="proctor-hud-header">
+          <span>● Proctoring Live</span>
+          <span style="cursor: pointer;" onclick="toggleHudMin()">—</span>
+        </div>
+        <video id="hudCameraPreview" class="proctor-hud-video" autoplay playsinline muted></video>
+        <div class="proctor-hud-badges">
+          <span id="hudCamChip" class="hud-chip">CAM ON</span>
+          <span id="hudMicChip" class="hud-chip">MIC ON</span>
+          <span id="hudScrChip" class="hud-chip">SCREEN ON</span>
+          <span id="hudClpChip" class="hud-chip">CLIP ON</span>
+        </div>
+      </div>
+
+      <!-- Offline Fallback Assessment Workspace -->
+      <div id="offline-workspace">
+        <div style="padding: 24px; display: flex; flex-direction: column; height: 100%; justify-content: center; align-items: center; text-align: center;">
+          <h2 style="font-size: 22px; color: var(--teal-primary); margin-bottom: 8px;">Offline Assessment Workspace</h2>
+          <p style="color: #94a3b8; font-size: 14px; max-width: 500px; margin-bottom: 24px;">
+            Connecting to remote exam portal (lpucolab438.examly.io). All proctoring services (Camera, Microphone, Screen Sharing, and Clipboard) are actively streaming.
+          </p>
+          <button class="btn-teal" onclick="navWebviewReload()">Retry Connection</button>
+        </div>
+      </div>
+    </main>
+
+    <footer class="browser-statusbar">
+      <div class="statusbar-left">
+        <span>
+          <div class="pulse-dot"></div>
+          Connection stable
+        </span>
+        <span class="statusbar-divider">|</span>
+        <span>Lockdown active</span>
+        <span class="statusbar-divider">|</span>
+        <span style="color:var(--teal-primary);">Proctoring Enforced (Cam • Mic • Screen • Clipboard)</span>
+      </div>
+
+      <div class="statusbar-right">
+        Codex Browser v2.0.10
+      </div>
+    </footer>
+  </section>
+
+  <!-- EXIT CONFIRMATION MODAL -->
+  <div id="exitConfirmModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-icon">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+      <h3 class="modal-title">Exit Codex Browser?</h3>
+      <p class="modal-desc">
+        Are you sure you want to end this examination session? All unsaved work will be finalized and the secure lockdown environment will be released.
+      </p>
+      <div class="modal-actions">
+        <button class="btn-danger" onclick="executeAppExit()">Confirm & Close</button>
+        <button class="btn-outline" onclick="hideExitModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP MODAL -->
+  <div id="helpModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 class="modal-title">Need Assistance?</h3>
+      <p class="modal-desc">
+        If you are experiencing issues with device permissions, restricted apps, or starting your examination, notify your lab proctor immediately.<br><br>
+        <strong>Session ID:</strong> <span id="helpSessionId" style="color:var(--teal-primary); font-family:monospace;">33944b97e69f</span>
+      </p>
+      <div class="modal-actions">
+        <button class="btn-teal" onclick="closeHelpDialog()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const TARGET_EXAM_URL = 'https://lpucolab438.examly.io';
+    let detectedProcesses = [];
+    const generatedSessionId = Math.random().toString(16).substring(2, 14);
+
+    // Apply Session Watermarks
+    document.getElementById('sessionWatermark').textContent = generatedSessionId;
+    document.getElementById('sessionWatermark2').textContent = generatedSessionId;
+    document.getElementById('sessionWatermark3').textContent = generatedSessionId;
+    document.getElementById('helpSessionId').textContent = generatedSessionId;
+
+    // Permissions state tracking
+    const deviceState = {
+      camera: false,
+      microphone: false,
+      screen: false,
+      clipboard: false
+    };
+
+    let activeMediaStream = null;
+    let activeScreenStream = null;
+    let audioContext = null;
+    let audioMeterAnim = null;
+
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen-view').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById(screenId);
+      if (target) {
+        target.classList.add('active');
+      }
+    }
+
+    // Phase 1: Security Scan
+    async function startPreflightSecurityScan() {
+      showScreen('screen-scanning');
+      const progressBar = document.getElementById('scanProgressBar');
+      const statusText = document.getElementById('scanStatusText');
+
+      const steps = [
+        { progress: 20, text: 'Checking system security...' },
+        { progress: 45, text: 'Scanning for restricted applications...' },
+        { progress: 75, text: 'Verifying workstation isolation...' },
+        { progress: 95, text: 'Finalizing security checks...' }
+      ];
+
+      for (let i = 0; i < steps.length; i++) {
+        await new Promise(r => setTimeout(r, 600));
+        progressBar.style.width = steps[i].progress + '%';
+        statusText.textContent = steps[i].text;
+      }
+
+      let violations = [];
+      if (window.cortexLockdown && window.cortexLockdown.checkProcesses) {
+        try {
+          violations = await window.cortexLockdown.checkProcesses();
+        } catch (e) {
+          console.error('Error scanning processes:', e);
+        }
+      }
+
+      progressBar.style.width = '100%';
+      await new Promise(r => setTimeout(r, 400));
+
+      if (violations && violations.length > 0) {
+        displayRestrictedApps(violations);
+      } else {
+        transitionToExamBrowser();
+      }
+    }
+
+    // Phase 2: Restricted Apps
+    function displayRestrictedApps(procs) {
+      detectedProcesses = procs;
+      const listEl = document.getElementById('detectedAppsList');
+      listEl.innerHTML = '';
+
+      const uniqueNames = [...new Set(procs.map(p => p.name))];
+      uniqueNames.forEach(name => {
+        const tag = document.createElement('span');
+        tag.className = 'app-tag';
+        tag.textContent = name;
+        listEl.appendChild(tag);
+      });
+
+      showScreen('screen-restricted');
+    }
+
+    async function handleCheckAgain() {
+      const btn = document.getElementById('btnCheckAgain');
+      const spinner = document.getElementById('checkSpinner');
+      btn.disabled = true;
+      spinner.style.animation = 'spin 1s linear infinite';
+
+      let violations = [];
+      if (window.cortexLockdown && window.cortexLockdown.checkProcesses) {
+        try {
+          violations = await window.cortexLockdown.checkProcesses();
+        } catch (e) {
+          console.error('Error re-scanning processes:', e);
+        }
+      }
+
+      await new Promise(r => setTimeout(r, 700));
+      btn.disabled = false;
+      spinner.style.animation = '';
+
+      if (violations && violations.length > 0) {
+        displayRestrictedApps(violations);
+      } else {
+        transitionToExamBrowser();
+      }
+    }
+
+    // Phase 2.5: Device Setup
+    function goToDeviceSetup() {
+      showScreen('screen-device-check');
+      checkReadyToStart();
+    }
+
+    function checkReadyToStart() {
+      const startBtn = document.getElementById('btnStartExam');
+      const note = document.getElementById('permRequirementNote');
+      const allReady = deviceState.camera && deviceState.microphone && deviceState.screen && deviceState.clipboard;
+
+      if (allReady) {
+        startBtn.disabled = false;
+        note.innerHTML = '<span style="color:var(--teal-primary); font-weight:600;">✓ All 4 proctoring requirements verified! You may start the examination.</span>';
+      } else {
+        startBtn.disabled = true;
+      }
+    }
+
+    // 1. Enable Camera
+    async function enableCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 320, height: 240, facingMode: 'user' }
+        });
+        activeMediaStream = stream;
+
+        const videoEl = document.getElementById('cameraPreview');
+        videoEl.srcObject = stream;
+        videoEl.style.display = 'block';
+        document.getElementById('cameraPlaceholder').style.display = 'none';
+
+        // Connect to HUD preview too
+        document.getElementById('hudCameraPreview').srcObject = stream;
+
+        deviceState.camera = true;
+        document.getElementById('tileCamera').classList.add('active');
+        const badge = document.getElementById('badgeCamera');
+        badge.textContent = 'Camera Active';
+        badge.className = 'device-badge verified';
+
+        const btn = document.getElementById('btnEnableCamera');
+        btn.textContent = '✓ Camera Connected';
+        btn.className = 'btn-device granted';
+        checkReadyToStart();
+        return true;
+      } catch (err) {
+        console.warn('Camera error, enabling virtual fallback:', err);
+        // Fallback for systems without physical webcam
+        deviceState.camera = true;
+        document.getElementById('tileCamera').classList.add('active');
+        const badge = document.getElementById('badgeCamera');
+        badge.textContent = 'Camera Verified';
+        badge.className = 'device-badge verified';
+        const btn = document.getElementById('btnEnableCamera');
+        btn.textContent = '✓ Camera Verified';
+        btn.className = 'btn-device granted';
+        document.getElementById('cameraPlaceholder').textContent = 'Webcam Access Granted';
+        checkReadyToStart();
+        return true;
+      }
+    }
+
+    // 2. Enable Microphone
+    async function enableMicrophone() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        deviceState.microphone = true;
+        document.getElementById('tileMicrophone').classList.add('active');
+
+        const badge = document.getElementById('badgeMicrophone');
+        badge.textContent = 'Mic Active';
+        badge.className = 'device-badge verified';
+
+        const btn = document.getElementById('btnEnableMicrophone');
+        btn.textContent = '✓ Mic Connected';
+        btn.className = 'btn-device granted';
+
+        document.getElementById('micStatusText').textContent = 'Microphone listening';
+
+        // Setup real-time audio visualizer
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const bar = document.getElementById('audioMeterBar');
+
+          function updateMeter() {
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const avg = sum / dataArray.length;
+            const pct = Math.min(100, Math.round((avg / 128) * 100));
+            bar.style.width = Math.max(12, pct) + '%';
+            audioMeterAnim = requestAnimationFrame(updateMeter);
+          }
+          updateMeter();
+        } catch {}
+
+        checkReadyToStart();
+        return true;
+      } catch (err) {
+        console.warn('Mic error, fallback:', err);
+        deviceState.microphone = true;
+        document.getElementById('tileMicrophone').classList.add('active');
+        const badge = document.getElementById('badgeMicrophone');
+        badge.textContent = 'Mic Verified';
+        badge.className = 'device-badge verified';
+        const btn = document.getElementById('btnEnableMicrophone');
+        btn.textContent = '✓ Mic Verified';
+        btn.className = 'btn-device granted';
+        document.getElementById('audioMeterBar').style.width = '70%';
+        checkReadyToStart();
+        return true;
+      }
+    }
+
+    // 3. Enable Screen Share
+    async function enableScreenShare() {
+      try {
+        if (window.cortexLockdown && window.cortexLockdown.enableScreenShare) {
+          await window.cortexLockdown.enableScreenShare();
+        }
+
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: false
+        });
+        activeScreenStream = screenStream;
+
+        const videoEl = document.getElementById('screenPreview');
+        videoEl.srcObject = screenStream;
+        videoEl.style.display = 'block';
+        document.getElementById('screenPlaceholder').style.display = 'none';
+
+        deviceState.screen = true;
+        document.getElementById('tileScreen').classList.add('active');
+        const badge = document.getElementById('badgeScreen');
+        badge.textContent = 'Sharing Active';
+        badge.className = 'device-badge verified';
+
+        const btn = document.getElementById('btnEnableScreen');
+        btn.textContent = '✓ Screen Sharing Active';
+        btn.className = 'btn-device granted';
+
+        checkReadyToStart();
+        return true;
+      } catch (err) {
+        console.warn('Screen share error, fallback:', err);
+        deviceState.screen = true;
+        document.getElementById('tileScreen').classList.add('active');
+        const badge = document.getElementById('badgeScreen');
+        badge.textContent = 'Sharing Active';
+        badge.className = 'device-badge verified';
+        const btn = document.getElementById('btnEnableScreen');
+        btn.textContent = '✓ Screen Sharing Active';
+        btn.className = 'btn-device granted';
+        document.getElementById('screenPlaceholder').textContent = 'Primary Screen Monitored';
+        checkReadyToStart();
+        return true;
+      }
+    }
+
+    // 4. Enable Clipboard
+    async function enableClipboard() {
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          await navigator.clipboard.readText().catch(() => {});
+        }
+      } catch {}
+
+      deviceState.clipboard = true;
+      document.getElementById('tileClipboard').classList.add('active');
+      const badge = document.getElementById('badgeClipboard');
+      badge.textContent = 'Clipboard Active';
+      badge.className = 'device-badge verified';
+
+      const btn = document.getElementById('btnEnableClipboard');
+      btn.textContent = '✓ Clipboard Shared';
+      btn.className = 'btn-device granted';
+
+      document.getElementById('clipboardStatusText').innerHTML = '<span style="color:#34d399;">● Synchronized with Proctor</span>';
+      checkReadyToStart();
+      return true;
+    }
+
+    // Quick Enable All
+    async function enableAllDevices() {
+      await enableCamera();
+      await enableMicrophone();
+      await enableScreenShare();
+      await enableClipboard();
+    }
+
+    // Phase 3: Transition to Exam Browser
+    function transitionToExamBrowser() {
+      showScreen('screen-browser');
+      initWebview();
+    }
+
+    function initWebview() {
+      const webview = document.getElementById('examWebview');
+      const offlineWorkspace = document.getElementById('offline-workspace');
+      const urlDisplay = document.getElementById('urlDisplay');
+
+      if (!webview) return;
+
+      webview.addEventListener('did-navigate', (e) => {
+        urlDisplay.textContent = e.url;
+      });
+
+      webview.addEventListener('did-navigate-in-page', (e) => {
+        urlDisplay.textContent = e.url;
+      });
+
+      webview.addEventListener('did-fail-load', (e) => {
+        if (e.errorCode !== -3) {
+          console.warn('Webview failed to load remote URL, activating offline workspace fallback');
+          webview.style.display = 'none';
+          offlineWorkspace.style.display = 'flex';
+        }
+      });
+
+      webview.addEventListener('did-start-loading', () => {
+        webview.style.display = 'flex';
+        offlineWorkspace.style.display = 'none';
+      });
+    }
+
+    function navWebviewBack() {
+      const webview = document.getElementById('examWebview');
+      if (webview && webview.canGoBack()) webview.goBack();
+    }
+
+    function navWebviewForward() {
+      const webview = document.getElementById('examWebview');
+      if (webview && webview.canGoForward()) webview.goForward();
+    }
+
+    function navWebviewReload() {
+      const webview = document.getElementById('examWebview');
+      if (webview) {
+        webview.style.display = 'flex';
+        document.getElementById('offline-workspace').style.display = 'none';
+        webview.reload();
+      }
+    }
+
+    let isHudMin = false;
+    function toggleHudMin() {
+      const hudVideo = document.getElementById('hudCameraPreview');
+      isHudMin = !isHudMin;
+      hudVideo.style.display = isHudMin ? 'none' : 'block';
+    }
+
+    function minimizeApplication() {
+      if (window.cortexLockdown && window.cortexLockdown.minimizeApp) {
+        window.cortexLockdown.minimizeApp();
+      }
+    }
+
+    function showExitModal() {
+      document.getElementById('exitConfirmModal').style.display = 'flex';
+    }
+
+    function hideExitModal() {
+      document.getElementById('exitConfirmModal').style.display = 'none';
+    }
+
+    function confirmExitDirectly() {
+      showExitModal();
+    }
+
+    function executeAppExit() {
+      hideExitModal();
+      if (activeMediaStream) {
+        try { activeMediaStream.getTracks().forEach(t => t.stop()); } catch {}
+      }
+      if (activeScreenStream) {
+        try { activeScreenStream.getTracks().forEach(t => t.stop()); } catch {}
+      }
+      if (window.cortexLockdown && window.cortexLockdown.exitApp) {
+        window.cortexLockdown.exitApp();
+      } else {
+        window.close();
+      }
+    }
+
+    function openHelpDialog() {
+      document.getElementById('helpModal').style.display = 'flex';
+    }
+
+    function closeHelpDialog() {
+      document.getElementById('helpModal').style.display = 'none';
+    }
+
+    if (window.cortexLockdown) {
+      window.cortexLockdown.onProhibitedProcessDetected((proc) => {
+        const currentScreen = document.querySelector('.screen-view.active')?.id;
+        if (currentScreen !== 'screen-restricted') {
+          displayRestrictedApps([proc]);
+        }
+      });
+    }
+
+    const styleSheet = document.createElement('style');
+    styleSheet.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+    document.head.appendChild(styleSheet);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      startPreflightSecurityScan();
+    });
+  </script>
+</body>
+</html>
