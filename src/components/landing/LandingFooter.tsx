@@ -19,21 +19,40 @@ import { Aurora, GlowCtaButton } from './EffectsSuite';
 export const LandingFooter: React.FC = () => {
   const { isDark } = useTheme();
   const footerRef = React.useRef<HTMLElement>(null);
-  const [scrollProgress, setScrollProgress] = React.useState(0);
+  const letterERef = React.useRef<HTMLSpanElement>(null);
+  const letterXRef = React.useRef<HTMLSpanElement>(null);
 
   React.useEffect(() => {
+    let ticking = false;
+    const updateTransforms = () => {
+      if (footerRef.current) {
+        const rect = footerRef.current.getBoundingClientRect();
+        const windowH = window.innerHeight || 800;
+        const totalRange = rect.height + windowH;
+        const currentPos = windowH - rect.top;
+        const progress = Math.max(0, Math.min(1, currentPos / totalRange));
+
+        if (letterERef.current) {
+          const yE = Math.round(20 + progress * 18);
+          letterERef.current.style.transform = `translateY(-${yE}px) rotate(-4deg)`;
+        }
+        if (letterXRef.current) {
+          const yX = Math.round(45 + progress * 25);
+          letterXRef.current.style.transform = `translateY(-${yX}px) rotate(8deg)`;
+        }
+      }
+      ticking = false;
+    };
+
     const handleScroll = () => {
-      if (!footerRef.current) return;
-      const rect = footerRef.current.getBoundingClientRect();
-      const windowH = window.innerHeight || 800;
-      const totalRange = rect.height + windowH;
-      const currentPos = windowH - rect.top;
-      const progress = Math.max(0, Math.min(1, currentPos / totalRange));
-      setScrollProgress(progress);
+      if (!ticking) {
+        window.requestAnimationFrame(updateTransforms);
+        ticking = true;
+      }
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
+    updateTransforms();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -239,8 +258,9 @@ export const LandingFooter: React.FC = () => {
 
             {/* Only last two letters float: E (modeled after 't' in Antigravity) */}
             <span
+              ref={letterERef}
               style={{
-                transform: `translateY(-${Math.round(20 + scrollProgress * 18)}px) rotate(-4deg)`,
+                transform: 'translateY(-20px) rotate(-4deg)',
                 transition: 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)',
               }}
               className="inline-block transform-gpu hover:-translate-y-10 hover:rotate-[-6deg] hover:text-[#FF9100] transition-all duration-300 cursor-default"
@@ -257,8 +277,9 @@ export const LandingFooter: React.FC = () => {
 
             {/* Only last two letters float: X (modeled after 'Y' in Antigravity) */}
             <span
+              ref={letterXRef}
               style={{
-                transform: `translateY(-${Math.round(45 + scrollProgress * 25)}px) rotate(8deg)`,
+                transform: 'translateY(-45px) rotate(8deg)',
                 transition: 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)',
               }}
               className="inline-block transform-gpu hover:-translate-y-14 hover:rotate-[12deg] hover:text-[#FF9100] transition-all duration-300 cursor-default"

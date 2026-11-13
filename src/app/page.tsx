@@ -388,21 +388,40 @@ function LandingStickyNav(_props?: {
 /* ================= 4. GIANT ARCHITECTURAL FOOTER COMPONENT ('EX' FLOATING ONLY) ================= */
 function LandingFooter({ isDark }: { isDark?: boolean }) {
   const footerRef = React.useRef<HTMLElement>(null);
-  const [scrollProgress, setScrollProgress] = useState(0);
+  const letterERef = React.useRef<HTMLSpanElement>(null);
+  const letterXRef = React.useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
+    let ticking = false;
+    const updateTransforms = () => {
+      if (footerRef.current) {
+        const rect = footerRef.current.getBoundingClientRect();
+        const winH = window.innerHeight || 800;
+        const totalRange = rect.height + winH;
+        const currentPos = winH - rect.top;
+        const progress = Math.max(0, Math.min(1, currentPos / totalRange));
+
+        if (letterERef.current) {
+          const yE = Math.round(20 + progress * 18);
+          letterERef.current.style.transform = `translateY(-${yE}px) rotate(-4deg)`;
+        }
+        if (letterXRef.current) {
+          const yX = Math.round(45 + progress * 25);
+          letterXRef.current.style.transform = `translateY(-${yX}px) rotate(8deg)`;
+        }
+      }
+      ticking = false;
+    };
+
     const handleScroll = () => {
-      if (!footerRef.current) return;
-      const rect = footerRef.current.getBoundingClientRect();
-      const windowH = window.innerHeight || 800;
-      const totalRange = rect.height + windowH;
-      const currentPos = windowH - rect.top;
-      const progress = Math.max(0, Math.min(1, currentPos / totalRange));
-      setScrollProgress(progress);
+      if (!ticking) {
+        window.requestAnimationFrame(updateTransforms);
+        ticking = true;
+      }
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
+    updateTransforms();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -434,6 +453,11 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
       <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-gradient-to-b from-[#FF9100]/15 via-[#FF3D00]/5 to-transparent blur-3xl opacity-60 dark:opacity-30" />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* ================= MINIMALIST SINGLE-FRAME VIDEO SHOWCASE (BEFORE EXPERIENCE LIMITLESS CODE) ================= */}
+        <div className="pb-16 sm:pb-24">
+          <InteractiveVideoShowcase isDark={isDark} />
+        </div>
+
         {/* Upper Navigation & Mission Statement Grid */}
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 pb-14">
           {/* Left Column: Heading, Subtitle & Action CTAs */}
@@ -575,8 +599,9 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
 
             {/* Only last two letters float: E (modeled after 't' in Antigravity) */}
             <span
+              ref={letterERef}
               style={{
-                transform: `translateY(-${Math.round(20 + scrollProgress * 18)}px) rotate(-4deg)`,
+                transform: 'translateY(-20px) rotate(-4deg)',
                 transition: 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)',
               }}
               className="inline-block transform-gpu hover:-translate-y-10 hover:rotate-[-6deg] hover:text-[#FF9100] transition-all duration-300 cursor-default"
@@ -593,8 +618,9 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
 
             {/* Only last two letters float: X (modeled after 'Y' in Antigravity) */}
             <span
+              ref={letterXRef}
               style={{
-                transform: `translateY(-${Math.round(45 + scrollProgress * 25)}px) rotate(8deg)`,
+                transform: 'translateY(-45px) rotate(8deg)',
                 transition: 'transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1)',
               }}
               className="inline-block transform-gpu hover:-translate-y-14 hover:rotate-[12deg] hover:text-[#FF9100] transition-all duration-300 cursor-default"
@@ -666,32 +692,42 @@ export default function CortexLandingPage() {
     }
   }, [theme]);
 
-  // Robust, accurate scroll-spy tracking for sticky pill navigation
+  // High-performance rAF-throttled scroll-spy tracking for sticky pill navigation
   useEffect(() => {
+    let ticking = false;
     const handleScroll = () => {
-      const sections = ['ide', 'classroom', 'browser'];
-      const scrollPos = window.scrollY + 280;
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const sections = ['ide', 'classroom', 'browser'];
+          const scrollPos = window.scrollY + 280;
 
-      // Bottom detection: if scrolled near the bottom of document, prioritize 'browser'
-      if (
-        window.innerHeight + window.scrollY >=
-        document.documentElement.scrollHeight - 380
-      ) {
-        setActiveSection('browser');
-        return;
-      }
-
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const el = document.getElementById(sections[i]);
-        if (el) {
-          const top = el.offsetTop;
-          if (scrollPos >= top) {
-            setActiveSection(sections[i]);
+          // Bottom detection: if scrolled near the bottom of document, prioritize 'browser'
+          if (
+            window.innerHeight + window.scrollY >=
+            document.documentElement.scrollHeight - 380
+          ) {
+            setActiveSection((prev) => (prev !== 'browser' ? 'browser' : prev));
+            ticking = false;
             return;
           }
-        }
+
+          for (let i = sections.length - 1; i >= 0; i--) {
+            const el = document.getElementById(sections[i]);
+            if (el) {
+              const top = el.offsetTop;
+              if (scrollPos >= top) {
+                const target = sections[i];
+                setActiveSection((prev) => (prev !== target ? target : prev));
+                ticking = false;
+                return;
+              }
+            }
+          }
+          setActiveSection((prev) => (prev !== 'ide' ? 'ide' : prev));
+          ticking = false;
+        });
+        ticking = true;
       }
-      setActiveSection('ide');
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -717,9 +753,6 @@ export default function CortexLandingPage() {
 
         {/* ================= HERO SECTION ================= */}
         <LandingHero isDark={isDark} />
-
-        {/* ================= LIVE REPRESENTATION VIDEO SHOWCASE ================= */}
-        <InteractiveVideoShowcase isDark={isDark} />
 
         {/* ================= STICKY PILL PROGRESS NAV ================= */}
         <LandingStickyNav

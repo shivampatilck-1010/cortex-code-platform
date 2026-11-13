@@ -660,8 +660,20 @@ export function LiquidEther({
       autoDriver.forceStop();
     };
 
+    let isVisible = true;
+    const io = new IntersectionObserver(([entry]) => {
+      isVisible = entry.isIntersecting;
+      if (isVisible && !rafRef.current && manager.running) {
+        loop();
+      }
+    }, { threshold: 0.05 });
+    io.observe(wrapper);
+
     const loop = () => {
-      if (!manager.running) return;
+      if (!manager.running || !isVisible) {
+        rafRef.current = null;
+        return;
+      }
       autoDriver.update();
       Mouse.update();
       Common.update();
@@ -687,6 +699,7 @@ export function LiquidEther({
     return () => {
       manager.running = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      io.disconnect();
       ro.disconnect();
       Mouse.dispose();
       if (Common.renderer) {
