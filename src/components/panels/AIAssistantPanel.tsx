@@ -16,6 +16,7 @@ import {
   ExternalLink,
   CheckCircle2,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import { AISettings, AIAnalysisResult } from '@/lib/ai/assistant';
 import { SUPPORTED_LANGUAGES } from '@/config/languages';
@@ -316,9 +317,10 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                     </span>
                     <button
                       onClick={() => setShowKeyBanner(false)}
-                      className="text-gray-500 hover:text-gray-300 text-xs"
+                      className="text-gray-500 hover:text-gray-300 p-0.5 rounded"
+                      aria-label="Dismiss banner"
                     >
-                      ✕
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
@@ -398,9 +400,10 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                 </span>
                 <button
                   onClick={() => setShowKeyBanner(false)}
-                  className="text-gray-500 hover:text-gray-300 text-[10px]"
+                  className="text-gray-500 hover:text-gray-300 p-0.5 rounded"
+                  aria-label="Dismiss banner"
                 >
-                  ✕
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}

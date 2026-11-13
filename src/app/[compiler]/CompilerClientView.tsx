@@ -68,7 +68,7 @@ export const CompilerClientView: React.FC<CompilerClientViewProps> = ({
           </span>
         </div>
         <Link
-          href="/"
+          href="/ide"
           className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#ff9100] hover:bg-[#e08000] text-black rounded text-xs font-heading font-bold shadow transition active:scale-95"
         >
           <span>Open Full Cloud IDE</span>

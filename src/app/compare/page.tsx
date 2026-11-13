@@ -435,7 +435,7 @@ Please provide a concise, structured comparative analysis with:
       const data = await res.json();
       setAiComparison(data.reply || 'AI comparison completed.');
     } catch (err: any) {
-      setAiComparison(`⚠️ Failed to generate AI comparison: ${err?.message}`);
+      setAiComparison(`Failed to generate AI comparison: ${err?.message}`);
     } finally {
       setAiLoading(false);
     }
@@ -657,7 +657,7 @@ Please provide a concise, structured comparative analysis with:
                   >
                     {classroomParticipants.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} {p.isCodeHidden ? '🔒 (Private)' : `(${p.language})`}
+                        {p.name} {p.isCodeHidden ? '[Private]' : `(${p.language})`}
                       </option>
                     ))}
                   </select>
@@ -741,7 +741,7 @@ Please provide a concise, structured comparative analysis with:
                   >
                     {classroomParticipants.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} {p.isCodeHidden ? '🔒 (Private)' : `(${p.language})`}
+                        {p.name} {p.isCodeHidden ? '[Private]' : `(${p.language})`}
                       </option>
                     ))}
                   </select>
@@ -973,9 +973,9 @@ Please provide a concise, structured comparative analysis with:
                       <td className="py-2 px-4">
                         {hasResults && (
                           outputsMatch ? (
-                            <span className="text-emerald-400">✓ Identical outputs</span>
+                            <span className="text-emerald-400 inline-flex items-center gap-1.5"><Check className="w-3.5 h-3.5" /> Identical outputs</span>
                           ) : hasErrors ? (
-                            <span className="text-rose-400">⚠️ Error during execution</span>
+                            <span className="text-rose-400 inline-flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> Error during execution</span>
                           ) : (
                             <span className="text-amber-400">Outputs differ in stdout</span>
                           )

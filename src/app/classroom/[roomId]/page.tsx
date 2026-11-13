@@ -442,7 +442,7 @@ export default function ClassroomLivePage() {
           if (pid !== myId && !activeSessionPartnerIdsRef.current.has(pid)) {
             activeSessionPartnerIdsRef.current.add(pid);
             const partnerName = newRoom.participants[pid]?.name || 'Collaborator';
-            showToast(`🎉 Real-time collaboration active with ${partnerName}!`);
+            showToast(`Real-time collaboration active with ${partnerName}!`);
           }
         });
       });
@@ -616,7 +616,7 @@ export default function ClassroomLivePage() {
       if (data.success && data.room) {
         applyRoomState(data.room);
         collabClientRef.current?.triggerImmediateSync();
-        showToast('🚀 Code Arena launched for all waiting participants!');
+        showToast('Code Arena launched for all waiting participants!');
       }
     } catch (err) {
       console.error('Failed to launch classroom arena', err);
@@ -712,7 +712,7 @@ export default function ClassroomLivePage() {
             return updated;
           });
         }
-        showToast('🚀 Code Arena is now open! Entering arena...');
+        showToast('Code Arena is now open! Entering arena...');
         break;
       }
 
@@ -880,8 +880,8 @@ export default function ClassroomLivePage() {
             return updated;
           });
           if (targetUserId === participantId) {
-            if (isLocked) showToast('🔒 Your workspace was locked by the teacher.');
-            else if (isLocked === false) showToast('🔓 Your workspace was unlocked by the teacher.');
+            if (isLocked) showToast('Your workspace was locked by the teacher.');
+            else if (isLocked === false) showToast('Your workspace was unlocked by the teacher.');
           }
         }
         break;
@@ -933,7 +933,7 @@ export default function ClassroomLivePage() {
           if (request.status === 'accepted') {
             setSlotAUserId(participantId);
             setSlotBUserId(partnerId);
-            showToast(`🎉 Access approved! Real-time collaboration active with ${partner}.`);
+            showToast(`Access approved! Real-time collaboration active with ${partner}.`);
           } else if (request.status === 'declined') {
             showToast(`Access request was declined by ${partner}.`);
           }
@@ -974,12 +974,12 @@ export default function ClassroomLivePage() {
         
         if (req?.requesterId === participantId) {
           if (req.status === 'allow_once' || req.status === 'allow_session') {
-            showToast(`✅ Download approved by ${req.ownerName || 'owner'}!`);
+            showToast(`Download approved by ${req.ownerName || 'owner'}!`);
             if (token && fileId) {
               window.open(`/api/v1/classroom/${roomId}/file-download?fileId=${fileId}&token=${token}&requesterId=${participantId}`);
             }
           } else if (req.status === 'denied') {
-            showToast(`❌ Download request was denied by ${req.ownerName || 'owner'}.`);
+            showToast(`Download request was denied by ${req.ownerName || 'owner'}.`);
           }
         }
         fetchRoomState(participantId);
@@ -1237,7 +1237,7 @@ export default function ClassroomLivePage() {
       });
       collabClientRef.current?.triggerImmediateSync();
     } catch (err: any) {
-      showToast(`⚠️ ${err?.message || 'Failed to send request'}`);
+      showToast(err?.message || 'Failed to send request');
     }
   };
 
@@ -1278,7 +1278,7 @@ export default function ClassroomLivePage() {
     if (decision === 'accepted' && partnerId) {
       setSlotAUserId(participantId);
       setSlotBUserId(partnerId);
-      showToast(`🎉 Access approved! Real-time collaboration active.`);
+      showToast('Access approved! Real-time collaboration active.');
     } else if (decision === 'declined') {
       showToast('Access request declined.');
     }
@@ -1576,7 +1576,7 @@ export default function ClassroomLivePage() {
       <header className="h-12 bg-[#101116] border-b border-[#1f2026] px-3 sm:px-4 flex items-center justify-between z-30">
         <div className="flex items-center space-x-2 sm:space-x-3">
           <Link
-            href="/"
+            href="/ide"
             onClick={async () => {
               try {
                 await exitFullscreen();
@@ -1592,7 +1592,7 @@ export default function ClassroomLivePage() {
           <div className="flex items-center space-x-1.5 text-xs font-heading">
             <span className="text-gray-600">/</span>
             <Link
-              href="/"
+              href="/ide"
               onClick={async () => {
                 try {
                   await exitFullscreen();

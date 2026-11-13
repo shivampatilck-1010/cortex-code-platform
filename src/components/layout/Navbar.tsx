@@ -80,9 +80,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Global Hub Navigation */}
         <nav className="flex items-center space-x-1 pl-2.5 border-l border-[#1f2024]">
           <Link
-            href="/"
+            href="/ide"
             className={`h-8 px-2.5 rounded-md text-xs font-semibold flex items-center justify-center transition ${
-              pathname === '/' || pathname.endsWith('-online-compiler')
+              pathname === '/ide' || pathname.startsWith('/ide')
                 ? 'bg-[#1e1f26] text-[#ff9100]'
                 : 'text-gray-300 hover:text-[#ff9100] hover:bg-[#16171c]'
             }`}

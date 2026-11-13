@@ -33,6 +33,21 @@ The platform unites eight fully integrated subsystems into a singular high-perfo
 
 ---
 
+## 2. THE THREE DECOUPLED PRODUCT SUITES & FLAGSHIP WEB EXPERIENCE
+
+The Cortex platform has been decoupled into three standalone, isolated products anchored by an Antigravity-inspired promotional showcase on the root route (`/`):
+
+1. **Root Domain Showcase (`/`)**: Assembled with 8 modular components, dual-theme support (light mode with stark black Perlin contour waves on white; dark mode with quantum photon amber on obsidian), and an interactive scrollytelling video theater (`01 // 3D Kinetic Logo`, `02 // Flagship Brand`, `03 // Antigravity Walkthrough`).
+2. **Product 01: Cortex IDE (`/ide`)**: Standalone Monaco cloud developer workspace across 16 language runtimes with visual step-debugging, Bash terminal, and autonomous Gemini AI error repair.
+3. **Product 02: Cortex Classroom (`/classroom`)**: Real-time academic collaboration platform with CRDT multi-cursor code synchronisation, WebRTC AV lecture stage, KaTeX whiteboard, and auto-grader.
+4. **Product 03: Cortex Browser (`/lockdown`)**: High-integrity assessment kiosk placeholder with Win32 `WDA_EXCLUDEFROMCAPTURE` display affinity, `WH_KEYBOARD_LL` hook suppression, 40-process watchdog daemon, 10s transactional auto-save, and interactive security simulation.
+
+Detailed handover specifications:
+- [Google Antigravity SDK Handover Specification](docs/lockdown/HANDOVER_ANTIGRAVITY_SDK.md)
+- [Antigravity CLI Handover Specification](docs/lockdown/HANDOVER_ANTIGRAVITY_CLI.md)
+
+---
+
 ## 2. END-TO-END SYSTEM ARCHITECTURE
 
 Cortex is architected as an edge-first distributed system deployed globally on Cloudflare Workers, Cloudflare D1 distributed SQL, and native Win32 security APIs.
@@ -333,6 +348,21 @@ sequenceDiagram
 |                                 name (TEXT)                       role (TEXT)                     |
 +---------------------------------------------------------------------------------------------------+
 ```
+
+---
+
+## 2. THE THREE DECOUPLED PRODUCT SUITES & FLAGSHIP WEB EXPERIENCE
+
+The Cortex platform has been decoupled into three standalone, isolated products anchored by an Antigravity-inspired promotional showcase on the root route (`/`):
+
+1. **Root Domain Showcase (`/`)**: Assembled with 8 modular components, dual-theme support (light mode with stark black Perlin contour waves on white; dark mode with quantum photon amber on obsidian), and an interactive scrollytelling video theater (`01 // 3D Kinetic Logo`, `02 // Flagship Brand`, `03 // Antigravity Walkthrough`).
+2. **Product 01: Cortex IDE (`/ide`)**: Standalone Monaco cloud developer workspace across 16 language runtimes with visual step-debugging, Bash terminal, and autonomous Gemini AI error repair.
+3. **Product 02: Cortex Classroom (`/classroom`)**: Real-time academic collaboration platform with CRDT multi-cursor code synchronisation, WebRTC AV lecture stage, KaTeX whiteboard, and auto-grader.
+4. **Product 03: Cortex Browser (`/lockdown`)**: High-integrity assessment kiosk placeholder with Win32 `WDA_EXCLUDEFROMCAPTURE` display affinity, `WH_KEYBOARD_LL` hook suppression, 40-process watchdog daemon, 10s transactional auto-save, and interactive security simulation.
+
+Detailed handover specifications:
+- [Google Antigravity SDK Handover Specification](docs/lockdown/HANDOVER_ANTIGRAVITY_SDK.md)
+- [Antigravity CLI Handover Specification](docs/lockdown/HANDOVER_ANTIGRAVITY_CLI.md)
 
 ---
 

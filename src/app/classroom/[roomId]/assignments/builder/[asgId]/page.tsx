@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Save, ArrowLeft, Plus, Trash2, Settings, Terminal, Shield, Clock,
-  Upload, Download, Sparkles, BookOpen, FileText, CheckCircle2, Copy, AlertCircle, Eye, EyeOff
+  Upload, Download, Sparkles, BookOpen, FileText, CheckCircle2, Copy, AlertCircle, Eye, EyeOff, X
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 
@@ -560,7 +560,7 @@ export default function AssignmentBuilderPage({
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span>{importNotice}</span>
           </div>
-          <button onClick={() => setImportNotice(null)} className="text-emerald-400 hover:text-white">✕</button>
+          <button onClick={() => setImportNotice(null)} className="text-emerald-400 hover:text-white p-0.5 rounded" aria-label="Dismiss notice"><X className="w-4 h-4" /></button>
         </div>
       )}
 
@@ -924,8 +924,9 @@ export default function AssignmentBuilderPage({
               <button 
                 onClick={() => setShowImportModal(false)}
                 className="text-zinc-500 hover:text-white p-1 rounded"
+                aria-label="Close modal"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 

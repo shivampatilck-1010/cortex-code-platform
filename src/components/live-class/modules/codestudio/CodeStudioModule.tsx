@@ -1725,10 +1725,11 @@ export const CodeStudioModule: React.FC = () => {
                           />
                           <button
                             onClick={handleConfirmRenameFile}
-                            className="text-[#10B981] hover:text-white"
+                            className="text-[#10B981] hover:text-white p-0.5"
                             title="Confirm Rename"
+                            aria-label="Confirm Rename"
                           >
-                            ✓
+                            <Check className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (

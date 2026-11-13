@@ -172,7 +172,7 @@ export async function sendEmailNotification(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: `🚨 **[Cortex ${feedback.type.toUpperCase()}]** ${feedback.title}\nID: \`${feedback.id}\` | Severity: **${feedback.severity}**\nUser: ${feedback.email || 'Anonymous'}\n\n${feedback.description}\n${
+          content: `[ALERT] **[Cortex ${feedback.type.toUpperCase()}]** ${feedback.title}\nID: \`${feedback.id}\` | Severity: **${feedback.severity}**\nUser: ${feedback.email || 'Anonymous'}\n\n${feedback.description}\n${
             feedback.diagnostics?.stderr ? `\`\`\`${feedback.diagnostics.stderr.slice(0, 800)}\`\`\`` : ''
           }`,
         }),

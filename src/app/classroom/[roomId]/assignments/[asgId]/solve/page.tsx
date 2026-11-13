@@ -544,7 +544,7 @@ export default function SolveAssignmentPage({
                       </p>
 
                       <div className="flex items-center space-x-3 text-[11px] font-mono text-zinc-500 pt-1 border-t border-amber-900/20">
-                        <span>Status: <span className="text-amber-400">🔒 Locked (Evaluated at Submission)</span></span>
+                        <span>Status: <span className="text-amber-400 inline-flex items-center gap-1"><Lock className="w-3 h-3 inline" /> Locked (Evaluated at Submission)</span></span>
                         <span>•</span>
                         <span>Timeout: {tc.timeoutMs || 2000}ms</span>
                       </div>
@@ -605,7 +605,7 @@ export default function SolveAssignmentPage({
                           <span className="font-bold flex items-center space-x-2">
                             {tr.status === 'passed' ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-rose-400" />}
                             <span className={tr.status === 'passed' ? 'text-emerald-300' : 'text-rose-300'}>
-                              Test Case {i + 1} {tr.visibility === 'hidden' && '🔒 (Hidden Grading Case)'}
+                              Test Case {i + 1} {tr.visibility === 'hidden' && <span className="inline-flex items-center gap-1 text-zinc-400 font-normal"><Lock className="w-3 h-3 text-amber-400 inline" />(Hidden Grading Case)</span>}
                             </span>
                           </span>
                           <span className="text-[11px] font-mono text-zinc-400">
@@ -634,10 +634,18 @@ export default function SolveAssignmentPage({
                             )}
                           </div>
                         ) : (
-                          <div className="text-[11px] font-mono text-zinc-400 mt-1">
-                            {tr.status === 'passed' 
-                              ? '✓ Hidden case successfully satisfied all constraints.' 
-                              : '✗ Hidden case assertion failed (Test data shielded).'}
+                          <div className="text-[11px] font-mono text-zinc-400 mt-1 flex items-center gap-1.5">
+                            {tr.status === 'passed' ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>Hidden case successfully satisfied all constraints.</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                <span>Hidden case assertion failed (Test data shielded).</span>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>

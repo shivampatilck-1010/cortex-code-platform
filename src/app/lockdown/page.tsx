@@ -1,509 +1,727 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Shield,
-  Download,
-  Monitor,
-  CheckCircle2,
   Lock,
-  FileText,
-  Eye,
-  AlertTriangle,
-  ArrowRight,
-  ExternalLink,
-  Laptop,
-  Copy,
-  Check,
   Terminal,
   Cpu,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  ExternalLink,
+  ArrowRight,
   HardDrive,
-  Info,
-  Layers,
-  HelpCircle,
-  XCircle,
   Wifi,
-  Radio,
-  BookOpen,
+  WifiOff,
+  Download,
+  Layers,
+  Activity,
+  Play,
+  Monitor,
+  Check,
+  ChevronRight,
+  Zap,
 } from 'lucide-react';
-import Link from 'next/link';
+import { CortexLogo } from '@/components/brand/CortexLogo';
 
-export default function LockdownStudentDashboardPage() {
-  const [copiedHash, setCopiedHash] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'requirements' | 'install' | 'privacy' | 'troubleshoot'>('overview');
+interface TelemetryEntry {
+  id: string;
+  timestamp: string;
+  source: string;
+  severity: 'INFO' | 'WARN' | 'CRITICAL' | 'SUCCESS';
+  message: string;
+}
 
-  const copyToClipboard = (text: string, label: string) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      setCopiedHash(label);
-      setTimeout(() => setCopiedHash(null), 2500);
+export default function LockdownProductPage() {
+  // Simulator Interactive States
+  const [isObsBlackout, setIsObsBlackout] = useState(false);
+  const [isKeyboardHookSimulated, setIsKeyboardHookSimulated] = useState(false);
+  const [isWatchdogSimulated, setIsWatchdogSimulated] = useState(false);
+  const [isNetworkOffline, setIsNetworkOffline] = useState(false);
+  const [offlineBufferCount, setOfflineBufferCount] = useState(0);
+  const [simulatedTime, setSimulatedTime] = useState(10);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Telemetry Log Stream
+  const [telemetryLogs, setTelemetryLogs] = useState<TelemetryEntry[]>([
+    {
+      id: 'init-1',
+      timestamp: '14:40:02.108',
+      source: 'WIN32_KIOSK',
+      severity: 'INFO',
+      message: 'Native kiosk process initialized. TopMost=true, FormBorderStyle=None.',
+    },
+    {
+      id: 'init-2',
+      timestamp: '14:40:02.142',
+      source: 'DISPLAY_AFFINITY',
+      severity: 'SUCCESS',
+      message: 'SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) returned TRUE.',
+    },
+    {
+      id: 'init-3',
+      timestamp: '14:40:02.190',
+      source: 'KEYBOARD_HOOK',
+      severity: 'SUCCESS',
+      message: 'Low-level keyboard hook (WH_KEYBOARD_LL) attached to thread message loop.',
+    },
+    {
+      id: 'init-4',
+      timestamp: '14:40:02.245',
+      source: 'PROCESS_WATCHDOG',
+      severity: 'INFO',
+      message: 'Process watchdog daemon active. Blacklist database loaded (42 signatures).',
+    },
+    {
+      id: 'init-5',
+      timestamp: '14:40:02.310',
+      source: 'STATE_ENGINE',
+      severity: 'INFO',
+      message: '10s auto-save sync loop armed. Edge transaction channel connected.',
+    },
+  ]);
+
+  // Periodic Auto-save Simulation Timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSimulatedTime((prev) => {
+        if (prev <= 1) {
+          if (isNetworkOffline) {
+            setOfflineBufferCount((c) => c + 1);
+            addLog(
+              'STATE_ENGINE',
+              'WARN',
+              'Offline sync trigger: Transaction buffered to AES-GCM local ring storage.'
+            );
+          } else {
+            addLog(
+              'STATE_ENGINE',
+              'SUCCESS',
+              '10s Auto-save: State snapshot committed to Cloudflare D1 (latency: 14ms).'
+            );
+          }
+          return 10;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isNetworkOffline]);
+
+  const addLog = (
+    source: string,
+    severity: 'INFO' | 'WARN' | 'CRITICAL' | 'SUCCESS',
+    message: string
+  ) => {
+    const now = new Date();
+    const timeStr = now.toISOString().slice(11, 23);
+    setTelemetryLogs((prev) => [
+      {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: timeStr,
+        source,
+        severity,
+        message,
+      },
+      ...prev.slice(0, 24),
+    ]);
+  };
+
+  // Simulation Triggers
+  const handleToggleObsBlackout = () => {
+    const nextState = !isObsBlackout;
+    setIsObsBlackout(nextState);
+    if (nextState) {
+      addLog(
+        'WDA_EXCLUDEFROMCAPTURE',
+        'CRITICAL',
+        '[THREAT DETECTED] External screen capture / DWM hook detected. Display pipeline rendering 0x000000 black surface.'
+      );
+    } else {
+      addLog(
+        'WDA_EXCLUDEFROMCAPTURE',
+        'INFO',
+        'Direct3D presentation buffer restored to primary monitor workspace.'
+      );
     }
   };
 
-  const SETUP_EXE_HASH = '726E4618990C614DF6AF947F72167244BD51C37F21396D0889A3F0CD62FCF0C6';
-  const HARDENED_PAYLOAD_HASH = '82518B2D6966E3FB358892A040F148E52AA5ECDF8CAB92E0D93A2A22F3AFC895';
-  const EXE_HASH = SETUP_EXE_HASH;
-  const ZIP_HASH = '08BD0C5AAC9C5E7466D09A11A7E1A70F4203E131097F4C843C71231772CA6B30';
-  const EXE_SIZE = '60,928 bytes (~60 KB)';
-  const SETUP_SIZE = '60,928 bytes (~60 KB)';
-  const HARDENED_SIZE = '35,840 bytes (35 KB)';
-  const APP_VERSION = '1.0.0-rc1.2';
+  const handleSimulateKeyboardHook = () => {
+    setIsKeyboardHookSimulated(true);
+    addLog(
+      'WH_KEYBOARD_LL',
+      'CRITICAL',
+      '[BLOCKED] Intercepted VK_TAB + VK_MENU (Alt+Tab). Discarding keycode 0x09. Suppressed task-switch.'
+    );
+    setTimeout(() => {
+      setIsKeyboardHookSimulated(false);
+    }, 3500);
+  };
+
+  const handleSimulateWatchdog = () => {
+    setIsWatchdogSimulated(true);
+    addLog(
+      'PROCESS_WATCHDOG',
+      'CRITICAL',
+      '[THREAT DETECTED] Blacklisted executable detected: "obs64.exe" (PID: 4912). Incident logged to D1 audit ledger.'
+    );
+    setTimeout(() => {
+      setIsWatchdogSimulated(false);
+    }, 4500);
+  };
+
+  const handleToggleNetwork = () => {
+    const nextOffline = !isNetworkOffline;
+    setIsNetworkOffline(nextOffline);
+    if (nextOffline) {
+      addLog(
+        'STATE_ENGINE',
+        'WARN',
+        '[NETWORK DROP] Edge transport link severed. Switched to offline AES-GCM local ring buffer.'
+      );
+    } else {
+      const synced = offlineBufferCount;
+      setOfflineBufferCount(0);
+      addLog(
+        'STATE_ENGINE',
+        'SUCCESS',
+        `[NETWORK RESTORED] Edge link reconnected. ${synced} buffered snapshot(s) flushed and committed to D1 SQL.`
+      );
+    }
+  };
+
+  const handleResetSimulator = () => {
+    setIsObsBlackout(false);
+    setIsKeyboardHookSimulated(false);
+    setIsWatchdogSimulated(false);
+    setIsNetworkOffline(false);
+    setOfflineBufferCount(0);
+    setSimulatedTime(10);
+    addLog('SIMULATOR_CORE', 'INFO', 'Security simulation state engine reset to idle baseline.');
+  };
+
+  const handleCopyLink = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#0B0C10] text-[#F9FAFB] flex flex-col font-sans select-none bg-[radial-gradient(#1e2129_1px,transparent_1px)] [background-size:24px_24px]">
-      {/* Top Header / Navigation */}
-      <header className="h-16 border-b border-[#1f2024] bg-[#0B0C10]/95 backdrop-blur-md px-4 sm:px-8 lg:px-12 flex items-center justify-between sticky top-0 z-40">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#FF9100]/10 border border-[#FF9100]/30 flex items-center justify-center text-[#FF9100]">
-            <Shield className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="font-heading font-black text-sm text-white tracking-wider">CORTEX LOCKDOWN</span>
-            <span className="text-[10px] text-gray-400 block font-mono">EXAMINATION CLIENT PORTAL</span>
-          </div>
-        </Link>
+    <div className="min-h-screen bg-[#08090A] text-[#E6EDF3] flex flex-col font-sans select-none relative overflow-x-hidden">
+      {/* Background Radial Glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-gradient-to-b from-[#FF9100]/10 via-[#FF9100]/5 to-transparent blur-3xl pointer-events-none -z-10" />
 
-        <div className="flex items-center gap-3 text-xs font-semibold">
+      {/* 1. Global Navigation Header */}
+      <header className="h-14 border-b border-[#1F2024] bg-[#0B0C0E]/90 backdrop-blur-md px-4 sm:px-8 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center group transition" title="Cortex — Home">
+            <CortexLogo variant="header" size="sm" />
+          </Link>
+          <div className="h-4 w-px bg-[#1F2024] hidden sm:block" />
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="font-heading font-bold text-xs tracking-wider text-white">
+              CORTEX BROWSER
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-[#FF9100]/10 text-[#FF9100] border border-[#FF9100]/30">
+              PRODUCT 03
+            </span>
+          </div>
+        </div>
+
+        {/* Global Links */}
+        <nav className="flex items-center gap-2 text-xs font-semibold">
+          <Link
+            href="/ide"
+            className="px-2.5 py-1.5 rounded text-gray-400 hover:text-white hover:bg-[#16171C] transition hidden md:inline-flex items-center gap-1.5"
+          >
+            <span>Cloud IDE</span>
+          </Link>
           <Link
             href="/classroom"
-            className="text-gray-400 hover:text-white transition hidden sm:inline-block"
+            className="px-2.5 py-1.5 rounded text-gray-400 hover:text-white hover:bg-[#16171C] transition hidden md:inline-flex items-center gap-1.5"
           >
-            Classroom Portal
+            <span>Classroom Suite</span>
           </Link>
           <Link
             href="/lockdown/download"
-            className="text-gray-400 hover:text-[#00E5FF] transition hidden md:inline-block"
+            className="px-3 py-1.5 rounded bg-[#16171C] hover:bg-[#1F2026] text-gray-200 border border-[#2D3039] transition inline-flex items-center gap-1.5"
           >
-            Alternative Packages
+            <Download className="w-3.5 h-3.5 text-[#FF9100]" />
+            <span>Download Client</span>
           </Link>
-          <a
-            href="/api/v1/lockdown/downloads/CortexLockdown-Setup.exe"
-            className="h-8 px-3.5 rounded-lg bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-[#FF9100]/10"
+          <Link
+            href="/lockdown/workspace"
+            className="px-3 py-1.5 rounded bg-[#FF9100] hover:bg-[#E08000] text-black font-bold transition inline-flex items-center gap-1.5 shadow-sm shadow-[#FF9100]/20"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download</span>
-          </a>
-        </div>
+            <span>Sandbox Workspace</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </nav>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-10">
-        {/* Hero Section */}
-        <div className="text-center space-y-4 max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FF9100]/10 border border-[#FF9100]/30 text-[#FF9100] text-xs font-bold tracking-wide">
-            <Shield className="w-3.5 h-3.5" />
-            <span>OFFICIAL DESKTOP CLIENT</span>
-            <span className="text-gray-500">•</span>
-            <span className="text-gray-300 font-mono">v{APP_VERSION}</span>
+      {/* 2. Hero & Official Status Banner */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-10">
+        <section className="text-center space-y-4 max-w-4xl mx-auto">
+          {/* Prominent Status Badge */}
+          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[#FF9100]/10 border border-[#FF9100]/30 text-[#FF9100] text-xs font-mono font-bold tracking-wider">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF9100] opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF9100]" />
+            </span>
+            <span>BUILDING BY TEAM // COMING SOON // PLACEHOLDER</span>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-heading font-extrabold text-white tracking-tight leading-tight">
-            Cortex Lockdown for Windows
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-heading font-extrabold text-white tracking-tight leading-tight">
+            CORTEX LOCKDOWN BROWSER
           </h1>
-          <p className="text-xs sm:text-sm text-gray-400 leading-relaxed max-w-2xl mx-auto">
-            A hardened desktop examination environment engineered to ensure testing fairness. Provides full-screen kiosk isolation, system shortcut suppression, screen capture protection, and tamper-evident local persistence.
+
+          <p className="text-sm sm:text-base text-gray-400 max-w-2xl mx-auto leading-relaxed">
+            Native Windows Kiosk Engine (Win32 / C# .NET 4.8 / WebView2). Our engineering team is actively building the final production release of the Cortex Lockdown client. Explore the architectural preview, technical specifications, and interactive security simulation below.
           </p>
 
-          {/* Primary Action Button */}
-          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <a
-              href="/api/v1/lockdown/downloads/CortexLockdown-Setup.exe"
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-xl shadow-[#FF9100]/15 tracking-wide"
-            >
-              <Download className="w-4 h-4" />
-              <span>DOWNLOAD CORTEX LOCKDOWN FOR WINDOWS</span>
-            </a>
-            <Link
-              href="/lockdown/download"
-              className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-[#121316] hover:bg-[#1a1c22] text-gray-300 hover:text-white border border-[#262830] text-xs font-semibold transition flex items-center justify-center gap-2"
-            >
-              <FileText className="w-4 h-4 text-cyan-400" />
-              <span>View All Releases & Hashes</span>
-            </Link>
-          </div>
-
-          {/* Honest Release Status Pill */}
-          <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-gray-400 pt-1">
-            <span className="bg-[#121316] border border-[#22242b] px-2.5 py-1 rounded-md text-gray-300">
-              Target: <strong className="text-white">Windows 10 / 11 (64-bit)</strong>
+          {/* Quick Access Badges */}
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+            <span className="px-3 py-1 rounded bg-[#0B0C0E] border border-[#1F2024] text-[11px] font-mono text-gray-300 flex items-center gap-1.5">
+              <Terminal className="w-3 h-3 text-[#FF9100]" />
+              <span>Target: Windows 10/11 x64</span>
             </span>
-            <span className="bg-[#121316] border border-[#22242b] px-2.5 py-1 rounded-md text-gray-300">
-              Format: <strong className="text-white">Single-File Executable</strong> ({EXE_SIZE})
+            <span className="px-3 py-1 rounded bg-[#0B0C0E] border border-[#1F2024] text-[11px] font-mono text-gray-300 flex items-center gap-1.5">
+              <Cpu className="w-3 h-3 text-[#FF9100]" />
+              <span>Engine: WebView2 + Win32 Hooks</span>
             </span>
-            <span className="bg-[#121316] border border-[#22242b] px-2.5 py-1 rounded-md text-amber-300/90">
-              Status: <strong>Evaluation Release Candidate</strong>
+            <span className="px-3 py-1 rounded bg-[#0B0C0E] border border-[#1F2024] text-[11px] font-mono text-gray-300 flex items-center gap-1.5">
+              <Shield className="w-3 h-3 text-[#FF9100]" />
+              <span>Security Tier: Zero-Trust Examination</span>
             </span>
           </div>
-        </div>
+        </section>
 
-        {/* Security & Code Signing Transparency Notice */}
-        <div className="bg-[#121316] border border-[#FF9100]/30 rounded-2xl p-5 sm:p-6 space-y-3 relative overflow-hidden">
-          <div className="flex items-start gap-3.5">
-            <div className="w-9 h-9 rounded-xl bg-[#FF9100]/10 border border-[#FF9100]/30 text-[#FF9100] flex items-center justify-center shrink-0 mt-0.5">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div className="space-y-1.5 flex-1">
-              <h3 className="text-sm font-heading font-bold text-white flex items-center gap-2">
-                <span>Code Signing Disclosure & Institutional Pre-Authorization</span>
-              </h3>
-              <p className="text-xs text-gray-300 leading-relaxed">
-                Cortex Lockdown v{APP_VERSION} is compiled under a strict <strong className="text-white">INR 0 budget constraint</strong> and is currently unsigned by a commercial Certificate Authority. When launched on unmanaged personal PCs, <strong className="text-white">Microsoft Defender SmartScreen will display an unrecognized application warning</strong>.
-              </p>
-              <div className="text-[11px] text-amber-200/90 font-medium bg-[#FF9100]/10 border border-[#FF9100]/20 rounded-xl p-3 space-y-1">
-                <div>
-                  <strong>Mandatory Policy:</strong> Candidates must never be instructed to click &quot;Run Anyway&quot; or bypass Windows security warnings. For institutional evaluation, testing must take place on campus-managed devices with AppLocker or WDAC pre-authorization matching the authoritative hash below.
-                </div>
+        {/* 3. Interactive Anti-Cheat Security Simulator Card */}
+        <section className="rounded-xl border border-[#1F2024] bg-[#0B0C0E]/95 backdrop-blur-md overflow-hidden shadow-2xl">
+          {/* Card Header */}
+          <div className="px-5 py-4 border-b border-[#1F2024] bg-[#101116] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded bg-[#FF9100]/10 border border-[#FF9100]/30 flex items-center justify-center text-[#FF9100]">
+                <Activity className="w-4 h-4" />
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Section Navigation Tabs */}
-        <div className="flex items-center gap-1.5 border-b border-[#22242a] pb-2 overflow-x-auto text-xs font-semibold">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-3.5 py-2 rounded-lg transition whitespace-nowrap ${
-              activeTab === 'overview'
-                ? 'bg-[#1e1f26] text-[#FF9100] border border-[#FF9100]/30'
-                : 'text-gray-400 hover:text-white hover:bg-[#16171c]'
-            }`}
-          >
-            Overview & Security
-          </button>
-          <button
-            onClick={() => setActiveTab('requirements')}
-            className={`px-3.5 py-2 rounded-lg transition whitespace-nowrap ${
-              activeTab === 'requirements'
-                ? 'bg-[#1e1f26] text-[#FF9100] border border-[#FF9100]/30'
-                : 'text-gray-400 hover:text-white hover:bg-[#16171c]'
-            }`}
-          >
-            System Requirements
-          </button>
-          <button
-            onClick={() => setActiveTab('install')}
-            className={`px-3.5 py-2 rounded-lg transition whitespace-nowrap ${
-              activeTab === 'install'
-                ? 'bg-[#1e1f26] text-[#FF9100] border border-[#FF9100]/30'
-                : 'text-gray-400 hover:text-white hover:bg-[#16171c]'
-            }`}
-          >
-            Installation Guide
-          </button>
-          <button
-            onClick={() => setActiveTab('privacy')}
-            className={`px-3.5 py-2 rounded-lg transition whitespace-nowrap ${
-              activeTab === 'privacy'
-                ? 'bg-[#1e1f26] text-[#FF9100] border border-[#FF9100]/30'
-                : 'text-gray-400 hover:text-white hover:bg-[#16171c]'
-            }`}
-          >
-            Privacy Information
-          </button>
-          <button
-            onClick={() => setActiveTab('troubleshoot')}
-            className={`px-3.5 py-2 rounded-lg transition whitespace-nowrap ${
-              activeTab === 'troubleshoot'
-                ? 'bg-[#1e1f26] text-[#FF9100] border border-[#FF9100]/30'
-                : 'text-gray-400 hover:text-white hover:bg-[#16171c]'
-            }`}
-          >
-            Troubleshooting & Support
-          </button>
-        </div>
-
-        {/* Tab 1: Overview & Security */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 bg-[#121316] border border-[#22242a] rounded-xl space-y-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#00E5FF]/10 text-[#00E5FF] flex items-center justify-center">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <h4 className="text-sm font-bold text-white">Full-Screen Kiosk Mode</h4>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Locks the entire display window to prevent candidate switching to web browsers, messaging tools, or external applications during an active examination.
-                </p>
-              </div>
-
-              <div className="p-5 bg-[#121316] border border-[#22242a] rounded-xl space-y-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#FF9100]/10 text-[#FF9100] flex items-center justify-center">
-                  <Terminal className="w-4 h-4" />
-                </div>
-                <h4 className="text-sm font-bold text-white">Shortcut Suppression</h4>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Interprets low-level keyboard hooks to suppress Alt+Tab, Windows Key, PrintScreen, and Alt+F4, preventing unauthorized multitasking and screen grabs.
-                </p>
-              </div>
-
-              <div className="p-5 bg-[#121316] border border-[#22242a] rounded-xl space-y-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                  <Eye className="w-4 h-4" />
-                </div>
-                <h4 className="text-sm font-bold text-white">Capture Blackout</h4>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Utilizes hardware-accelerated display affinity (WDA_EXCLUDEFROMCAPTURE) to blackout exam content from background recording software and remote desktops.
+              <div>
+                <h2 className="font-heading font-bold text-sm text-white">
+                  Interactive Anti-Cheat Security Simulator
+                </h2>
+                <p className="text-[11px] font-mono text-gray-400">
+                  Simulate live kernel hooks, display exclusion, and telemetry polling
                 </p>
               </div>
             </div>
 
-            {/* Cryptographic Verification Card */}
-            <div className="p-5 sm:p-6 bg-[#121316] border border-[#22242a] rounded-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#00E5FF]" />
-                    Cryptographic Integrity Verification
-                  </h4>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Before executing the binary, verify the SHA-256 digest against the official release record.
-                  </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleResetSimulator}
+                className="px-2.5 py-1 rounded bg-[#16171C] hover:bg-[#1F2026] text-gray-300 border border-[#2D3039] text-xs font-mono transition flex items-center gap-1.5"
+                title="Reset simulation parameters"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Reset Baseline</span>
+              </button>
+              <button
+                onClick={handleCopyLink}
+                className="px-2.5 py-1 rounded bg-[#16171C] hover:bg-[#1F2026] text-gray-300 border border-[#2D3039] text-xs font-mono transition flex items-center gap-1.5"
+                title="Share simulator link"
+              >
+                {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <ExternalLink className="w-3 h-3" />}
+                <span>{copiedLink ? 'Copied' : 'Share'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card Body: Split Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-[#1F2024]">
+            {/* Left Control Column (5 Cols) */}
+            <div className="lg:col-span-5 p-5 space-y-4">
+              <div className="text-xs font-mono uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <Play className="w-3.5 h-3.5 text-[#FF9100]" />
+                <span>Defense Simulation Triggers</span>
+              </div>
+
+              {/* Trigger 1: OBS Screen Capture Exclusion */}
+              <div className="p-3.5 rounded-lg border border-[#1F2024] bg-[#0E0F13] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-white flex items-center gap-1.5">
+                    <EyeOff className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Display Affinity (WDA_EXCLUDE)</span>
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      isObsBlackout
+                        ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    }`}
+                  >
+                    {isObsBlackout ? '[BLOCKED]' : '[NORMAL]'}
+                  </span>
                 </div>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Forces Direct3D surface to return pure black pixels to OBS, Discord, Zoom, Snagit, and Snipping Tool.
+                </p>
                 <button
-                  onClick={() => copyToClipboard(`(Get-FileHash .\\CortexLockdown-Setup.exe -Algorithm SHA256).Hash -eq "${EXE_HASH}"`, 'hash-cmd')}
-                  className="px-3 py-1.5 rounded-lg bg-[#181a22] hover:bg-[#222530] text-xs font-semibold text-gray-300 hover:text-white border border-[#2c303c] transition flex items-center gap-1.5"
+                  onClick={handleToggleObsBlackout}
+                  className={`w-full py-2 px-3 rounded text-xs font-mono font-bold transition flex items-center justify-center gap-2 ${
+                    isObsBlackout
+                      ? 'bg-red-600 hover:bg-red-500 text-white'
+                      : 'bg-[#1F2026] hover:bg-[#2A2B35] text-gray-200 border border-[#2D3039]'
+                  }`}
                 >
-                  {copiedHash === 'hash-cmd' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedHash === 'hash-cmd' ? 'Copied' : 'Copy PowerShell Check'}</span>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{isObsBlackout ? 'Disable Capture Blackout' : 'Simulate External Stream / OBS Capture'}</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 bg-[#0a0a0d] border border-[#1e2028] rounded-lg space-y-1">
-                  <div className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">Installer Digest (CortexLockdown-Setup.exe):</div>
-                  <div className="font-mono text-xs text-[#00E5FF] break-all select-all">
-                    {SETUP_EXE_HASH}
+              {/* Trigger 2: Keyboard Hook Intercept */}
+              <div className="p-3.5 rounded-lg border border-[#1F2024] bg-[#0E0F13] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-white flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Low-Level Keyboard Hook</span>
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      isKeyboardHookSimulated
+                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                        : 'bg-gray-800 text-gray-400 border border-gray-700'
+                    }`}
+                  >
+                    {isKeyboardHookSimulated ? '[INTERCEPTED]' : '[ARMED]'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Win32 WH_KEYBOARD_LL hook intercepts and drops Alt+Tab, WinKey, Ctrl+Esc, and PrintScreen before Windows shell processing.
+                </p>
+                <button
+                  onClick={handleSimulateKeyboardHook}
+                  disabled={isKeyboardHookSimulated}
+                  className="w-full py-2 px-3 rounded text-xs font-mono font-bold bg-[#1F2026] hover:bg-[#2A2B35] disabled:opacity-50 text-gray-200 border border-[#2D3039] transition flex items-center justify-center gap-2"
+                >
+                  <Terminal className="w-3.5 h-3.5 text-[#FF9100]" />
+                  <span>Simulate Alt+Tab / WinKey Drop</span>
+                </button>
+              </div>
+
+              {/* Trigger 3: Process Watchdog */}
+              <div className="p-3.5 rounded-lg border border-[#1F2024] bg-[#0E0F13] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-white flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Process Watchdog (1,500ms)</span>
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      isWatchdogSimulated
+                        ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    }`}
+                  >
+                    {isWatchdogSimulated ? '[THREAT FLAGGED]' : '[POLLING]'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Background daemon scans active process snapshots against a 40+ signature blacklist every 1,500ms.
+                </p>
+                <button
+                  onClick={handleSimulateWatchdog}
+                  disabled={isWatchdogSimulated}
+                  className="w-full py-2 px-3 rounded text-xs font-mono font-bold bg-[#1F2026] hover:bg-[#2A2B35] disabled:opacity-50 text-gray-200 border border-[#2D3039] transition flex items-center justify-center gap-2"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Simulate Prohibited Process Launch</span>
+                </button>
+              </div>
+
+              {/* Trigger 4: 10s Auto-Save & Offline Buffer */}
+              <div className="p-3.5 rounded-lg border border-[#1F2024] bg-[#0E0F13] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-white flex items-center gap-1.5">
+                    <HardDrive className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>10s State Engine & Buffer</span>
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      isNetworkOffline
+                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    }`}
+                  >
+                    {isNetworkOffline ? `[OFFLINE // ${offlineBufferCount} QUEUED]` : '[CONNECTED]'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-gray-400">
+                  <span>Next sync cadence in:</span>
+                  <span className="font-mono text-[#FF9100] font-bold">{simulatedTime}s</span>
+                </div>
+                <button
+                  onClick={handleToggleNetwork}
+                  className={`w-full py-2 px-3 rounded text-xs font-mono font-bold transition flex items-center justify-center gap-2 ${
+                    isNetworkOffline
+                      ? 'bg-amber-600 hover:bg-amber-500 text-black'
+                      : 'bg-[#1F2026] hover:bg-[#2A2B35] text-gray-200 border border-[#2D3039]'
+                  }`}
+                >
+                  {isNetworkOffline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+                  <span>{isNetworkOffline ? 'Restore Edge Connection & Flush Buffer' : 'Simulate Network Drop (Offline Buffer)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Right Display & Live Telemetry Column (7 Cols) */}
+            <div className="lg:col-span-7 p-5 flex flex-col space-y-4">
+              {/* Virtual Kiosk Screen Simulation */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-gray-400">
+                  <span className="flex items-center gap-1.5">
+                    <Monitor className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Simulated Windows Kiosk Viewport</span>
+                  </span>
+                  <span className="text-[11px] text-gray-500">Resolution: 1920x1080 Borderless</span>
+                </div>
+
+                <div className="relative rounded-lg border border-[#1F2024] bg-black h-56 sm:h-64 overflow-hidden flex flex-col">
+                  {/* Title Bar Simulation */}
+                  <div className="h-7 bg-[#101116] border-b border-[#1F2024] px-3 flex items-center justify-between text-[10px] font-mono text-gray-400 select-none">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                      <span>CortexLockdown.exe — Examination Session: #EX-2026-9041</span>
+                    </div>
+                    <span>AFFINITY: WDA_EXCLUDEFROMCAPTURE</span>
                   </div>
-                  <div className="text-[10px] text-gray-500 font-mono">Size: 60,928 bytes (~60 KB)</div>
+
+                  {/* Viewport Content */}
+                  {isObsBlackout ? (
+                    /* Blackout State */
+                    <div className="flex-1 bg-black flex flex-col items-center justify-center p-6 text-center space-y-2 animate-fadeIn">
+                      <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500">
+                        <EyeOff className="w-5 h-5" />
+                      </div>
+                      <div className="font-mono text-xs font-bold text-red-400">
+                        [OBS / EXTERNAL STREAM BLACKOUT ACTIVE]
+                      </div>
+                      <p className="text-[11px] font-mono text-gray-500 max-w-sm">
+                        Direct3D swap-chain presentation surface excluded from Windows Desktop Duplication API. Frame output rendered as 0x000000.
+                      </p>
+                    </div>
+                  ) : (
+                    /* Active Examination State */
+                    <div className="flex-1 p-4 bg-[#0B0C0E] flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-[#1F2024] pb-2">
+                          <span className="text-xs font-bold text-white">
+                            Question 14 of 30: Distributed Consensus Protocols
+                          </span>
+                          <span className="text-[11px] font-mono text-[#FF9100]">Time Remaining: 42:18</span>
+                        </div>
+                        <p className="text-xs text-gray-300 leading-relaxed font-sans">
+                          Which mechanism in Raft consensus prevents split-vote cycles during candidate leader elections?
+                        </p>
+                        <div className="space-y-1.5 text-xs text-gray-400 font-mono">
+                          <div className="p-1.5 rounded bg-[#16171C] border border-[#2D3039] text-gray-300">
+                            [A] Randomized election timeouts
+                          </div>
+                          <div className="p-1.5 rounded bg-[#16171C] border border-[#2D3039]">
+                            [B] Two-phase commit barriers
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Overlay Toast Alerts */}
+                      {isKeyboardHookSimulated && (
+                        <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono flex items-center gap-2 animate-pulse">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>[HOOK INTERCEPT] Alt+Tab suppressed. Keycode discarded.</span>
+                        </div>
+                      )}
+
+                      {isWatchdogSimulated && (
+                        <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono flex items-center gap-2 animate-pulse">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>[CRITICAL] Blacklisted process obs64.exe detected. Event logged.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="p-3 bg-[#0a0a0d] border border-[#1e2028] rounded-lg space-y-1">
-                  <div className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">Hardened Payload Digest (CortexLockdown-Hardened.exe):</div>
-                  <div className="font-mono text-xs text-amber-300/90 break-all select-all">
-                    {HARDENED_PAYLOAD_HASH}
-                  </div>
-                  <div className="text-[10px] text-gray-500 font-mono">Size: 35,840 bytes (35 KB) • Campus IT AppLocker Rule</div>
+              </div>
+
+              {/* Live Monospace Telemetry Stream */}
+              <div className="flex-1 space-y-2 flex flex-col min-h-[160px]">
+                <div className="flex items-center justify-between text-xs font-mono uppercase tracking-wider text-gray-400">
+                  <span className="flex items-center gap-1.5">
+                    <Terminal className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Real-time Telemetry Stream</span>
+                  </span>
+                  <span className="text-[10px] text-gray-500">Live UTC Stream</span>
+                </div>
+
+                <div className="flex-1 bg-[#050607] rounded-lg border border-[#1F2024] p-3 font-mono text-[11px] overflow-y-auto max-h-48 space-y-1.5 select-text">
+                  {telemetryLogs.map((log) => {
+                    const badgeColor =
+                      log.severity === 'CRITICAL'
+                        ? 'text-red-400'
+                        : log.severity === 'WARN'
+                        ? 'text-amber-400'
+                        : log.severity === 'SUCCESS'
+                        ? 'text-emerald-400'
+                        : 'text-gray-400';
+                    return (
+                      <div key={log.id} className="flex items-start gap-2 leading-tight">
+                        <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
+                        <span className={`font-bold shrink-0 ${badgeColor}`}>[{log.source}]</span>
+                        <span className="text-gray-300 break-all">{log.message}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </section>
 
-        {/* Tab 2: System Requirements */}
-        {activeTab === 'requirements' && (
-          <div className="p-6 bg-[#121316] border border-[#22242a] rounded-xl space-y-6">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Monitor className="w-5 h-5 text-[#FF9100]" />
-                Windows System Requirements
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">
-                Verify your candidate computer meets these specifications prior to examination day.
+        {/* 4. Architecture Specifications Grid */}
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="font-heading font-bold text-lg text-white">
+              Cortex Lockdown Architecture Specifications
+            </h3>
+            <p className="text-xs font-mono text-gray-400">
+              Low-level Win32 security subsystems enforced at kernel and user mode
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Spec 1: Display Affinity */}
+            <div className="p-4 rounded-xl border border-[#1F2024] bg-[#0B0C0E] space-y-2.5 hover:border-[#FF9100]/40 transition">
+              <div className="w-8 h-8 rounded-lg bg-[#FF9100]/10 border border-[#FF9100]/30 flex items-center justify-center text-[#FF9100]">
+                <EyeOff className="w-4 h-4" />
+              </div>
+              <h4 className="font-heading font-bold text-sm text-white">
+                Win32 Display Affinity
+              </h4>
+              <p className="text-xs text-gray-400 leading-relaxed font-mono">
+                SetWindowDisplayAffinity with flag WDA_EXCLUDEFROMCAPTURE (0x00000011). Prevents DWM frame capture by screen recorders and remote desktop software.
               </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="text-gray-400 text-[11px] font-semibold block uppercase">Operating System</span>
-                <span className="text-white font-bold text-sm block">Windows 10 / 11 (64-bit)</span>
-                <span className="text-gray-400 text-[11px] block">Windows 10 Version 2004 or newer required for screen capture exclusion API.</span>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="text-gray-400 text-[11px] font-semibold block uppercase">Runtime Framework</span>
-                <span className="text-white font-bold text-sm block">.NET Framework 4.8+</span>
-                <span className="text-gray-400 text-[11px] block">Pre-installed by default on modern Windows 10 and 11 distributions.</span>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="text-gray-400 text-[11px] font-semibold block uppercase">Browser Component</span>
-                <span className="text-white font-bold text-sm block">Edge WebView2 Evergreen</span>
-                <span className="text-gray-400 text-[11px] block">Powers secure assessment rendering; standard in Windows 10/11.</span>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="text-gray-400 text-[11px] font-semibold block uppercase">System Memory (RAM)</span>
-                <span className="text-white font-bold text-sm block">4 GB Minimum (8 GB Rec.)</span>
-                <span className="text-gray-400 text-[11px] block">Client process footprint is compact (&lt; 90 MB working set).</span>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="text-gray-400 text-[11px] font-semibold block uppercase">Available Disk Space</span>
-                <span className="text-white font-bold text-sm block">150 MB Free Space</span>
-                <span className="text-gray-400 text-[11px] block">Used for encrypted SQLite offline persistence and cached UI assets.</span>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="text-gray-400 text-[11px] font-semibold block uppercase">Display Configuration</span>
-                <span className="text-white font-bold text-sm block">Single Physical Monitor</span>
-                <span className="text-gray-400 text-[11px] block">Secondary monitors must be disconnected before launching an exam.</span>
+              <div className="pt-2 border-t border-[#1F2024] text-[10px] font-mono text-gray-500">
+                Layer: User32 / D3D11 SwapChain
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Tab 3: Installation Guide */}
-        {activeTab === 'install' && (
-          <div className="p-6 bg-[#121316] border border-[#22242a] rounded-xl space-y-6">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Laptop className="w-5 h-5 text-[#00E5FF]" />
-                Step-by-Step Installation Instructions
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">
-                Follow these four steps to install Cortex Lockdown on your evaluation computer.
+            {/* Spec 2: Low-Level Hook */}
+            <div className="p-4 rounded-xl border border-[#1F2024] bg-[#0B0C0E] space-y-2.5 hover:border-[#FF9100]/40 transition">
+              <div className="w-8 h-8 rounded-lg bg-[#FF9100]/10 border border-[#FF9100]/30 flex items-center justify-center text-[#FF9100]">
+                <Lock className="w-4 h-4" />
+              </div>
+              <h4 className="font-heading font-bold text-sm text-white">
+                Low-Level Keyboard Hook
+              </h4>
+              <p className="text-xs text-gray-400 leading-relaxed font-mono">
+                SetWindowsHookEx(WH_KEYBOARD_LL) dropping Alt+Tab, Alt+Esc, WinKey, Ctrl+Esc, Ctrl+Shift+Esc, and PrintScreen. Supervisor override: Ctrl+Alt+F10.
               </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex gap-4 p-4 bg-[#16171d] border border-[#262832] rounded-xl">
-                <div className="w-7 h-7 rounded-lg bg-[#FF9100]/20 text-[#FF9100] flex items-center justify-center font-bold text-xs shrink-0">
-                  1
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h4 className="text-xs font-bold text-white">Download the Executable</h4>
-                  <p className="text-xs text-gray-400">
-                    Download <code className="text-[#00E5FF]">CortexLockdown-Setup.exe</code> from the button above and place it in a local directory (e.g., your Desktop or Downloads folder).
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 p-4 bg-[#16171d] border border-[#262832] rounded-xl">
-                <div className="w-7 h-7 rounded-lg bg-[#FF9100]/20 text-[#FF9100] flex items-center justify-center font-bold text-xs shrink-0">
-                  2
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h4 className="text-xs font-bold text-white">Verify Cryptographic Checksum</h4>
-                  <p className="text-xs text-gray-400">
-                    Open Windows PowerShell in the folder where the file is downloaded and run:
-                  </p>
-                  <pre className="p-2.5 bg-[#0a0a0d] border border-[#20222a] rounded text-[11px] font-mono text-gray-300 overflow-x-auto select-all">
-                    Get-FileHash .\CortexLockdown-Setup.exe -Algorithm SHA256
-                  </pre>
-                  <p className="text-[11px] text-gray-500">
-                    Ensure the returned digest matches: <span className="text-gray-300 font-mono">{EXE_HASH}</span>.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 p-4 bg-[#16171d] border border-[#262832] rounded-xl">
-                <div className="w-7 h-7 rounded-lg bg-[#FF9100]/20 text-[#FF9100] flex items-center justify-center font-bold text-xs shrink-0">
-                  3
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h4 className="text-xs font-bold text-white">Protocol Association</h4>
-                  <p className="text-xs text-gray-400">
-                    Cortex Lockdown uses the <code className="text-cyan-400">cortex-lockdown://</code> URI scheme to transition securely from the browser into kiosk mode. Run the executable once or use the IT deployment runbook to complete registration.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 p-4 bg-[#16171d] border border-[#262832] rounded-xl">
-                <div className="w-7 h-7 rounded-lg bg-[#FF9100]/20 text-[#FF9100] flex items-center justify-center font-bold text-xs shrink-0">
-                  4
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h4 className="text-xs font-bold text-white">Launch Proctored Assessment</h4>
-                  <p className="text-xs text-gray-400">
-                    Navigate to your assigned Classroom examination, complete the 5-step readiness check, and click <strong className="text-white">&quot;Launch in Cortex Lockdown&quot;</strong>.
-                  </p>
-                </div>
+              <div className="pt-2 border-t border-[#1F2024] text-[10px] font-mono text-gray-500">
+                Layer: Win32 Message Loop Hook
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Tab 4: Privacy Information */}
-        {activeTab === 'privacy' && (
-          <div className="p-6 bg-[#121316] border border-[#22242a] rounded-xl space-y-6">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Shield className="w-5 h-5 text-emerald-400" />
-                Privacy & Data Retention Disclosures
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">
-                Cortex Lockdown enforces transparent boundaries. We only monitor indicators strictly relevant to exam integrity.
+            {/* Spec 3: Process Watchdog */}
+            <div className="p-4 rounded-xl border border-[#1F2024] bg-[#0B0C0E] space-y-2.5 hover:border-[#FF9100]/40 transition">
+              <div className="w-8 h-8 rounded-lg bg-[#FF9100]/10 border border-[#FF9100]/30 flex items-center justify-center text-[#FF9100]">
+                <Cpu className="w-4 h-4" />
+              </div>
+              <h4 className="font-heading font-bold text-sm text-white">
+                Process Watchdog Daemon
+              </h4>
+              <p className="text-xs text-gray-400 leading-relaxed font-mono">
+                Continuous 1,500ms background thread polling active process handles against a 40+ entry blacklist (Discord, OBS, AnyDesk, TeamViewer, CheatEngine).
               </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-3">
-                <h4 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
-                  <CheckCircle2 className="w-4 h-4" />
-                  What Cortex Lockdown Monitors
-                </h4>
-                <ul className="text-xs text-gray-300 space-y-2 list-disc pl-4">
-                  <li>Active process names against a predefined blacklist of screen recorders, remote desktop clients, and debuggers.</li>
-                  <li>System key combinations (Alt+Tab, WinKey, PrintScreen) to suppress app switching during exams.</li>
-                  <li>Number of connected physical and virtual monitors to enforce single-display testing.</li>
-                  <li>Periodic network heartbeat and submission timestamps to verify continuous presence.</li>
-                </ul>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-3">
-                <h4 className="text-xs font-bold text-red-400 flex items-center gap-1.5 uppercase tracking-wider">
-                  <XCircle className="w-4 h-4" />
-                  What Cortex Lockdown Never Does
-                </h4>
-                <ul className="text-xs text-gray-300 space-y-2 list-disc pl-4">
-                  <li><strong>Zero Keylogging:</strong> Individual alphanumeric keystrokes are never recorded or logged.</li>
-                  <li><strong>No Hidden Recording:</strong> No continuous desktop audio/video recording is saved without explicit exam proctoring disclosures.</li>
-                  <li><strong>No File Scanning:</strong> Personal directories, emails, browser histories, and photos are never touched or inspected.</li>
-                  <li><strong>No Persistence:</strong> Exiting the examination stops all monitoring. No background services remain running.</li>
-                </ul>
+              <div className="pt-2 border-t border-[#1F2024] text-[10px] font-mono text-gray-500">
+                Layer: Background Thread Polling
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Tab 5: Troubleshooting & Support */}
-        {activeTab === 'troubleshoot' && (
-          <div className="p-6 bg-[#121316] border border-[#22242a] rounded-xl space-y-6">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <HelpCircle className="w-5 h-5 text-amber-400" />
-                Troubleshooting & Support Information
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">
-                Solutions to the most common setup and launch difficulties.
+            {/* Spec 4: Auto-Save State Engine */}
+            <div className="p-4 rounded-xl border border-[#1F2024] bg-[#0B0C0E] space-y-2.5 hover:border-[#FF9100]/40 transition">
+              <div className="w-8 h-8 rounded-lg bg-[#FF9100]/10 border border-[#FF9100]/30 flex items-center justify-center text-[#FF9100]">
+                <HardDrive className="w-4 h-4" />
+              </div>
+              <h4 className="font-heading font-bold text-sm text-white">
+                10s Transactional Engine
+              </h4>
+              <p className="text-xs text-gray-400 leading-relaxed font-mono">
+                Auto-saves every 10 seconds to Cloudflare D1 with client-side AES-GCM encrypted ring storage buffer for zero answer loss during transient drops.
               </p>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="font-bold text-white block">Microsoft Defender SmartScreen Warning (&quot;Windows protected your PC&quot;)</span>
-                <p className="text-gray-400 leading-relaxed">
-                  Because Cortex Lockdown is currently unsigned by a commercial CA (preserving zero budget), Windows displays an &quot;Unknown Publisher&quot; warning. In institutional campus environments, your lab administrator will have pre-authorized the executable via AppLocker or WDAC. If you are taking an exam on a managed campus PC, contact your lab proctor if this screen appears.
-                </p>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="font-bold text-white block">Multiple Display Detected Error</span>
-                <p className="text-gray-400 leading-relaxed">
-                  Cortex Lockdown enforces single-display proctoring to prevent off-screen reference material. Disconnect all external monitors, HDMI cables, DisplayPort cables, or wireless screens before launching the exam.
-                </p>
-              </div>
-
-              <div className="p-4 bg-[#16171d] border border-[#262832] rounded-xl space-y-1.5">
-                <span className="font-bold text-white block">Protocol Handoff Not Launching</span>
-                <p className="text-gray-400 leading-relaxed">
-                  If clicking &quot;Launch in Cortex Lockdown&quot; does not open the desktop client, ensure that you have run the setup once to register the <code className="text-cyan-400">cortex-lockdown://</code> URI protocol handler in Windows.
-                </p>
+              <div className="pt-2 border-t border-[#1F2024] text-[10px] font-mono text-gray-500">
+                Layer: Cloudflare Edge + Local Storage
               </div>
             </div>
           </div>
-        )}
+        </section>
+
+        {/* 5. Navigation & Next Actions */}
+        <section className="p-6 rounded-xl border border-[#1F2024] bg-[#0E0F13] flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-1 text-center md:text-left">
+            <h4 className="font-heading font-bold text-base text-white">
+              Ready to Explore More Cortex Platforms?
+            </h4>
+            <p className="text-xs text-gray-400">
+              Access the other standalone suites in the decoupled ecosystem.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+            <Link
+              href="/lockdown/download"
+              className="px-4 py-2 rounded-lg bg-[#16171C] hover:bg-[#1F2026] text-gray-200 border border-[#2D3039] transition inline-flex items-center gap-2"
+            >
+              <Download className="w-4 h-4 text-[#FF9100]" />
+              <span>Download Windows Client</span>
+            </Link>
+            <Link
+              href="/lockdown/workspace"
+              className="px-4 py-2 rounded-lg bg-[#16171C] hover:bg-[#1F2026] text-gray-200 border border-[#2D3039] transition inline-flex items-center gap-2"
+            >
+              <Zap className="w-4 h-4 text-emerald-400" />
+              <span>Launch Examination Sandbox</span>
+            </Link>
+            <Link
+              href="/ide"
+              className="px-4 py-2 rounded-lg bg-[#16171C] hover:bg-[#1F2026] text-gray-200 border border-[#2D3039] transition inline-flex items-center gap-2"
+            >
+              <Terminal className="w-4 h-4 text-[#FF9100]" />
+              <span>Launch Cloud IDE</span>
+            </Link>
+            <Link
+              href="/classroom"
+              className="px-4 py-2 rounded-lg bg-[#FF9100] hover:bg-[#E08000] text-black font-bold transition inline-flex items-center gap-2"
+            >
+              <span>Enter Classroom Suite</span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-[#1f2024] bg-[#0a0b0d] py-8 px-4 sm:px-8 text-center text-xs text-gray-500 space-y-2">
-        <div className="flex items-center justify-center gap-4 text-gray-400">
-          <Link href="/classroom" className="hover:text-white transition">Classroom</Link>
-          <span>•</span>
-          <Link href="/lockdown" className="hover:text-white transition">Cortex Lockdown</Link>
-          <span>•</span>
-          <Link href="/lockdown/download" className="hover:text-white transition">Downloads & Checksums</Link>
+      {/* 6. Enterprise Footer */}
+      <footer className="border-t border-[#1F2024] bg-[#0B0C0E] py-8 px-4 sm:px-8 mt-12 text-xs font-mono text-gray-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+            <span className="text-gray-300">SYSTEM STATUS // ALL SYSTEMS OPERATIONAL</span>
+          </div>
+          <div>
+            <span>CORTEX UNIVERSAL CODE PLATFORM — PRODUCT 03: LOCKDOWN BROWSER</span>
+          </div>
         </div>
-        <p>Cortex Learning Systems Inc. • Strict Zero Emojis Enforced • Budget: INR 0</p>
       </footer>
     </div>
   );

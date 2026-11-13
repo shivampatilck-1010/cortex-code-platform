@@ -48,6 +48,7 @@ import {
   Eye,
   EyeOff,
   X,
+  CheckCheck,
   BarChart2,
   CheckCircle2,
   Activity,
@@ -117,7 +118,7 @@ export default function ClassroomHubPage() {
 
   const handleExitToIDE = async () => {
     await hookExitToIDE();
-    window.location.href = '/';
+    window.location.href = '/ide';
   };
 
   // Active Role & User Persona
@@ -1383,7 +1384,7 @@ export default function ClassroomHubPage() {
 
           {/* Logo & Classroom Badge */}
           <div className="flex items-center space-x-2 truncate">
-            <Link href="/" onClick={handleExitToIDE} className="flex items-center group transition shrink-0" title="Cortex — Code Beyond Limits">
+            <Link href="/ide" onClick={handleExitToIDE} className="flex items-center group transition shrink-0" title="Cortex — Code Beyond Limits">
               <CortexLogo variant="header" size="sm" />
             </Link>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#FF9100]/15 text-[#FF9100] border border-[#FF9100]/30 shrink-0">
@@ -2179,7 +2180,7 @@ export default function ClassroomHubPage() {
                                         <div className="break-words">{m.content}</div>
                                         <div className="text-[9px] text-right mt-1 opacity-75 flex items-center justify-end space-x-1 shrink-0">
                                           <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                          {isMe && <span className="text-cyan-300 font-bold ml-1 text-[10px]">✓✓</span>}
+                                          {isMe && <CheckCheck className="w-3 h-3 text-cyan-300 ml-1 inline" />}
                                         </div>
                                       </div>
                                     </div>
@@ -3173,7 +3174,7 @@ export default function ClassroomHubPage() {
           <div className="neon-glass rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Create New Classroom</h4>
-              <button onClick={() => setIsCreateClassModalOpen(false)} className="text-[#E5E5E5] hover:text-white">✕</button>
+              <button onClick={() => setIsCreateClassModalOpen(false)} className="text-[#E5E5E5] hover:text-white p-0.5 rounded" aria-label="Close modal"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleCreateClassroom} className="space-y-3 text-xs">
               <div className="space-y-1">
@@ -3245,7 +3246,7 @@ export default function ClassroomHubPage() {
           <div className="neon-glass rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Join Classroom with Code</h4>
-              <button onClick={() => setIsJoinClassModalOpen(false)} className="text-[#E5E5E5] hover:text-white">✕</button>
+              <button onClick={() => setIsJoinClassModalOpen(false)} className="text-[#E5E5E5] hover:text-white p-0.5 rounded" aria-label="Close modal"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleJoinClassroom} className="space-y-3 text-xs">
               <div className="space-y-1">
@@ -3290,7 +3291,7 @@ export default function ClassroomHubPage() {
           <div className="neon-glass rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Edit Announcement</h4>
-              <button onClick={() => setEditingAnnouncement(null)} className="text-[#E5E5E5] hover:text-white">✕</button>
+              <button onClick={() => setEditingAnnouncement(null)} className="text-[#E5E5E5] hover:text-white p-0.5 rounded" aria-label="Close modal"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleSaveEditAnnouncement} className="space-y-3 text-xs">
               <div className="space-y-1">
@@ -3472,7 +3473,7 @@ export default function ClassroomHubPage() {
           <div className="neon-glass rounded-2xl p-6 max-w-xl w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#525252] pb-3">
               <h4 className="text-sm font-bold text-white">Publish New Assignment</h4>
-              <button onClick={() => setIsCreateAsgModalOpen(false)} className="text-[#E5E5E5] hover:text-white">✕</button>
+              <button onClick={() => setIsCreateAsgModalOpen(false)} className="text-[#E5E5E5] hover:text-white p-0.5 rounded" aria-label="Close modal"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleCreateAssignment} className="space-y-3 text-xs">
               <div className="space-y-1">

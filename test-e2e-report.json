@@ -1,0 +1,314 @@
+{
+  "timestamp": "2026-11-12T16:36:57.609Z",
+  "allPassed": true,
+  "totalDuration": 3364,
+  "totalTests": 15,
+  "totalPassedTests": 15,
+  "totalFailedTests": 0,
+  "totalAssertions": 110,
+  "totalPassedAssertions": 110,
+  "totalFailedAssertions": 0,
+  "summaries": [
+    {
+      "tierName": "Tier 1 - Feature Coverage",
+      "passed": true,
+      "totalTests": 6,
+      "passedTests": 6,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "totalAssertions": 48,
+      "passedAssertions": 48,
+      "failedAssertions": 0,
+      "durationMs": 3042,
+      "results": [
+        {
+          "name": "TC1.1 - Lint and TypeScript Typecheck Execution",
+          "tier": "Tier 1 - Feature Coverage",
+          "status": "passed",
+          "durationMs": 3034,
+          "assertionCount": 5,
+          "details": [
+            "[PASS] package.json must exist in project root",
+            "[PASS] package.json must declare a \"lint\" script",
+            "[PASS] lint script must execute TypeScript compiler with --noEmit (target did not contain expected element)",
+            "[PASS] npm run lint (node ./node_modules/typescript/bin/tsc --noEmit) must exit with code 0 (stderr: ) (expected: 0, got: 0)",
+            "[PASS] npm run lint output must not contain TypeScript errors"
+          ]
+        },
+        {
+          "name": "TC1.2 - Production Next.js Build Compilation",
+          "tier": "Tier 1 - Feature Coverage",
+          "status": "passed",
+          "durationMs": 1,
+          "assertionCount": 4,
+          "details": [
+            "[PASS] package.json must declare a \"build\" script",
+            "[PASS] Next.js .next/BUILD_ID artifact must exist",
+            "[PASS] .next/BUILD_ID must be a non-empty build identifier",
+            "[PASS] Next.js .next/build-manifest.json artifact must exist"
+          ]
+        },
+        {
+          "name": "TC1.3 - Standalone Cortex IDE Route (/ide)",
+          "tier": "Tier 1 - Feature Coverage",
+          "status": "passed",
+          "durationMs": 2,
+          "assertionCount": 8,
+          "details": [
+            "[PASS] src/app/ide/page.tsx must exist",
+            "[PASS] IDE page must contain \"use client\" directive (target did not contain expected element)",
+            "[PASS] IDE page must export default React component function (string did not match pattern: /export\\s+default\\s+function/)",
+            "[PASS] IDE page must import and render MonacoCodeEditor component (target did not contain expected element)",
+            "[PASS] IDE page must integrate interactive TerminalPanel (target did not contain expected element)",
+            "[PASS] IDE page must integrate execution OutputPanel (target did not contain expected element)",
+            "[PASS] IDE page must support multi-language cloud runtime configurations (target did not contain expected element)",
+            "[PASS] Decoupled IDE route must not import classroom or live lecture modules"
+          ]
+        },
+        {
+          "name": "TC1.4 - Standalone Cortex Classroom Route (/classroom)",
+          "tier": "Tier 1 - Feature Coverage",
+          "status": "passed",
+          "durationMs": 1,
+          "assertionCount": 6,
+          "details": [
+            "[PASS] src/app/classroom/page.tsx must exist",
+            "[PASS] Classroom page must contain \"use client\" directive (target did not contain expected element)",
+            "[PASS] Classroom page must export default React component function (string did not match pattern: /export\\s+default\\s+function/)",
+            "[PASS] Classroom page must render Cortex brand logo (string did not match pattern: /CortexLogo/)",
+            "[PASS] Classroom page must contain academic course and room management logic (string did not match pattern: /Course|course|Room|room|Classroom|classroom/)",
+            "[PASS] Classroom page must provide return navigation link to IDE or platform root (string did not match pattern: /href=[\"']\\/ide[\"']|href=[\"']\\/[\"']/)"
+          ]
+        },
+        {
+          "name": "TC1.5 - Standalone Cortex Lockdown Route (/lockdown)",
+          "tier": "Tier 1 - Feature Coverage",
+          "status": "passed",
+          "durationMs": 1,
+          "assertionCount": 10,
+          "details": [
+            "[PASS] src/app/lockdown/page.tsx must exist",
+            "[PASS] Lockdown page must contain \"use client\" directive (target did not contain expected element)",
+            "[PASS] Lockdown page must export default React component function (string did not match pattern: /export\\s+default\\s+function/)",
+            "[PASS] Lockdown page must display status placeholder banner: \"Building by Team // Coming Soon\" (string did not match pattern: /BUILDING BY TEAM \\/\\/ COMING SOON|Building by Team \\/\\/ Coming Soon/i)",
+            "[PASS] Lockdown simulation must demonstrate WDA_EXCLUDEFROMCAPTURE display affinity (target did not contain expected element)",
+            "[PASS] Lockdown simulation must demonstrate WH_KEYBOARD_LL low-level keyboard hook suppression (target did not contain expected element)",
+            "[PASS] Lockdown simulation must demonstrate background process watchdog daemon (string did not match pattern: /Watchdog|watchdog|WATCHDOG/)",
+            "[PASS] Lockdown simulation must demonstrate 10s transactional auto-save engine (string did not match pattern: /10s|10-second|Auto-save|auto-save/i)",
+            "[PASS] Lockdown page must link to /lockdown/download (target did not contain expected element)",
+            "[PASS] Lockdown page must link to /lockdown/workspace (target did not contain expected element)"
+          ]
+        },
+        {
+          "name": "TC1.6 - Scrollytelling Showcase Root Route (/)",
+          "tier": "Tier 1 - Feature Coverage",
+          "status": "passed",
+          "durationMs": 3,
+          "assertionCount": 15,
+          "details": [
+            "[PASS] src/app/page.tsx must exist",
+            "[PASS] src/components/landing directory must exist for modular showcase components",
+            "[PASS] Landing component LandingHeaderNav.tsx must contain substantive implementation",
+            "[PASS] Landing component LandingHero.tsx must contain substantive implementation",
+            "[PASS] Landing component LandingStickyNav.tsx must contain substantive implementation",
+            "[PASS] Landing component IdeProductShowcase.tsx must contain substantive implementation",
+            "[PASS] Landing component ClassroomProductShowcase.tsx must contain substantive implementation",
+            "[PASS] Landing component LockdownProductShowcase.tsx must contain substantive implementation",
+            "[PASS] Landing component TechnicalArchitectureGrid.tsx must contain substantive implementation",
+            "[PASS] Landing component LandingFooter.tsx must contain substantive implementation",
+            "[PASS] All 8 modular landing components must exist (found 8/8) (expected >= 8, got 8)",
+            "[PASS] Root page must render LandingHeaderNav (target did not contain expected element)",
+            "[PASS] Root page must render LandingHero (target did not contain expected element)",
+            "[PASS] Root page must render LandingStickyNav (target did not contain expected element)",
+            "[PASS] Root page must render LandingFooter (target did not contain expected element)"
+          ]
+        }
+      ]
+    },
+    {
+      "tierName": "Tier 2 - Boundary and Corner Cases",
+      "passed": true,
+      "totalTests": 3,
+      "passedTests": 3,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "totalAssertions": 26,
+      "passedAssertions": 26,
+      "failedAssertions": 0,
+      "durationMs": 6,
+      "results": [
+        {
+          "name": "TC2.1 - Query Parameter Resilience for /ide",
+          "tier": "Tier 2 - Boundary and Corner Cases",
+          "status": "passed",
+          "durationMs": 2,
+          "assertionCount": 11,
+          "details": [
+            "[PASS] src/app/ide/page.tsx must exist",
+            "[PASS] IDE page must support parameter parsing or safe default session initialization (string did not match pattern: /useSearchParams|searchParams|projectId|DEFAULT_PROJECT|default/i)",
+            "[PASS] Valid projectId param must be marked valid (expected: true, got: true)",
+            "[PASS] Valid projectId must be preserved (expected: alpha-987, got: alpha-987)",
+            "[PASS] Missing projectId must resolve to invalid/null (expected: false, got: false)",
+            "[PASS] Missing projectId must return null (expected: null, got: null)",
+            "[PASS] Empty projectId must resolve to invalid/null (expected: false, got: false)",
+            "[PASS] Empty projectId must return null (expected: null, got: null)",
+            "[PASS] Malformed characters in projectId must be sanitized without throwing (expected: scriptalert1script, got: scriptalert1script)",
+            "[PASS] URL-encoded projectId must be safely sanitized (expected: mycustomid, got: mycustomid)",
+            "[PASS] Excessively long projectId param must be bounded to <= 128 characters"
+          ]
+        },
+        {
+          "name": "TC2.2 - Edge Route and Subroute Behavior",
+          "tier": "Tier 2 - Boundary and Corner Cases",
+          "status": "passed",
+          "durationMs": 1,
+          "assertionCount": 7,
+          "details": [
+            "[PASS] src/config/languages.ts must exist",
+            "[PASS] Language configurations must define at least 14+ runtimes (found 15) (expected >= 14, got 15)",
+            "[PASS] src/app/lockdown/download/page.tsx must exist",
+            "[PASS] Lockdown download route must export default React component (string did not match pattern: /export\\s+default\\s+function/)",
+            "[PASS] src/app/lockdown/workspace/page.tsx must exist",
+            "[PASS] Lockdown workspace route must export default React component (string did not match pattern: /export\\s+default\\s+function/)",
+            "[PASS] src/app/[compiler]/CompilerClientView.tsx must exist"
+          ]
+        },
+        {
+          "name": "TC2.3 - Empty State and SSR Fallback Stability",
+          "tier": "Tier 2 - Boundary and Corner Cases",
+          "status": "passed",
+          "durationMs": 3,
+          "assertionCount": 8,
+          "details": [
+            "[PASS] IDE page must be declared as a Client Component for browser window access",
+            "[PASS] IDE page must guard browser-only globals (window/navigator) against SSR crashes (string did not match pattern: /typeof\\s+window|useEffect|typeof\\s+navigator/)",
+            "[PASS] Lockdown page must be declared as a Client Component",
+            "[PASS] Lockdown page must guard browser APIs inside useEffect or typeof window checks (string did not match pattern: /useEffect|typeof\\s+window|typeof\\s+navigator/)",
+            "[PASS] Classroom page must be declared as a Client Component",
+            "[PASS] IDE page must provide fallback file state when empty (string did not match pattern: /starterCode|defaultFileName|getStarterContentForFile|files\\.length/)",
+            "[PASS] src/lib/execution/engine.ts must exist",
+            "[PASS] Execution engine must gracefully handle empty test case arrays (string did not match pattern: /testCases|length/)"
+          ]
+        }
+      ]
+    },
+    {
+      "tierName": "Tier 3 - Cross-Feature Combinations",
+      "passed": true,
+      "totalTests": 2,
+      "passedTests": 2,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "totalAssertions": 21,
+      "passedAssertions": 21,
+      "failedAssertions": 0,
+      "durationMs": 6,
+      "results": [
+        {
+          "name": "TC3.1 - Cross-Navigation Link Integrity Across Suites",
+          "tier": "Tier 3 - Cross-Feature Combinations",
+          "status": "passed",
+          "durationMs": 3,
+          "assertionCount": 15,
+          "details": [
+            "[PASS] src/components/layout/Navbar.tsx must exist",
+            "[PASS] Navbar must contain navigation link to platform root (/) (string did not match pattern: /href=[\"']\\/[\"']/)",
+            "[PASS] Navbar must contain navigation link to standalone IDE (/ide) (string did not match pattern: /href=[\"']\\/ide[\"']/)",
+            "[PASS] Navbar must contain navigation link to standalone Classroom (/classroom) (string did not match pattern: /href=[\"']\\/classroom[\"']/)",
+            "[PASS] Navbar must contain navigation link to standalone Lockdown Browser (/lockdown) (string did not match pattern: /href=[\"']\\/lockdown[\"']/)",
+            "[PASS] CompilerClientView.tsx must exist",
+            "[PASS] Compiler view must contain direct action link to Open Full Cloud IDE (/ide) (string did not match pattern: /href=[\"']\\/ide[\"']/)",
+            "[PASS] Compiler view must contain return link to brand root (/) (string did not match pattern: /href=[\"']\\/[\"']/)",
+            "[PASS] src/app/classroom/page.tsx must exist",
+            "[PASS] Classroom suite must provide breadcrumb/navigation back to IDE (/ide) or platform root (/) (string did not match pattern: /href=[\"']\\/ide[\"']|href=[\"']\\/[\"']/)",
+            "[PASS] src/app/lockdown/page.tsx must exist",
+            "[PASS] Lockdown suite must link to /lockdown/download (string did not match pattern: /href=[\"']\\/lockdown\\/download[\"']/)",
+            "[PASS] Lockdown suite must link to /lockdown/workspace (string did not match pattern: /href=[\"']\\/lockdown\\/workspace[\"']/)",
+            "[PASS] Lockdown suite must link to Cloud IDE (/ide) (string did not match pattern: /href=[\"']\\/ide[\"']/)",
+            "[PASS] Lockdown suite must link to Classroom suite (/classroom) (string did not match pattern: /href=[\"']\\/classroom[\"']/)"
+          ]
+        },
+        {
+          "name": "TC3.2 - Decoupled Architecture & Forbidden Cross-Dependencies",
+          "tier": "Tier 3 - Cross-Feature Combinations",
+          "status": "passed",
+          "durationMs": 3,
+          "assertionCount": 6,
+          "details": [
+            "[PASS] src/app/ide/page.tsx must exist",
+            "[PASS] IDE route must not import classroom/live-class dependencies (found: ) (expected: 0, got: 0)",
+            "[PASS] Lockdown route must not import heavy Monaco editor dependencies (found: ) (expected: 0, got: 0)",
+            "[PASS] Classroom route must not import native lockdown hooks (found: ) (expected: 0, got: 0)",
+            "[PASS] IDE must not include low-level lockdown keyboard hook simulation",
+            "[PASS] Classroom must not include win32 display affinity simulation"
+          ]
+        }
+      ]
+    },
+    {
+      "tierName": "Tier 4 - Governance and Workload Simulation",
+      "passed": true,
+      "totalTests": 4,
+      "passedTests": 4,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "totalAssertions": 15,
+      "passedAssertions": 15,
+      "failedAssertions": 0,
+      "durationMs": 304,
+      "results": [
+        {
+          "name": "TC4.1 - Codebase Zero-Emoji Audit (src, public, docs, tests)",
+          "tier": "Tier 4 - Governance and Workload Simulation",
+          "status": "passed",
+          "durationMs": 205,
+          "assertionCount": 2,
+          "details": [
+            "[PASS] Zero-emoji audit must inspect at least 50+ repository text files (found 402) (expected >= 50, got 402)",
+            "[PASS] Strict zero-emoji policy violated! Found 0 emoji characters in codebase () (expected: 0, got: 0)"
+          ]
+        },
+        {
+          "name": "TC4.2 - Git Commit Message Zero-Emoji Governance",
+          "tier": "Tier 4 - Governance and Workload Simulation",
+          "status": "passed",
+          "durationMs": 95,
+          "assertionCount": 2,
+          "details": [
+            "[PASS] Must inspect at least 5 recent git commit messages (expected >= 5, got 50)",
+            "[PASS] Git commit history must contain 0 emojis (found 0) (expected: 0, got: 0)"
+          ]
+        },
+        {
+          "name": "TC4.3 - Technical English Terminology Verification",
+          "tier": "Tier 4 - Governance and Workload Simulation",
+          "status": "passed",
+          "durationMs": 1,
+          "assertionCount": 5,
+          "details": [
+            "[PASS] src/app/lockdown/page.tsx must exist",
+            "[PASS] Lockdown page must declare standard technical English placeholder banner (string did not match pattern: /BUILDING BY TEAM \\/\\/ COMING SOON|Building by Team \\/\\/ Coming Soon/i)",
+            "[PASS] Lockdown page must use exact Win32 security token WDA_EXCLUDEFROMCAPTURE (target did not contain expected element)",
+            "[PASS] Lockdown page must use exact Win32 security token WH_KEYBOARD_LL (target did not contain expected element)",
+            "[PASS] Footer must declare standard operational status: \"SYSTEM STATUS // ALL SYSTEMS OPERATIONAL\" (string did not match pattern: /SYSTEM STATUS \\/\\/ ALL SYSTEMS OPERATIONAL/i)"
+          ]
+        },
+        {
+          "name": "TC4.4 - Production Workload & Bundle Sizing Verification",
+          "tier": "Tier 4 - Governance and Workload Simulation",
+          "status": "passed",
+          "durationMs": 3,
+          "assertionCount": 6,
+          "details": [
+            "[PASS] .next/build-manifest.json must exist",
+            "[PASS] Build manifest must contain pages dictionary",
+            "[PASS] Production build static chunks must exceed 10KB",
+            "[PASS] src/components/landing/TechnicalArchitectureGrid.tsx must exist to declare edge latency benchmarks",
+            "[PASS] Technical architecture grid must specify <50ms worker latency (string did not match pattern: /50ms|<50ms/i)",
+            "[PASS] Technical architecture grid must specify <15ms D1 SQL latency (string did not match pattern: /15ms|<15ms/i)"
+          ]
+        }
+      ]
+    }
+  ]
+}
