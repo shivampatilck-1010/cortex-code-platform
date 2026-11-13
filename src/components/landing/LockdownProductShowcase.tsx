@@ -20,6 +20,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
+import { Aurora, GlowCtaButton, InteractiveWavesBackground } from './EffectsSuite';
 
 interface TelemetryEvent {
   id: string;
@@ -137,6 +138,15 @@ export const LockdownProductShowcase: React.FC = () => {
         isDark ? 'border-[#1F2024] bg-[#08090A] text-[#E6EDF3]' : 'border-slate-200 bg-[#FFFFFF] text-zinc-950'
       }`}
     >
+      {/* Aurora Atmospheric Security Shield Glow */}
+      <Aurora 
+        colorStops={isDark ? ['#FF9100', '#FF3232', '#3A29FF'] : ['#FDBA74', '#FB7185', '#818CF8']}
+        amplitude={1.1}
+        blend={isDark ? 0.45 : 0.28}
+        speed={0.4}
+        className="absolute inset-0 pointer-events-none opacity-45 dark:opacity-30"
+      />
+
       {/* Background Accent */}
       <div 
         className="absolute top-1/2 left-1/3 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none -z-10" 
@@ -168,13 +178,9 @@ export const LockdownProductShowcase: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            <Link
-              href="/lockdown"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider bg-purple-600 text-white hover:bg-purple-500 transition-all shadow-[0_0_20px_rgba(168,85,247,0.25)] group"
-            >
-              <span>EXPLORE SECURITY ARCHITECTURE</span>
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-            </Link>
+            <GlowCtaButton href="/lockdown">
+              EXPLORE SECURITY ARCHITECTURE
+            </GlowCtaButton>
             <a
               href="https://github.com/shivampatilck-1010/cortex-code-platform"
               target="_blank"
@@ -441,6 +447,50 @@ export const LockdownProductShowcase: React.FC = () => {
               <Link href="/classroom" className="hover:text-white transition-colors">
                 Classroom Suite
               </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Telemetry Cut-Out Card with Chamfered Corners and Perlin Waves */}
+        <div className="mt-8">
+          <div 
+            className={`relative p-5 border overflow-hidden transition-colors ${
+              isDark ? 'bg-[#0B0C0E]/90 border-[#1F2024]' : 'bg-white/90 border-slate-300 shadow-md'
+            }`}
+            style={{
+              clipPath: 'polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))',
+            }}
+          >
+            <InteractiveWavesBackground 
+              lineColor={isDark ? 'rgba(255, 145, 0, 0.22)' : 'rgba(234, 88, 12, 0.18)'}
+              waveSpeedX={0.015}
+              waveSpeedY={0.008}
+              waveAmpX={20}
+              waveAmpY={10}
+            />
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-mono tracking-widest text-[#FF9100] uppercase font-bold">
+                    SECURITY TELEMETRY // REAL-TIME KERNEL INTEGRITY
+                  </span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
+                <h4 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                  Cryptographically Sealed Audit Pipeline
+                </h4>
+                <p className={`text-xs mt-1 max-w-2xl leading-relaxed ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  Low-level hooks emit continuous SHA-256 telemetry events with zero PII retention, verifying non-tampered exam execution in institutional testing centers.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="px-3 py-1 rounded bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono font-bold">
+                  WDA_EXCLUDE ACTIVE
+                </span>
+                <span className="px-3 py-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold">
+                  HOOKS NOMINAL
+                </span>
+              </div>
             </div>
           </div>
         </div>

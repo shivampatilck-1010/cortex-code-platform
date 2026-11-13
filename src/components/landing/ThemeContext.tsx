@@ -12,14 +12,14 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'dark',
-  isDark: true,
+  theme: 'light',
+  isDark: false,
   toggleTheme: () => {},
   setTheme: () => {},
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<ThemeMode>('dark');
+  const [theme, setThemeState] = useState<ThemeMode>('light');
   const [mounted, setMounted] = useState<boolean>(false);
 
   useEffect(() => {
@@ -29,14 +29,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setThemeState(storedTheme);
         document.documentElement.classList.toggle('dark', storedTheme === 'dark');
       } else {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initialTheme: ThemeMode = prefersDark ? 'dark' : 'dark'; // Default dark for Cortex flagship
+        const initialTheme: ThemeMode = 'light';
         setThemeState(initialTheme);
-        document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+        document.documentElement.classList.toggle('dark', false);
       }
     } catch {
-      // Fallback for sandboxed or SSR environments
-      document.documentElement.classList.add('dark');
+      // Fallback for sandboxed or SSR environments: default light
+      document.documentElement.classList.remove('dark');
     }
     setMounted(true);
   }, []);

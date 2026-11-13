@@ -16,8 +16,8 @@ import {
   Layers,
   ChevronRight
 } from 'lucide-react';
-import { InteractiveWavesBackground } from '@/components/ui/InteractiveWavesBackground';
 import { useTheme } from './ThemeContext';
+import { Squares, GlowCtaButton, InteractiveWavesBackground } from './EffectsSuite';
 
 interface CodeSnippet {
   language: string;
@@ -174,19 +174,15 @@ export const IdeProductShowcase: React.FC = () => {
         isDark ? 'border-[#1F2024] bg-[#08090A] text-[#E6EDF3]' : 'border-slate-200 bg-[#FFFFFF] text-zinc-950'
       }`}
     >
-      {/* Background Accent Waves */}
-      <div className={`absolute inset-0 pointer-events-none ${isDark ? 'opacity-20' : 'opacity-70'}`}>
-        <InteractiveWavesBackground 
-          lineColor={isDark ? 'rgba(255, 145, 0, 0.3)' : '#000000'}
-          lineWidth={isDark ? 1.1 : 1.25}
-          waveSpeedX={0.012}
-          waveSpeedY={0.005}
-          waveAmpX={26}
-          waveAmpY={14}
-          xGap={10}
-          yGap={32}
-        />
-      </div>
+      {/* Architectural Engineering Grid (Squares Component) */}
+      <Squares 
+        borderColor={isDark ? '#1F242D' : '#E2E8F0'}
+        hoverFillColor={isDark ? '#2A1C0D' : '#FFEDD5'}
+        speed={0.4}
+        squareSize={38}
+        direction="diagonal"
+        className="absolute inset-0 pointer-events-auto"
+      />
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
@@ -208,13 +204,9 @@ export const IdeProductShowcase: React.FC = () => {
             interactive step-debugging, and sub-50ms cloud sandbox latency.
           </p>
           <div>
-            <Link
-              href="/ide"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider bg-[#FF9100] text-black hover:bg-[#FFA726] transition-all shadow-[0_0_20px_rgba(255,145,0,0.25)] group"
-            >
-              <span>LAUNCH STANDALONE IDE</span>
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-            </Link>
+            <GlowCtaButton href="/ide">
+              LAUNCH STANDALONE IDE
+            </GlowCtaButton>
           </div>
         </div>
 
@@ -407,6 +399,105 @@ export const IdeProductShowcase: React.FC = () => {
                 </span>
                 <span>Sub-50ms Cold Start</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 Small Rectangular Cut-Out Side Panels with Chamfered Corners and Perlin Waves */}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Panel 1: Gemini 2.5 Flash AI Assistant */}
+          <div 
+            className={`relative p-5 border overflow-hidden transition-colors ${
+              isDark ? 'bg-[#0B0C0E]/90 border-[#1F2024]' : 'bg-white/90 border-slate-300 shadow-md'
+            }`}
+            style={{
+              clipPath: 'polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))',
+            }}
+          >
+            <InteractiveWavesBackground 
+              lineColor={isDark ? 'rgba(255, 145, 0, 0.22)' : 'rgba(234, 88, 12, 0.18)'}
+              waveSpeedX={0.014}
+              waveSpeedY={0.007}
+              waveAmpX={18}
+              waveAmpY={10}
+            />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono tracking-widest text-[#FF9100] uppercase font-bold">
+                  AI ENGINE // GEMINI 2.5 FLASH
+                </span>
+                <span className="w-2 h-2 rounded-full bg-[#FF9100] animate-ping" />
+              </div>
+              <h4 className={`text-sm font-bold mb-1.5 ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                Autonomous AST Self-Healing
+              </h4>
+              <p className={`text-xs leading-relaxed ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                Underlying compiler diagnostics feed directly into Gemini Flash for instant syntax fix proposals and vector optimizations.
+              </p>
+            </div>
+          </div>
+
+          {/* Panel 2: Cloudflare D1 Database Schema */}
+          <div 
+            className={`relative p-5 border overflow-hidden transition-colors ${
+              isDark ? 'bg-[#0B0C0E]/90 border-[#1F2024]' : 'bg-white/90 border-slate-300 shadow-md'
+            }`}
+            style={{
+              clipPath: 'polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))',
+            }}
+          >
+            <InteractiveWavesBackground 
+              lineColor={isDark ? 'rgba(255, 145, 0, 0.22)' : 'rgba(234, 88, 12, 0.18)'}
+              waveSpeedX={0.016}
+              waveSpeedY={0.008}
+              waveAmpX={18}
+              waveAmpY={10}
+            />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono tracking-widest text-cyan-500 uppercase font-bold">
+                  DATABASE // CLOUDFLARE D1
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400">&lt; 15ms D1 SQL latency</span>
+              </div>
+              <h4 className={`text-sm font-bold mb-1.5 ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                Distributed SQLite Replication
+              </h4>
+              <p className={`text-xs leading-relaxed ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                Zero-cold-start edge SQL store replicating user snippets and workspace configs across 300+ global edge locations.
+              </p>
+            </div>
+          </div>
+
+          {/* Panel 3: Isolated Sandboxed Micro-VM Telemetry */}
+          <div 
+            className={`relative p-5 border overflow-hidden transition-colors ${
+              isDark ? 'bg-[#0B0C0E]/90 border-[#1F2024]' : 'bg-white/90 border-slate-300 shadow-md'
+            }`}
+            style={{
+              clipPath: 'polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))',
+            }}
+          >
+            <InteractiveWavesBackground 
+              lineColor={isDark ? 'rgba(255, 145, 0, 0.22)' : 'rgba(234, 88, 12, 0.18)'}
+              waveSpeedX={0.013}
+              waveSpeedY={0.009}
+              waveAmpX={18}
+              waveAmpY={10}
+            />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono tracking-widest text-purple-400 uppercase font-bold">
+                  SECURITY // SECCOMP-BPF
+                </span>
+                <span className="text-[10px] font-mono text-purple-400">&lt; 50ms worker latency</span>
+              </div>
+              <h4 className={`text-sm font-bold mb-1.5 ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                Ephemeral Tenant Isolation
+              </h4>
+              <p className={`text-xs leading-relaxed ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                Strict memory cgroups and seccomp filters isolate every compilation process with zero persistent storage access.
+              </p>
             </div>
           </div>
         </div>

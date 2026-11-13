@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { useTheme } from './ThemeContext';
+import { Aurora, GlowCtaButton } from './EffectsSuite';
 
 export const LandingFooter: React.FC = () => {
   const { isDark } = useTheme();
@@ -25,6 +26,45 @@ export const LandingFooter: React.FC = () => {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Final CTA Banner with Aurora Background */}
+        <div className={`relative rounded-3xl overflow-hidden border mb-16 p-8 sm:p-12 text-center shadow-2xl transition-colors ${
+          isDark 
+            ? 'border-[#FF9100]/30 bg-gradient-to-b from-[#FF9100]/10 via-[#0B0C0E] to-[#08090A]' 
+            : 'border-orange-200 bg-gradient-to-b from-orange-50 via-white to-white'
+        }`}>
+          <Aurora 
+            colorStops={isDark ? ['#FF9100', '#FF3232', '#3A29FF'] : ['#FDBA74', '#FB7185', '#818CF8']}
+            amplitude={1.2}
+            blend={isDark ? 0.5 : 0.3}
+            speed={0.45}
+            className="absolute inset-0 pointer-events-none opacity-45 dark:opacity-35"
+          />
+          <div className="relative z-10 max-w-3xl mx-auto space-y-4">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-bold tracking-widest text-[#FF9100] uppercase bg-[#FF9100]/10 border border-[#FF9100]/30">
+              INSTANT CLOUD EXECUTION
+            </span>
+            <h3 className={`text-3xl sm:text-5xl font-extrabold tracking-tight ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+              Ready to code at the speed of edge?
+            </h3>
+            <p className={`text-sm sm:text-base max-w-xl mx-auto ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              Launch the zero-install cloud IDE with 16 runtimes, or deploy virtual labs for your classroom in seconds.
+            </p>
+            <div className="pt-4 flex flex-wrap items-center justify-center gap-4">
+              <GlowCtaButton href="/ide" className="px-8 py-3.5 text-sm font-mono font-bold">
+                LAUNCH IDE NOW
+              </GlowCtaButton>
+              <Link
+                href="/classroom"
+                className={`px-6 py-3 rounded-full text-xs font-mono font-semibold tracking-wide border transition-all ${
+                  isDark ? 'bg-white/5 border-white/10 text-zinc-300 hover:text-white hover:bg-white/10' : 'bg-white border-slate-300 text-zinc-700 hover:text-zinc-900 shadow-sm'
+                }`}
+              >
+                ENTER CLASSROOM
+              </Link>
+            </div>
+          </div>
+        </div>
+
         {/* Status Beacon Banner */}
         <div className={`p-4 rounded-xl border mb-12 flex flex-wrap items-center justify-between gap-4 transition-colors ${
           isDark ? 'bg-[#0B0C0E] border-[#1F2024]' : 'bg-slate-50 border-slate-200 shadow-sm'

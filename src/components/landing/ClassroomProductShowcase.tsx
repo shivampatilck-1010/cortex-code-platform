@@ -18,6 +18,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import { useTheme } from './ThemeContext';
+import { GhostCursor, GlowCtaButton } from './EffectsSuite';
 
 export const ClassroomProductShowcase: React.FC = () => {
   const { isDark } = useTheme();
@@ -30,6 +31,15 @@ export const ClassroomProductShowcase: React.FC = () => {
         isDark ? 'border-[#1F2024] bg-[#08090A] text-[#E6EDF3]' : 'border-slate-200 bg-[#FFFFFF] text-zinc-950'
       }`}
     >
+      {/* Live Multi-Cursor Presence Simulation (GhostCursor Component) */}
+      <GhostCursor 
+        color={isDark ? '#FF9100' : '#EA580C'}
+        mixBlendMode={isDark ? 'screen' : 'multiply'}
+        brightness={isDark ? 1.2 : 0.9}
+        trailLength={24}
+        className="pointer-events-none absolute inset-0 z-0"
+      />
+
       {/* Ambient Glow */}
       <div 
         className="absolute top-1/3 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none -z-10" 
@@ -56,13 +66,9 @@ export const ClassroomProductShowcase: React.FC = () => {
             mathematical whiteboard workspaces, and instant automated grading rubrics.
           </p>
           <div>
-            <Link
-              href="/classroom"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider bg-cyan-500 text-black hover:bg-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.25)] group"
-            >
-              <span>ENTER CLASSROOM SUITE</span>
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-            </Link>
+            <GlowCtaButton href="/classroom">
+              ENTER CLASSROOM SUITE
+            </GlowCtaButton>
           </div>
         </div>
 

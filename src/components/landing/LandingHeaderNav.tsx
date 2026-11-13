@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { useTheme } from './ThemeContext';
+import { GlowCtaButton } from './EffectsSuite';
 
 export const LandingHeaderNav: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -152,13 +153,9 @@ export const LandingHeaderNav: React.FC = () => {
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          <Link
-            href="/ide"
-            className="relative group px-4 py-2 rounded-lg text-xs font-mono font-semibold tracking-wider bg-[#FF9100] text-black hover:bg-[#FFA726] transition-all duration-200 shadow-[0_0_20px_rgba(255,145,0,0.3)] hover:shadow-[0_0_25px_rgba(255,145,0,0.5)] flex items-center gap-2"
-          >
-            <span>LAUNCH IDE</span>
-            <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+          <GlowCtaButton href="/ide">
+            LAUNCH IDE
+          </GlowCtaButton>
         </div>
 
         {/* Mobile Menu & Theme Toggle */}
