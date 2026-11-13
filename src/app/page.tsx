@@ -137,6 +137,8 @@ function LandingHeaderNav({
   activeSection: string;
   onSelectSection: (id: string) => void;
 }) {
+  const [logoError, setLogoError] = useState(false);
+
   return (
     <header
       className={`sticky top-0 z-50 w-full border-b backdrop-blur-xl transition-colors ${
@@ -146,25 +148,34 @@ function LandingHeaderNav({
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-3">
+        <Link
+          href="/"
+          className="flex items-center gap-3 group focus:outline-none"
+          aria-label="Cortex Platform"
+        >
           <div
-            className={`flex h-9 w-9 items-center justify-center rounded-xl border ${
-              isDark ? 'border-white/10 bg-white/[0.03]' : 'border-zinc-200 bg-zinc-100'
+            className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all duration-200 group-hover:border-[#FF9100]/60 group-hover:shadow-[0_0_14px_rgba(255,145,0,0.25)] ${
+              isDark
+                ? 'border-white/10 bg-white/[0.04]'
+                : 'border-zinc-200/90 bg-white shadow-sm shadow-zinc-950/5'
             }`}
           >
-            <img
-              src="/brand/cortex-logo-transparent.png"
-              alt="Cortex"
-              className="h-6 w-6 object-contain"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
-            />
-            <span className="font-mono text-xs font-bold text-[#FF9100]">CX</span>
+            {logoError ? (
+              <span className="font-mono text-xs font-bold text-[#FF9100]">CX</span>
+            ) : (
+              <img
+                src="/brand/cortex-emblem.png"
+                alt="Cortex Emblem"
+                className="h-6 w-6 object-contain transition-transform duration-200 group-hover:scale-105"
+                onError={() => setLogoError(true)}
+              />
+            )}
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold tracking-[0.18em]">CORTEX</span>
-            <span className="hidden font-mono text-[10px] tracking-widest text-zinc-500 sm:inline">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-extrabold tracking-[0.16em] text-zinc-950 dark:text-white">
+              CORTEX
+            </span>
+            <span className="hidden sm:inline font-mono text-[10px] font-bold tracking-[0.2em] text-[#FF9100]">
               PLATFORM
             </span>
           </div>

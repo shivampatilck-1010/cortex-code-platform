@@ -128,14 +128,14 @@ export const CortexLogo: React.FC<CortexLogoProps> = ({
         
         <div className="flex flex-col leading-none">
           {/* Brand Name: Corte + Orange x */}
-          <span className={`font-heading font-black tracking-tight ${iconSizes.text} text-white flex items-center`}>
+          <span className={`font-heading font-black tracking-tight ${iconSizes.text} text-zinc-950 dark:text-white flex items-center`}>
             <span>Corte</span>
             <span className="text-[#ff9100]">x</span>
           </span>
 
           {/* Primary Tagline: CODE BEYOND LIMITS */}
           {(variant === 'header' || variant === 'full') && (
-            <span className={`font-heading text-gray-400 font-bold tracking-[0.25em] ${iconSizes.sub} uppercase mt-1 select-none`}>
+            <span className={`font-heading text-zinc-500 dark:text-gray-400 font-bold tracking-[0.25em] ${iconSizes.sub} uppercase mt-1 select-none`}>
               CODE BEYOND LIMITS
             </span>
           )}
@@ -144,7 +144,7 @@ export const CortexLogo: React.FC<CortexLogoProps> = ({
 
       {/* Sub-Pillars: COMPILE | CREATE | COLLABORATE | DEPLOY */}
       {(variant === 'full' || showPillars) && (
-        <div className={`font-heading flex items-center space-x-2 mt-2 pt-1.5 border-t border-[#252834] ${iconSizes.motto} font-semibold uppercase tracking-wider text-gray-400 select-none`}>
+        <div className={`font-heading flex items-center space-x-2 mt-2 pt-1.5 border-t border-zinc-200 dark:border-[#252834] ${iconSizes.motto} font-semibold uppercase tracking-wider text-zinc-500 dark:text-gray-400 select-none`}>
           <span>COMPILE</span>
           <span className="text-[#ff9100] font-bold">|</span>
           <span>CREATE</span>
