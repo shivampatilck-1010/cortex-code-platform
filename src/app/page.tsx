@@ -128,10 +128,14 @@ function LandingHeaderNav({
   isDark,
   theme,
   setTheme,
+  activeSection,
+  onSelectSection,
 }: {
   isDark: boolean;
   theme: 'dark' | 'light';
   setTheme: (t: 'dark' | 'light') => void;
+  activeSection: string;
+  onSelectSection: (id: string) => void;
 }) {
   return (
     <header
@@ -169,19 +173,34 @@ function LandingHeaderNav({
         <nav className="hidden items-center gap-6 text-xs font-semibold md:flex">
           <a
             href="#ide"
-            className="text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100] transition-colors"
+            onClick={() => onSelectSection('ide')}
+            className={`transition-colors ${
+              activeSection === 'ide'
+                ? 'text-[#FF9100]'
+                : 'text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100]'
+            }`}
           >
             01 // IDE
           </a>
           <a
             href="#classroom"
-            className="text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100] transition-colors"
+            onClick={() => onSelectSection('classroom')}
+            className={`transition-colors ${
+              activeSection === 'classroom'
+                ? 'text-[#FF9100]'
+                : 'text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100]'
+            }`}
           >
             02 // Classroom
           </a>
           <a
             href="#browser"
-            className="text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100] transition-colors"
+            onClick={() => onSelectSection('browser')}
+            className={`transition-colors ${
+              activeSection === 'browser'
+                ? 'text-[#FF9100]'
+                : 'text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100]'
+            }`}
           >
             03 // Browser
           </a>
@@ -352,7 +371,13 @@ function LandingHero({ isDark }: { isDark: boolean }) {
 }
 
 /* ================= 3. STICKY PROGRESS NAV COMPONENT ================= */
-function LandingStickyNav({ activeSection }: { activeSection: string }) {
+function LandingStickyNav({
+  activeSection,
+  onSelectSection,
+}: {
+  activeSection: string;
+  onSelectSection: (id: string) => void;
+}) {
   return (
     <div className="sticky top-20 z-40 mx-auto my-8 flex w-full max-w-fit justify-center px-4">
       <nav
@@ -366,7 +391,10 @@ function LandingStickyNav({ activeSection }: { activeSection: string }) {
           <a
             key={tab.id}
             href={`#${tab.id}`}
-            className={`rounded-full px-4 py-1.5 font-mono text-[11px] tracking-wider transition-all ${
+            onClick={(e) => {
+              onSelectSection(tab.id);
+            }}
+            className={`rounded-full px-4 py-1.5 font-mono text-[11px] tracking-wider transition-all cursor-pointer ${
               activeSection === tab.id
                 ? 'bg-[#FF9100] font-bold text-[#08090A] shadow-[0_0_20px_-2px_rgba(255,145,0,0.6)]'
                 : 'text-zinc-700 hover:text-black dark:text-zinc-400 dark:hover:text-white font-medium'
@@ -408,23 +436,37 @@ export default function CortexLandingPage() {
     }
   }, [theme]);
 
+  // Robust, accurate scroll-spy tracking for sticky pill navigation
   useEffect(() => {
-    const ids = ['ide', 'classroom', 'browser'];
-    const observers = ids.map((id) => {
-      const el = document.getElementById(id);
-      if (!el) return null;
-      const obs = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) setActiveSection(id);
-          });
-        },
-        { rootMargin: '-35% 0px -50% 0px' }
-      );
-      obs.observe(el);
-      return obs;
-    });
-    return () => observers.forEach((o) => o?.disconnect());
+    const handleScroll = () => {
+      const sections = ['ide', 'classroom', 'browser'];
+      const scrollPos = window.scrollY + 280;
+
+      // Bottom detection: if scrolled near the bottom of document, prioritize 'browser'
+      if (
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 380
+      ) {
+        setActiveSection('browser');
+        return;
+      }
+
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const el = document.getElementById(sections[i]);
+        if (el) {
+          const top = el.offsetTop;
+          if (scrollPos >= top) {
+            setActiveSection(sections[i]);
+            return;
+          }
+        }
+      }
+      setActiveSection('ide');
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   return (
@@ -435,13 +477,22 @@ export default function CortexLandingPage() {
         }`}
       >
         {/* ================= HEADER NAVBAR ================= */}
-        <LandingHeaderNav isDark={isDark} theme={theme} setTheme={setTheme} />
+        <LandingHeaderNav
+          isDark={isDark}
+          theme={theme}
+          setTheme={setTheme}
+          activeSection={activeSection}
+          onSelectSection={(id) => setActiveSection(id)}
+        />
 
         {/* ================= HERO SECTION ================= */}
         <LandingHero isDark={isDark} />
 
         {/* ================= STICKY PILL PROGRESS NAV ================= */}
-        <LandingStickyNav activeSection={activeSection} />
+        <LandingStickyNav
+          activeSection={activeSection}
+          onSelectSection={(id) => setActiveSection(id)}
+        />
 
         {/* ================= PRODUCT 01: CORTEX IDE (with Squares + Cut-out Waves Side Panel) ================= */}
         <section id="ide" className="relative scroll-mt-28 overflow-hidden py-24">
@@ -659,24 +710,22 @@ export default function CortexLandingPage() {
           </div>
         </section>
 
-        {/* ================= PRODUCT 03: CORTEX BROWSER (with Aurora Stacking Cards + High-Contrast D1 Cut-Out) ================= */}
+        {/* ================= PRODUCT 03: CORTEX BROWSER (with Stacking Cards: Light Alabaster in Light Mode, Aurora in Dark Mode) ================= */}
         <section
           id="browser"
           className="relative scroll-mt-28 overflow-visible border-t border-zinc-200/60 dark:border-white/[0.07] py-24"
         >
-          {/* Subtle Aurora Ambient Backdrop */}
-          <div className="pointer-events-none absolute inset-0 z-0 opacity-20 dark:opacity-30">
-            <Aurora
-              colorStops={
-                isDark
-                  ? ['#3A29FF', '#FF94B4', '#FF3232']
-                  : ['#818CF8', '#FB7185', '#FDBA74']
-              }
-              amplitude={1.0}
-              blend={0.5}
-              speed={0.5}
-            />
-          </div>
+          {/* Subtle Aurora Ambient Backdrop (Dark Mode Only) */}
+          {isDark && (
+            <div className="pointer-events-none absolute inset-0 z-0 opacity-25">
+              <Aurora
+                colorStops={['#3A29FF', '#FF94B4', '#FF3232']}
+                amplitude={1.0}
+                blend={0.5}
+                speed={0.5}
+              />
+            </div>
+          )}
 
           <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12">
@@ -733,7 +782,7 @@ export default function CortexLandingPage() {
                 </div>
               </div>
 
-              {/* Right Column: The "Stacking Cards" Deck with Aurora WebGL */}
+              {/* Right Column: The "Stacking Cards" Deck (Light Card in Light Mode, Aurora in Dark Mode) */}
               <div className="lg:col-span-7 relative">
                 <div className="space-y-8 pb-12">
                   {STACKING_CARDS.map((card, idx) => (
@@ -743,42 +792,64 @@ export default function CortexLandingPage() {
                         top: `${96 + idx * 28}px`,
                         zIndex: 10 + idx * 10,
                       }}
-                      className="sticky rounded-2xl border border-white/10 dark:border-white/15 bg-[#12131A] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-300"
+                      className={`sticky rounded-2xl border transition-all duration-300 overflow-hidden ${
+                        isDark
+                          ? 'border-white/10 bg-[#1A1A1B] shadow-[0_0_40px_rgba(0,0,0,0.4)] text-white'
+                          : 'border-zinc-300 bg-white/95 shadow-[0_20px_50px_rgba(0,0,0,0.1)] text-zinc-950'
+                      }`}
                     >
-                      {/* Background Gradient to blend with Aurora */}
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 z-10 pointer-events-none" />
+                      {/* Dark Mode ONLY: Aurora WebGL + Gradient Overlay + Glowing Blurs */}
+                      {isDark && (
+                        <>
+                          {/* Background Gradient to blend with Aurora */}
+                          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/40 z-10 pointer-events-none" />
 
-                      {/* Aurora Component with exact requested colors */}
-                      <div className="absolute inset-0 z-0">
-                        <Aurora
-                          colorStops={['#3A29FF', '#FF94B4', '#FF3232']}
-                          blend={0.5}
-                          amplitude={1.0}
-                          speed={0.5}
-                        />
-                      </div>
+                          {/* Aurora WebGL Component */}
+                          <div className="absolute inset-0 z-0">
+                            <Aurora
+                              colorStops={['#3A29FF', '#FF94B4', '#FF3232']}
+                              blend={0.5}
+                              amplitude={1.0}
+                              speed={0.5}
+                            />
+                          </div>
+
+                          {/* Decorative ambient blurs */}
+                          <div className="absolute -top-12 -left-12 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
+                          <div className="absolute -bottom-12 -right-12 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
+                        </>
+                      )}
 
                       {/* Foreground Content */}
-                      <div className="relative z-20 p-6 sm:p-8 flex flex-col justify-between min-h-[300px]">
+                      <div className="relative z-20 p-6 sm:p-8 flex flex-col justify-between min-h-[290px]">
                         {/* Header */}
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div>
-                            <div className="flex items-center gap-2 font-mono text-xs text-[#FF94B4]">
-                              <span className="font-bold tracking-widest">{card.index} //</span>
-                              <span className="text-white/60">{card.subsystem}</span>
+                            <div className="flex items-center gap-2 font-mono text-xs">
+                              <span className="font-bold tracking-widest text-[#EA580C] dark:text-[#FF94B4]">
+                                {card.index} //
+                              </span>
+                              <span className="font-semibold text-zinc-600 dark:text-white/60">
+                                {card.subsystem}
+                              </span>
                             </div>
-                            <h3 className="mt-1 text-2xl font-bold text-white tracking-tight">
+                            <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-black dark:text-white">
                               {card.file}
                             </h3>
-                            <p className="mt-2 text-white/70 text-xs sm:text-sm max-w-md leading-relaxed">
+                            <p className="mt-2 text-xs sm:text-sm max-w-md leading-relaxed font-medium text-zinc-800 dark:text-white/70">
                               {card.desc}
                             </p>
                           </div>
+
                           <div className="flex flex-wrap gap-2">
                             {card.badges.map((badge) => (
                               <span
                                 key={badge}
-                                className="px-3 py-1 rounded-full text-xs font-mono font-medium bg-white/10 text-white/90 border border-white/10 backdrop-blur-sm shadow-sm"
+                                className={`px-3 py-1 rounded-full text-xs font-mono font-semibold ${
+                                  isDark
+                                    ? 'bg-white/10 text-white/90 border border-white/10 backdrop-blur-sm'
+                                    : 'bg-zinc-100 text-zinc-900 border border-zinc-300 shadow-sm'
+                                }`}
                               >
                                 {badge}
                               </span>
@@ -787,28 +858,44 @@ export default function CortexLandingPage() {
                         </div>
 
                         {/* API Banner */}
-                        <div className="my-5 rounded-xl border border-white/10 bg-black/40 p-3.5 backdrop-blur-md">
+                        <div
+                          className={`my-5 rounded-xl border p-3.5 ${
+                            isDark
+                              ? 'border-white/10 bg-black/40 backdrop-blur-md text-amber-300'
+                              : 'border-zinc-200 bg-zinc-50 shadow-sm text-black'
+                          }`}
+                        >
                           <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-                            <div className="flex items-center gap-2 text-amber-300 font-semibold">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                               <span>{card.api}</span>
                             </div>
-                            <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
+                            <span
+                              className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
+                                isDark
+                                  ? 'bg-white/10 text-zinc-300'
+                                  : 'bg-zinc-200 text-zinc-800'
+                              }`}
+                            >
                               {card.spec}
                             </span>
                           </div>
                         </div>
 
                         {/* Card Footer / Telemetry */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 font-mono text-[11px] text-white/60">
+                        <div
+                          className={`flex flex-wrap items-center justify-between gap-2 border-t pt-4 font-mono text-[11px] font-semibold ${
+                            isDark
+                              ? 'border-white/10 text-white/60'
+                              : 'border-zinc-200 text-zinc-700'
+                          }`}
+                        >
                           <div>{card.metric}</div>
-                          <div className="font-semibold text-emerald-400">{card.status}</div>
+                          <div className="font-bold text-emerald-700 dark:text-emerald-400">
+                            {card.status}
+                          </div>
                         </div>
                       </div>
-
-                      {/* Decorative ambient blurs outside card */}
-                      <div className="absolute -top-12 -left-12 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
-                      <div className="absolute -bottom-12 -right-12 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
                     </div>
                   ))}
                 </div>
