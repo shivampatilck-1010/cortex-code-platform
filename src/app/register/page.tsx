@@ -45,7 +45,11 @@ export default function RegisterPage() {
       <div className="max-w-md w-full bg-[#14151d] border border-[#272a39] rounded-2xl p-8 space-y-6 shadow-2xl">
         <Link
           href="/"
-          className="group block text-center space-y-2 focus:outline-none transition-transform hover:scale-[1.02]"
+          onClick={(e) => {
+            e.preventDefault();
+            window.location.href = '/';
+          }}
+          className="group block text-center space-y-2 focus:outline-none transition-transform hover:scale-[1.02] cursor-pointer"
           aria-label="Cortex Platform Home"
           title="Return to Cortex Platform Home"
         >

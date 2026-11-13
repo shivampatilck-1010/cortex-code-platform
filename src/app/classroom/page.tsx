@@ -146,7 +146,7 @@ export default function ClassroomHubPage() {
         setProfileLoaded(true);
       })
       .catch(() => {
-        router.push('/login');
+        router.replace('/login');
       });
   }, [router]);
 

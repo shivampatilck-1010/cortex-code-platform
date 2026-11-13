@@ -76,7 +76,11 @@ export default function LoginPage() {
       <div className="max-w-md w-full bg-[#0A0A0A]/90 backdrop-blur-md border border-[#333333] rounded-2xl p-8 space-y-6 shadow-2xl relative z-10">
         <Link
           href="/"
-          className="group flex items-center justify-center space-x-6 mb-10 focus:outline-none transition-transform hover:scale-[1.02]"
+          onClick={(e) => {
+            e.preventDefault();
+            window.location.href = '/';
+          }}
+          className="group flex items-center justify-center space-x-6 mb-10 focus:outline-none transition-transform hover:scale-[1.02] cursor-pointer"
           aria-label="Cortex Platform Home"
           title="Return to Cortex Platform Home"
         >
