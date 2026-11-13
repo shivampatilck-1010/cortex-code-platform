@@ -38,10 +38,10 @@ export function GlowCtaButton({
   };
 
   const sharedClasses = cn(
-    'group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-xs font-semibold tracking-wide transition-all duration-300 select-none cursor-pointer',
+    'group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-xs font-bold tracking-wide transition-all duration-300 select-none cursor-pointer',
     variant === 'primary'
-      ? 'border border-[#FF9100]/60 bg-zinc-950 text-white dark:bg-[#0D0F12] shadow-[0_0_25px_-5px_rgba(255,145,0,0.45)] hover:border-[#FF9100] hover:shadow-[0_0_35px_0px_rgba(255,145,0,0.65)] hover:scale-[1.02]'
-      : 'border border-zinc-300/80 bg-white/80 text-zinc-900 dark:border-white/15 dark:bg-white/[0.04] dark:text-zinc-100 hover:border-[#FF9100]/60 hover:scale-[1.02]',
+      ? 'border border-[#FF9100]/70 bg-black text-white shadow-[0_0_25px_-5px_rgba(255,145,0,0.5)] hover:border-[#FF9100] hover:shadow-[0_0_35px_0px_rgba(255,145,0,0.75)] hover:scale-[1.02]'
+      : 'border border-zinc-950/80 bg-white text-zinc-950 hover:bg-zinc-50 hover:border-black dark:border-white/20 dark:bg-white/[0.04] dark:text-zinc-100 dark:hover:border-[#FF9100]/60 hover:scale-[1.02]',
     className
   );
 
@@ -53,7 +53,7 @@ export function GlowCtaButton({
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{
           background:
-            'radial-gradient(110px circle at var(--x, 50%) var(--y, 50%), rgba(255, 145, 0, 0.38), transparent 80%)',
+            'radial-gradient(120px circle at var(--x, 50%) var(--y, 50%), rgba(255, 145, 0, 0.45), transparent 75%)',
         }}
       />
       {/* Subtle inner rim */}
@@ -1467,3 +1467,13 @@ export const Aurora: React.FC<AuroraProps> = ({
     />
   );
 };
+
+/* ============================================================================
+ * 9. MAGNIFICATION DOCK COMPONENT (Framer Motion Spring Physics & Tooltips)
+ * ========================================================================== */
+export {
+  MagnificationDock,
+  type DockItemData,
+  type DockProps,
+} from '@/sd-components/92e48665-ebf7-4173-98d2-a1d488decf45';
+

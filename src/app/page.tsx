@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Terminal, BookOpen, ShieldAlert } from 'lucide-react';
 import {
   LiquidEther,
   TubesBackground,
@@ -10,6 +11,8 @@ import {
   Squares,
   Aurora,
   GlowCtaButton,
+  MagnificationDock,
+  type DockItemData,
 } from '@/components/landing/EffectsSuite';
 
 const RUNTIMES = [
@@ -370,7 +373,7 @@ function LandingHero({ isDark }: { isDark: boolean }) {
   );
 }
 
-/* ================= 3. STICKY PROGRESS NAV COMPONENT ================= */
+/* ================= 3. STICKY PROGRESS NAV COMPONENT (MagnificationDock) ================= */
 function LandingStickyNav({
   activeSection,
   onSelectSection,
@@ -378,32 +381,81 @@ function LandingStickyNav({
   activeSection: string;
   onSelectSection: (id: string) => void;
 }) {
+  const dockItems: DockItemData[] = [
+    {
+      label: '01 // CORTEX IDE (16 Cloud Runtimes)',
+      active: activeSection === 'ide',
+      onClick: () => {
+        onSelectSection('ide');
+        const el = document.getElementById('ide');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+      icon: (
+        <span
+          className={`flex items-center gap-2 rounded-full px-5 py-2 font-mono text-xs tracking-wider transition-all cursor-pointer ${
+            activeSection === 'ide'
+              ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_24px_rgba(255,145,0,0.7)]'
+              : 'font-bold text-zinc-950 hover:text-black dark:text-zinc-300 dark:hover:text-white'
+          }`}
+        >
+          <Terminal className="h-3.5 w-3.5 text-current" />
+          <span>01 // CORTEX IDE</span>
+        </span>
+      ),
+    },
+    {
+      label: '02 // CORTEX CLASSROOM (Academic Virtual Labs)',
+      active: activeSection === 'classroom',
+      onClick: () => {
+        onSelectSection('classroom');
+        const el = document.getElementById('classroom');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+      icon: (
+        <span
+          className={`flex items-center gap-2 rounded-full px-5 py-2 font-mono text-xs tracking-wider transition-all cursor-pointer ${
+            activeSection === 'classroom'
+              ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_24px_rgba(255,145,0,0.7)]'
+              : 'font-bold text-zinc-950 hover:text-black dark:text-zinc-300 dark:hover:text-white'
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5 text-current" />
+          <span>02 // CORTEX CLASSROOM</span>
+        </span>
+      ),
+    },
+    {
+      label: '03 // CORTEX BROWSER (Win32 Kiosk Security)',
+      active: activeSection === 'browser',
+      onClick: () => {
+        onSelectSection('browser');
+        const el = document.getElementById('browser');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+      icon: (
+        <span
+          className={`flex items-center gap-2 rounded-full px-5 py-2 font-mono text-xs tracking-wider transition-all cursor-pointer ${
+            activeSection === 'browser'
+              ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_24px_rgba(255,145,0,0.7)]'
+              : 'font-bold text-zinc-950 hover:text-black dark:text-zinc-300 dark:hover:text-white'
+          }`}
+        >
+          <ShieldAlert className="h-3.5 w-3.5 text-current" />
+          <span>03 // CORTEX BROWSER</span>
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="sticky top-20 z-40 mx-auto my-8 flex w-full max-w-fit justify-center px-4">
-      <nav
-        className="flex flex-wrap items-center justify-center gap-1 rounded-full border p-1.5 shadow-2xl backdrop-blur-xl border-zinc-200 bg-white/95 dark:border-white/[0.1] dark:bg-[#0D0F12]/85"
-      >
-        {[
-          { id: 'ide', label: '01 // CORTEX IDE' },
-          { id: 'classroom', label: '02 // CORTEX CLASSROOM' },
-          { id: 'browser', label: '03 // CORTEX BROWSER' },
-        ].map((tab) => (
-          <a
-            key={tab.id}
-            href={`#${tab.id}`}
-            onClick={(e) => {
-              onSelectSection(tab.id);
-            }}
-            className={`rounded-full px-4 py-1.5 font-mono text-[11px] tracking-wider transition-all cursor-pointer ${
-              activeSection === tab.id
-                ? 'bg-[#FF9100] font-bold text-[#08090A] shadow-[0_0_20px_-2px_rgba(255,145,0,0.6)]'
-                : 'text-zinc-700 hover:text-black dark:text-zinc-400 dark:hover:text-white font-medium'
-            }`}
-          >
-            {tab.label}
-          </a>
-        ))}
-      </nav>
+      <MagnificationDock
+        items={dockItems}
+        magnification={58}
+        baseItemSize={48}
+        distance={160}
+        panelHeight={52}
+      />
     </div>
   );
 }
