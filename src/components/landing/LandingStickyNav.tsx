@@ -71,14 +71,6 @@ export const LandingStickyNav: React.FC<LandingStickyNavProps> = ({
 
   const navItems = [
     {
-      id: 'interactive-showcase',
-      label: '00 // SHOWCASE',
-      icon: Video,
-      activeColor: 'text-[#FF9100]',
-      activeBg: isDark ? 'bg-[#FF9100]/10 border-[#FF9100]/30' : 'bg-orange-50 border-orange-300',
-      activeIndicator: 'bg-[#FF9100]',
-    },
-    {
       id: 'cortex-ide',
       label: '01 // CORTEX IDE',
       icon: Terminal,

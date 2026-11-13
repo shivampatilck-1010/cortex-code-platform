@@ -159,7 +159,7 @@ export const LockdownProductShowcase: React.FC = () => {
           {/* Status Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono font-semibold tracking-wider mb-4">
             <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-            <span>03 // CORTEX BROWSER &bull; BUILDING BY TEAM // COMING SOON // PLACEHOLDER</span>
+            <span>03 // CORTEX BROWSER &bull; NATIVE LOCKDOWN KIOSK ENGINE</span>
           </div>
           <h2 className={`text-3xl sm:text-5xl font-extrabold tracking-tight mb-4 ${
             isDark ? 'text-white' : 'text-zinc-900'
@@ -173,8 +173,7 @@ export const LockdownProductShowcase: React.FC = () => {
             <p className={`text-sm leading-relaxed font-mono ${
               isDark ? 'text-purple-200' : 'text-purple-900'
             }`}>
-              ENGINEERING NOTE: Our engineering team is actively building the final release of the 
-              Cortex Lockdown client. Explore the architectural preview and interactive security simulation below.
+              PRODUCTION ENFORCEMENT: Hardware screen capture exclusion (WDA_EXCLUDEFROMCAPTURE), low-level keyboard interception (WH_KEYBOARD_LL), and 1,500ms kernel watchdog polling.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-4">

@@ -11,7 +11,6 @@ import {
   Aurora,
   GlowCtaButton,
 } from '@/components/landing/EffectsSuite';
-import { InteractiveVideoShowcase } from '@/components/landing/InteractiveVideoShowcase';
 
 const RUNTIMES = [
   {
@@ -154,20 +153,14 @@ function LandingHeaderNav({
           className="flex items-center gap-3 group focus:outline-none"
           aria-label="Cortex Platform"
         >
-          <div
-            className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all duration-200 group-hover:border-[#FF9100]/60 group-hover:shadow-[0_0_14px_rgba(255,145,0,0.25)] ${
-              isDark
-                ? 'border-white/10 bg-white/[0.04]'
-                : 'border-zinc-200/90 bg-white shadow-sm shadow-zinc-950/5'
-            }`}
-          >
+          <div className="relative flex items-center justify-center h-8 w-8 flex-shrink-0 transition-transform duration-200 group-hover:scale-105">
             {logoError ? (
               <span className="font-mono text-xs font-bold text-[#FF9100]">CX</span>
             ) : (
               <img
                 src="/brand/cortex-emblem.png"
                 alt="Cortex Emblem"
-                className="h-6 w-6 object-contain transition-transform duration-200 group-hover:scale-105"
+                className="h-7 w-7 object-contain drop-shadow-[0_2px_8px_rgba(255,145,0,0.25)]"
                 onError={() => setLogoError(true)}
               />
             )}
@@ -183,17 +176,6 @@ function LandingHeaderNav({
         </Link>
 
         <nav className="hidden items-center gap-6 text-xs font-semibold md:flex">
-          <a
-            href="#showcase"
-            onClick={() => onSelectSection('showcase')}
-            className={`transition-colors ${
-              activeSection === 'showcase'
-                ? 'text-[#FF9100]'
-                : 'text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100]'
-            }`}
-          >
-            00 // Showcase
-          </a>
           <a
             href="#ide"
             onClick={() => onSelectSection('ide')}
@@ -402,22 +384,184 @@ function LandingStickyNav(_props?: {
   return null;
 }
 
-/* ================= 4. FOOTER COMPONENT ================= */
-function LandingFooter() {
+/* ================= 4. GIANT ARCHITECTURAL FOOTER COMPONENT ================= */
+function LandingFooter({ isDark }: { isDark?: boolean }) {
   return (
-    <footer className="relative overflow-hidden border-t border-zinc-200/60 dark:border-white/[0.07] py-16 text-center font-mono text-xs text-zinc-500">
-      <div className="max-w-4xl mx-auto px-4 space-y-6">
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <GlowCtaButton href="/ide" variant="primary">
-            Launch Standalone IDE
-          </GlowCtaButton>
-          <GlowCtaButton href="/classroom" variant="book-call">
-            Book an Engineering Demo
-          </GlowCtaButton>
+    <footer className="relative w-full overflow-hidden border-t border-zinc-200/80 dark:border-white/[0.08] bg-[#F8FAFC] dark:bg-[#08090A] pt-16 sm:pt-24 pb-8 transition-colors duration-300">
+      {/* Decorative ambient background glow */}
+      <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-gradient-to-b from-[#FF9100]/15 via-[#FF3D00]/5 to-transparent blur-3xl opacity-60 dark:opacity-30" />
+
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* Upper Navigation & Mission Statement Grid */}
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 pb-14">
+          
+          {/* Left Column: Heading, Subtitle & Action CTAs */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#FF9100]/40 bg-[#FF9100]/10 px-3 py-1 font-mono text-[11px] font-bold tracking-widest text-[#FF9100]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#FF9100] animate-pulse" />
+              <span>CORTEX PLATFORM v1.0 // LIFTOFF</span>
+            </div>
+
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-zinc-950 dark:text-white leading-[1.08]">
+              Experience limitless code
+            </h2>
+
+            <p className="text-sm sm:text-base leading-relaxed font-medium text-zinc-700 dark:text-zinc-400 max-w-md">
+              Three decoupled high-performance developer runtimes engineered for modern engineering workflows: instant zero-install cloud compilation, live collaborative classrooms, and tamper-resistant assessment kiosks.
+            </p>
+
+            <div className="pt-2 flex flex-wrap items-center gap-4">
+              <GlowCtaButton href="/ide" variant="primary">
+                Launch Standalone IDE
+              </GlowCtaButton>
+              <Link
+                href="/classroom"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-mono font-bold tracking-wider border border-zinc-300 dark:border-white/15 bg-white/90 dark:bg-white/5 text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors shadow-sm"
+              >
+                <span>Enter Classroom</span>
+                <span className="text-[#FF9100]">&rarr;</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Right Columns: Multi-Column Product, Platform & Resources Directory */}
+          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-8 font-mono">
+            {/* Column 1: Product */}
+            <div className="space-y-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-zinc-950 dark:text-white">
+                Product
+              </div>
+              <ul className="space-y-2.5 text-xs">
+                <li>
+                  <Link href="/ide" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Cortex IDE
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/classroom" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Cortex Classroom
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/lockdown" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Cortex Browser
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/cpp" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    C++ 20 Sandbox
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/python" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Python 3.12 Engine
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/rust" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Rust Toolchain
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Column 2: Platform */}
+            <div className="space-y-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-zinc-950 dark:text-white">
+                Platform
+              </div>
+              <ul className="space-y-2.5 text-xs text-zinc-600 dark:text-zinc-400">
+                <li>Cloudflare D1 Storage</li>
+                <li>Durable Objects Rooms</li>
+                <li>Kernel Hook Watchdog</li>
+                <li>DisplayAffinity Mask</li>
+                <li>Air-Gapped IPC Scrub</li>
+                <li>WebRTC Mesh Grid</li>
+              </ul>
+            </div>
+
+            {/* Column 3: Resources */}
+            <div className="space-y-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-zinc-950 dark:text-white">
+                Resources
+              </div>
+              <ul className="space-y-2.5 text-xs">
+                <li>
+                  <Link href="/downloads" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Documentation
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/shivampatilck-1010/cortex-code-platform"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors flex items-center gap-1"
+                  >
+                    <span>GitHub</span>
+                    <span className="text-[10px] text-[#FF9100]">&nearr;</span>
+                  </a>
+                </li>
+                <li>
+                  <Link href="/lockdown" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Security Whitepaper
+                  </Link>
+                </li>
+                <li>
+                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Status: Operational</span>
+                  </div>
+                </li>
+                <li>
+                  <Link href="/login" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                    Terminal Login
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
-        <div className="font-mono text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-          CORTEX PLATFORM v1.0 // CODE BEYOND LIMITS // LIGHT &amp; DARK ADAPTIVE SUITE
+
+        {/* ================= MASSIVE ARCHITECTURAL WORDMARK ================= */}
+        <div className="relative w-full overflow-hidden select-none border-t border-zinc-200/80 dark:border-white/[0.08] pt-6 pb-2 sm:pt-12 sm:pb-6">
+          <div className="w-full text-center">
+            <span className="block font-black tracking-tighter text-[19vw] leading-[0.8] text-zinc-950 dark:text-white select-none transition-colors duration-300">
+              CORTEX
+            </span>
+          </div>
         </div>
+
+        {/* ================= BOTTOM LEGAL & SOCIAL SUBFOOTER ================= */}
+        <div className="border-t border-zinc-200/80 dark:border-white/[0.08] pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+          <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-start">
+            <div className="flex items-center gap-2 font-bold text-zinc-950 dark:text-white">
+              <img
+                src="/brand/cortex-emblem.png"
+                alt="Cortex"
+                className="h-4 w-4 object-contain"
+              />
+              <span>CORTEX PLATFORM</span>
+            </div>
+            <span>&bull;</span>
+            <Link href="/privacy" className="hover:text-zinc-950 dark:hover:text-white transition-colors">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-zinc-950 dark:hover:text-white transition-colors">
+              Terms
+            </Link>
+            <Link href="/security" className="hover:text-zinc-950 dark:hover:text-white transition-colors">
+              Security
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <span>EDGE POPS: 300+</span>
+            <span>UPTIME: 99.99%</span>
+            <span>&copy; 2026 Cortex</span>
+          </div>
+        </div>
+
       </div>
     </footer>
   );
@@ -445,7 +589,7 @@ export default function CortexLandingPage() {
   // Robust, accurate scroll-spy tracking for sticky pill navigation
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['showcase', 'ide', 'classroom', 'browser'];
+      const sections = ['ide', 'classroom', 'browser'];
       const scrollPos = window.scrollY + 280;
 
       // Bottom detection: if scrolled near the bottom of document, prioritize 'browser'
@@ -493,9 +637,6 @@ export default function CortexLandingPage() {
 
         {/* ================= HERO SECTION ================= */}
         <LandingHero isDark={isDark} />
-
-        {/* ================= 00. INTERACTIVE VIDEO SHOWCASE REEL ================= */}
-        <InteractiveVideoShowcase isDark={isDark} />
 
         {/* ================= STICKY PILL PROGRESS NAV ================= */}
         <LandingStickyNav
@@ -884,7 +1025,7 @@ export default function CortexLandingPage() {
         </section>
 
         {/* ================= FOOTER ================= */}
-        <LandingFooter />
+        <LandingFooter isDark={isDark} />
       </div>
     </div>
   );

@@ -64,18 +64,6 @@ export const LandingHeaderNav: React.FC = () => {
         {/* Desktop Navigation Anchors */}
         <nav className="hidden md:flex items-center gap-1 lg:gap-2">
           <button
-            onClick={() => scrollToSection('interactive-showcase')}
-            className={`px-3 py-1.5 text-xs font-mono tracking-wider rounded-md transition-colors flex items-center gap-1.5 ${
-              isDark 
-                ? 'text-zinc-400 hover:text-white hover:bg-white/5' 
-                : 'text-zinc-600 hover:text-zinc-900 hover:bg-slate-100'
-            }`}
-          >
-            <Video className="w-3.5 h-3.5 text-amber-500" />
-            <span>00 // SHOWCASE</span>
-          </button>
-
-          <button
             onClick={() => scrollToSection('cortex-ide')}
             className={`px-3 py-1.5 text-xs font-mono tracking-wider rounded-md transition-colors flex items-center gap-1.5 ${
               isDark 
@@ -201,15 +189,6 @@ export const LandingHeaderNav: React.FC = () => {
           <div className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase px-2">
             Navigation Sections
           </div>
-          <button
-            onClick={() => scrollToSection('interactive-showcase')}
-            className={`w-full text-left px-3 py-2 text-sm font-mono rounded-md flex items-center gap-2 ${
-              isDark ? 'text-zinc-300 hover:text-white hover:bg-white/5' : 'text-zinc-700 hover:text-zinc-900 hover:bg-slate-100'
-            }`}
-          >
-            <Video className="w-4 h-4 text-amber-500" />
-            <span>00 // VIDEO SHOWCASE</span>
-          </button>
           <button
             onClick={() => scrollToSection('cortex-ide')}
             className={`w-full text-left px-3 py-2 text-sm font-mono rounded-md flex items-center gap-2 ${

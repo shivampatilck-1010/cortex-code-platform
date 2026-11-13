@@ -191,6 +191,15 @@ export const LandingFooter: React.FC = () => {
           </div>
         </div>
 
+        {/* Giant Architectural Wordmark */}
+        <div className="relative w-full overflow-hidden select-none border-t border-zinc-200/80 dark:border-white/[0.08] pt-6 pb-2 sm:pt-12 sm:pb-6 my-4">
+          <div className="w-full text-center">
+            <span className="block font-black tracking-tighter text-[19vw] leading-[0.8] text-zinc-950 dark:text-white select-none transition-colors duration-300">
+              CORTEX
+            </span>
+          </div>
+        </div>
+
         {/* Bottom Legal Bar */}
         <div className={`pt-8 border-t flex flex-wrap items-center justify-between text-xs font-mono gap-4 ${
           isDark ? 'border-[#1F2024] text-zinc-600' : 'border-slate-200 text-zinc-500'
