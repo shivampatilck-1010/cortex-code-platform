@@ -58,6 +58,24 @@ body {
 .pulse-glow {
   animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Slide-in blur entrance keyframes for interactive CTA buttons */
+@keyframes slideBlurIn {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-blur-in {
+  animation: slideBlurIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
 /* Monochrome Neon Theme Classes */
 .bg-monochrome-dotted {
   background-image: radial-gradient(circle at center, #525252 1px, transparent 1px);

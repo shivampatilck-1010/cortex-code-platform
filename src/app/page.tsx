@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Terminal, BookOpen, ShieldAlert } from 'lucide-react';
 import {
   LiquidEther,
   TubesBackground,
@@ -11,8 +10,6 @@ import {
   Squares,
   Aurora,
   GlowCtaButton,
-  MagnificationDock,
-  type DockItemData,
 } from '@/components/landing/EffectsSuite';
 
 const RUNTIMES = [
@@ -299,8 +296,8 @@ function LandingHero({ isDark }: { isDark: boolean }) {
             <GlowCtaButton href="/ide" variant="primary">
               Launch Standalone IDE
             </GlowCtaButton>
-            <GlowCtaButton href="/classroom" variant="secondary">
-              Explore Virtual Classroom
+            <GlowCtaButton href="/classroom" variant="book-call">
+              Book a Call // Live Lab Tour
             </GlowCtaButton>
           </div>
         </div>
@@ -373,89 +370,47 @@ function LandingHero({ isDark }: { isDark: boolean }) {
   );
 }
 
-/* ================= 3. STICKY PROGRESS NAV COMPONENT (MagnificationDock) ================= */
+/* ================= 3. STICKY PROGRESS NAV COMPONENT ================= */
 function LandingStickyNav({
   activeSection,
   onSelectSection,
 }: {
   activeSection: string;
-  onSelectSection: (id: string) => void;
+  onSelectSection?: (id: string) => void;
 }) {
-  const dockItems: DockItemData[] = [
-    {
-      label: '01 // CORTEX IDE (16 Cloud Runtimes)',
-      active: activeSection === 'ide',
-      onClick: () => {
-        onSelectSection('ide');
-        const el = document.getElementById('ide');
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      },
-      icon: (
-        <span
-          className={`flex items-center gap-2 rounded-full px-5 py-2 font-mono text-xs tracking-wider transition-all cursor-pointer ${
-            activeSection === 'ide'
-              ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_24px_rgba(255,145,0,0.7)]'
-              : 'font-bold text-zinc-950 hover:text-black dark:text-zinc-300 dark:hover:text-white'
-          }`}
-        >
-          <Terminal className="h-3.5 w-3.5 text-current" />
-          <span>01 // CORTEX IDE</span>
-        </span>
-      ),
-    },
-    {
-      label: '02 // CORTEX CLASSROOM (Academic Virtual Labs)',
-      active: activeSection === 'classroom',
-      onClick: () => {
-        onSelectSection('classroom');
-        const el = document.getElementById('classroom');
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      },
-      icon: (
-        <span
-          className={`flex items-center gap-2 rounded-full px-5 py-2 font-mono text-xs tracking-wider transition-all cursor-pointer ${
-            activeSection === 'classroom'
-              ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_24px_rgba(255,145,0,0.7)]'
-              : 'font-bold text-zinc-950 hover:text-black dark:text-zinc-300 dark:hover:text-white'
-          }`}
-        >
-          <BookOpen className="h-3.5 w-3.5 text-current" />
-          <span>02 // CORTEX CLASSROOM</span>
-        </span>
-      ),
-    },
-    {
-      label: '03 // CORTEX BROWSER (Win32 Kiosk Security)',
-      active: activeSection === 'browser',
-      onClick: () => {
-        onSelectSection('browser');
-        const el = document.getElementById('browser');
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      },
-      icon: (
-        <span
-          className={`flex items-center gap-2 rounded-full px-5 py-2 font-mono text-xs tracking-wider transition-all cursor-pointer ${
-            activeSection === 'browser'
-              ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_24px_rgba(255,145,0,0.7)]'
-              : 'font-bold text-zinc-950 hover:text-black dark:text-zinc-300 dark:hover:text-white'
-          }`}
-        >
-          <ShieldAlert className="h-3.5 w-3.5 text-current" />
-          <span>03 // CORTEX BROWSER</span>
-        </span>
-      ),
-    },
+  const tabs = [
+    { id: 'ide', label: '01 // CORTEX IDE' },
+    { id: 'classroom', label: '02 // CORTEX CLASSROOM' },
+    { id: 'browser', label: '03 // CORTEX BROWSER' },
   ];
 
   return (
     <div className="sticky top-20 z-40 mx-auto my-8 flex w-full max-w-fit justify-center px-4">
-      <MagnificationDock
-        items={dockItems}
-        magnification={58}
-        baseItemSize={48}
-        distance={160}
-        panelHeight={52}
-      />
+      <nav
+        className="flex items-center gap-1.5 rounded-full border border-zinc-200/90 bg-white/95 dark:border-white/10 dark:bg-[#070708]/90 backdrop-blur-2xl shadow-[0_10px_35px_-5px_rgba(0,0,0,0.12)] p-1.5 transition-all duration-300"
+      >
+        {tabs.map((tab) => {
+          const isActive = activeSection === tab.id;
+          return (
+            <a
+              key={tab.id}
+              href={`#${tab.id}`}
+              onClick={() => {
+                if (onSelectSection) {
+                  onSelectSection(tab.id);
+                }
+              }}
+              className={`relative rounded-full px-7 py-2.5 font-mono text-xs tracking-wider transition-all duration-300 select-none ${
+                isActive
+                  ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_28px_rgba(255,145,0,0.65),0_2px_10px_rgba(255,145,0,0.4)]'
+                  : 'font-semibold text-zinc-800 hover:text-black dark:text-zinc-300 dark:hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </a>
+          );
+        })}
+      </nav>
     </div>
   );
 }
@@ -463,8 +418,20 @@ function LandingStickyNav({
 /* ================= 4. FOOTER COMPONENT ================= */
 function LandingFooter() {
   return (
-    <footer className="border-t border-zinc-200/60 dark:border-white/[0.07] py-12 text-center font-mono text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-      CORTEX PLATFORM v1.0 // CODE BEYOND LIMITS // LIGHT &amp; DARK ADAPTIVE SUITE
+    <footer className="relative overflow-hidden border-t border-zinc-200/60 dark:border-white/[0.07] py-16 text-center font-mono text-xs text-zinc-500">
+      <div className="max-w-4xl mx-auto px-4 space-y-6">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <GlowCtaButton href="/ide" variant="primary">
+            Launch Standalone IDE
+          </GlowCtaButton>
+          <GlowCtaButton href="/classroom" variant="book-call">
+            Book an Engineering Demo
+          </GlowCtaButton>
+        </div>
+        <div className="font-mono text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+          CORTEX PLATFORM v1.0 // CODE BEYOND LIMITS // LIGHT &amp; DARK ADAPTIVE SUITE
+        </div>
+      </div>
     </footer>
   );
 }

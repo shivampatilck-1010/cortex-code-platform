@@ -16,8 +16,11 @@ export interface GlowCtaButtonProps {
   href?: string;
   onClick?: () => void;
   children: React.ReactNode;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'book-call' | 'dark';
   className?: string;
+  glowColor?: string;
+  showArrow?: boolean;
+  showUnderline?: boolean;
 }
 
 export function GlowCtaButton({
@@ -26,6 +29,9 @@ export function GlowCtaButton({
   children,
   variant = 'primary',
   className = '',
+  glowColor = 'rgba(255, 145, 0, 0.42)',
+  showArrow = true,
+  showUnderline = true,
 }: GlowCtaButtonProps) {
   const ref = useRef<HTMLElement | null>(null);
 
@@ -33,45 +39,72 @@ export function GlowCtaButton({
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    el.style.setProperty('--x', `${e.clientX - rect.left}px`);
-    el.style.setProperty('--y', `${e.clientY - rect.top}px`);
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    el.style.setProperty('--x', `${x}px`);
+    el.style.setProperty('--y', `${y}px`);
   };
 
+  const isDarkBase = variant === 'primary' || variant === 'dark' || variant === 'book-call';
+
   const sharedClasses = cn(
-    'group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-xs font-bold tracking-wide transition-all duration-300 select-none cursor-pointer',
-    variant === 'primary'
-      ? 'border border-[#FF9100]/70 bg-black text-white shadow-[0_0_25px_-5px_rgba(255,145,0,0.5)] hover:border-[#FF9100] hover:shadow-[0_0_35px_0px_rgba(255,145,0,0.75)] hover:scale-[1.02]'
-      : 'border border-zinc-950/80 bg-white text-zinc-950 hover:bg-zinc-50 hover:border-black dark:border-white/20 dark:bg-white/[0.04] dark:text-zinc-100 dark:hover:border-[#FF9100]/60 hover:scale-[1.02]',
+    'group relative inline-flex items-center justify-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-xs font-semibold tracking-wide transition-all duration-300 select-none cursor-pointer animate-slide-blur-in',
+    isDarkBase
+      ? 'border border-[#FF9100]/50 bg-[#070708] text-white shadow-[0_0_20px_-3px_rgba(255,145,0,0.35)] hover:border-[#FF9100] hover:shadow-[0_0_35px_rgba(255,145,0,0.55)] hover:scale-[1.02]'
+      : 'border border-zinc-300 bg-white/95 text-zinc-950 dark:border-white/15 dark:bg-[#070708] dark:text-zinc-100 hover:border-black dark:hover:border-[#FF9100] hover:scale-[1.02]',
     className
   );
 
   const innerContent = (
     <>
+      {/* Outer ambient cursor-following halo glow */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -inset-[1px] rounded-full opacity-0 blur-md transition-opacity duration-300 group-hover:opacity-75"
+        style={{
+          background: `radial-gradient(140px circle at var(--x, 50%) var(--y, 50%), rgba(255, 145, 0, 0.55), transparent 80%)`,
+        }}
+      />
       {/* Cursor-tracked radial glow driven by --x and --y */}
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{
-          background:
-            'radial-gradient(120px circle at var(--x, 50%) var(--y, 50%), rgba(255, 145, 0, 0.45), transparent 75%)',
+          background: `radial-gradient(120px circle at var(--x, 50%) var(--y, 50%), ${glowColor}, transparent 75%)`,
         }}
       />
-      {/* Subtle inner rim */}
+      {/* Subtle inner glass rim */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-full border border-white/10 opacity-60"
+      />
+      {/* Foreground Content with Underline Expansion and Arrow Icon Shift */}
       <span className="relative z-10 flex items-center gap-2">
-        <span>{children}</span>
-        <svg
-          className="h-3.5 w-3.5 text-[#FF9100] transition-transform duration-300 group-hover:translate-x-1"
-          viewBox="0 0 16 16"
-          fill="none"
-        >
-          <path
-            d="M3.5 8H12.5M12.5 8L8.5 4M12.5 8L8.5 12"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <span className="relative inline-block font-mono font-bold tracking-wider">
+          {children}
+          {showUnderline && (
+            <span
+              aria-hidden="true"
+              className="absolute -bottom-1 left-0 h-[1.5px] w-0 bg-gradient-to-r from-[#FF9100] via-amber-400 to-[#FF9100] transition-all duration-300 ease-out group-hover:w-full rounded-full"
+            />
+          )}
+        </span>
+        {showArrow && (
+          <svg
+            className="h-3.5 w-3.5 text-[#FF9100] transition-transform duration-300 ease-out group-hover:translate-x-1.5 group-hover:scale-110"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3.5 8H12.5M12.5 8L8.5 4M12.5 8L8.5 12"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
       </span>
     </>
   );
@@ -101,6 +134,8 @@ export function GlowCtaButton({
     </button>
   );
 }
+
+export const InteractiveGlowButton = GlowCtaButton;
 
 /* ============================================================================
  * 0. LIQUID ETHER (WebGL Navier-Stokes Fluid Simulation)
@@ -1467,13 +1502,3 @@ export const Aurora: React.FC<AuroraProps> = ({
     />
   );
 };
-
-/* ============================================================================
- * 9. MAGNIFICATION DOCK COMPONENT (Framer Motion Spring Physics & Tooltips)
- * ========================================================================== */
-export {
-  MagnificationDock,
-  type DockItemData,
-  type DockProps,
-} from '@/sd-components/92e48665-ebf7-4173-98d2-a1d488decf45';
-
