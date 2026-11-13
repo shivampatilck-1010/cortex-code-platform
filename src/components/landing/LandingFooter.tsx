@@ -18,13 +18,51 @@ import { Aurora, GlowCtaButton } from './EffectsSuite';
 
 export const LandingFooter: React.FC = () => {
   const { isDark } = useTheme();
+  const footerRef = React.useRef<HTMLElement>(null);
+  const [scrollProgress, setScrollProgress] = React.useState(0);
+
+  React.useEffect(() => {
+    const handleScroll = () => {
+      if (!footerRef.current) return;
+      const rect = footerRef.current.getBoundingClientRect();
+      const windowH = window.innerHeight || 800;
+      const totalRange = rect.height + windowH;
+      const currentPos = windowH - rect.top;
+      const progress = Math.max(0, Math.min(1, currentPos / totalRange));
+      setScrollProgress(progress);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const LETTERS = [
+    { char: 'C', factor: 0.95, delay: '0s' },
+    { char: 'O', factor: 1.05, delay: '0.4s' },
+    { char: 'R', factor: 1.15, delay: '0.8s' },
+    { char: 'T', factor: 1.10, delay: '0.2s' },
+    { char: 'E', factor: 1.35, delay: '0.6s' },
+    { char: 'X', factor: 1.50, delay: '1.0s' },
+  ];
 
   return (
     <footer 
-      className={`border-t py-16 font-sans transition-colors duration-300 ${
+      ref={footerRef}
+      className={`border-t py-16 font-sans transition-colors duration-300 relative overflow-hidden ${
         isDark ? 'border-[#1F2024] bg-[#08090A] text-zinc-400' : 'border-slate-200 bg-white text-zinc-600'
       }`}
     >
+      <style>{`
+        @keyframes antigravity-bob {
+          0%, 100% {
+            transform: translateY(0px) rotate(0deg);
+          }
+          50% {
+            transform: translateY(-12px) rotate(0.4deg);
+          }
+        }
+      `}</style>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Final CTA Banner with Aurora Background */}
         <div className={`relative rounded-3xl overflow-hidden border mb-16 p-8 sm:p-12 text-center shadow-2xl transition-colors ${
@@ -191,12 +229,29 @@ export const LandingFooter: React.FC = () => {
           </div>
         </div>
 
-        {/* Giant Architectural Wordmark */}
-        <div className="relative w-full overflow-hidden select-none border-t border-zinc-200/80 dark:border-white/[0.08] pt-6 pb-2 sm:pt-12 sm:pb-6 my-4">
-          <div className="w-full text-center">
-            <span className="block font-black tracking-tighter text-[19vw] leading-[0.8] text-zinc-950 dark:text-white select-none transition-colors duration-300">
-              CORTEX
-            </span>
+        {/* Giant Architectural Wordmark with Anti-Gravity Floating Scroll */}
+        <div className="relative w-full overflow-hidden select-none border-t border-zinc-200/80 dark:border-white/[0.08] pt-8 pb-4 sm:pt-16 sm:pb-8 my-4">
+          <div className="w-full flex items-center justify-center font-black tracking-tighter text-[19vw] leading-[0.8] text-zinc-950 dark:text-white select-none transition-colors duration-300">
+            {LETTERS.map((item, idx) => (
+              <span
+                key={idx}
+                style={{
+                  transform: `translateY(${Math.round((1 - scrollProgress) * 120 * item.factor)}px)`,
+                  transition: 'transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                }}
+                className="inline-block transform-gpu hover:-translate-y-6 hover:text-[#FF9100] transition-all duration-300 cursor-default"
+              >
+                <span
+                  className="inline-block"
+                  style={{
+                    animation: 'antigravity-bob 4s ease-in-out infinite',
+                    animationDelay: item.delay,
+                  }}
+                >
+                  {item.char}
+                </span>
+              </span>
+            ))}
           </div>
         </div>
 
