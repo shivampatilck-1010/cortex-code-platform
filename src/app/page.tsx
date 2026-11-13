@@ -76,6 +76,53 @@ const HERO_CARDS = [
   },
 ];
 
+const STACKING_CARDS = [
+  {
+    index: '01',
+    file: 'DisplayAffinity.cs',
+    subsystem: 'WIN32 GPU HARDWARE MASK',
+    api: 'SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)',
+    desc: 'Forces hardware-accelerated black capture frames across OBS Studio, Discord Screenshare, Microsoft Teams, Zoom, and Windows Snipping Tool.',
+    badges: ['Win32 API', 'GPU Mask', 'WDA_EXCLUDEFROMCAPTURE'],
+    spec: 'Desktop Window Manager Hook',
+    metric: 'CAPTURE LATENCY: 0ms // DWM BUFFER',
+    status: 'STATUS: ACTIVE ENFORCEMENT',
+  },
+  {
+    index: '02',
+    file: 'KeyboardHook.cs',
+    subsystem: 'LOW-LEVEL KERNEL INTERCEPTION',
+    api: 'SetWindowsHookEx(WH_KEYBOARD_LL, HookCallback, ...)',
+    desc: 'Hardware scan-code interception suppressing WinKey, Alt+Tab, Ctrl+Alt+Del, Ctrl+Shift+Esc, and PrintScreen. Supervisor override: Ctrl+Alt+F10.',
+    badges: ['WH_KEYBOARD_LL', 'Ring 3 Hook', 'Low-Level'],
+    spec: 'Hardware Scan Codes Suppressed',
+    metric: 'SCAN CODES: INTERCEPTED // HOTKEYS: MUTED',
+    status: 'SUPERVISOR EXIT: Ctrl+Alt+F10',
+  },
+  {
+    index: '03',
+    file: 'ProcessWatchdog.cs',
+    subsystem: 'CONTINUOUS PROCESS SENTINEL',
+    api: 'System.Diagnostics.Process Watchdog Daemon',
+    desc: 'Continuously scans active host background processes against a 40+ prohibited binary blacklist (Wireshark, Cheat Engine, IDA Pro, x64dbg, VMware).',
+    badges: ['1,500ms Poll', '40+ Blacklist', 'Anti-Cheat'],
+    spec: '1,500ms Kernel Thread Loop',
+    metric: 'POLL INTERVAL: 1,500ms // HOST AUDIT',
+    status: 'SIGNATURES: 40+ VERIFIED',
+  },
+  {
+    index: '04',
+    file: 'ClipboardGuard.cs',
+    subsystem: 'AIR-GAPPED BUFFER ISOLATION',
+    api: 'OpenClipboard() & EmptyClipboard() Sanitation',
+    desc: 'Enforces strict clipboard sandboxing, scrubbing host clipboard buffers every second and isolating candidate memory from unauthorized IPC injection.',
+    badges: ['Memory Sandbox', 'Air-Gapped IPC', 'Buffer Scrub'],
+    spec: 'Ephemeral Memory Wipe',
+    metric: 'BUFFER LEAK: 0 BYTES // PERIODIC PURGE',
+    status: 'SANDBOX: AIR-GAPPED',
+  },
+];
+
 /* ================= 1. HEADER NAVBAR COMPONENT ================= */
 function LandingHeaderNav({
   isDark,
@@ -119,14 +166,23 @@ function LandingHeaderNav({
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-6 text-xs font-medium md:flex">
-          <a href="#ide" className="hover:text-[#FF9100] transition-colors">
+        <nav className="hidden items-center gap-6 text-xs font-semibold md:flex">
+          <a
+            href="#ide"
+            className="text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100] transition-colors"
+          >
             01 // IDE
           </a>
-          <a href="#classroom" className="hover:text-[#FF9100] transition-colors">
+          <a
+            href="#classroom"
+            className="text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100] transition-colors"
+          >
             02 // Classroom
           </a>
-          <a href="#browser" className="hover:text-[#FF9100] transition-colors">
+          <a
+            href="#browser"
+            className="text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100] transition-colors"
+          >
             03 // Browser
           </a>
         </nav>
@@ -136,10 +192,10 @@ function LandingHeaderNav({
           <button
             type="button"
             onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-[11px] transition-all ${
+            className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-[11px] font-bold transition-all ${
               isDark
                 ? 'border-white/15 bg-white/[0.04] text-zinc-200 hover:border-[#FF9100]/50'
-                : 'border-zinc-300 bg-zinc-100 text-zinc-800 hover:border-[#FF9100]'
+                : 'border-zinc-300 bg-zinc-100 text-black hover:border-zinc-950'
             }`}
             aria-label="Toggle color theme"
           >
@@ -188,28 +244,28 @@ function LandingHero({ isDark }: { isDark: boolean }) {
             className={`mb-7 inline-flex items-center gap-2.5 rounded-full border px-4 py-1.5 backdrop-blur-md ${
               isDark
                 ? 'border-white/15 bg-black/50 text-zinc-200'
-                : 'border-zinc-300 bg-white/80 text-zinc-800'
+                : 'border-zinc-300 bg-white/80 text-black font-semibold'
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-[#FF9100] shadow-[0_0_10px_#FF9100]" />
-            <span className="font-mono text-[11px] font-medium tracking-[0.16em]">
+            <span className="font-mono text-[11px] font-bold tracking-[0.16em]">
               CORTEX PLATFORM v1.0 // THREE PRODUCTION SUITES
             </span>
           </div>
 
           <h1
-            className={`text-5xl font-semibold tracking-tight sm:text-7xl lg:text-[5.25rem] lg:leading-[1.02] ${
+            className={`text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-[5.25rem] lg:leading-[1.02] ${
               isDark
                 ? 'bg-gradient-to-b from-white via-zinc-100 to-zinc-400 bg-clip-text text-transparent'
-                : 'text-zinc-950'
+                : 'text-black'
             }`}
           >
             CODE BEYOND LIMITS
           </h1>
 
           <p
-            className={`mt-6 max-w-2xl text-base leading-relaxed sm:text-lg ${
-              isDark ? 'text-zinc-300' : 'text-zinc-600'
+            className={`mt-6 max-w-2xl text-base leading-relaxed sm:text-lg font-medium ${
+              isDark ? 'text-zinc-300' : 'text-zinc-800'
             }`}
           >
             One unified engineering architecture decoupled into three standalone systems:
@@ -235,26 +291,26 @@ function LandingHero({ isDark }: { isDark: boolean }) {
               className={`group relative rounded-2xl border overflow-hidden transition-all duration-300 ${
                 isDark
                   ? 'border-white/[0.12] bg-[#0B0D11]/90 hover:border-[#FF9100]/60'
-                  : 'border-zinc-200 bg-white/90 shadow-lg hover:border-[#FF9100]'
+                  : 'border-zinc-300 bg-white/95 shadow-lg hover:border-black'
               }`}
             >
               <TubesBackground enableClickInteraction={true} className="min-h-[270px]">
                 <div
                   className={`flex h-full min-h-[270px] flex-col justify-between p-6 backdrop-blur-[2px] ${
-                    isDark ? 'bg-black/55' : 'bg-white/75'
+                    isDark ? 'bg-black/55' : 'bg-white/80'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-semibold tracking-widest text-[#FF9100]">
+                      <span className="font-mono text-xs font-bold tracking-widest text-[#FF9100]">
                         {card.index} //
                       </span>
                       <span
-                        className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] tracking-wider ${
+                        className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold tracking-wider ${
                           card.badge === 'PRODUCTION'
                             ? isDark
                               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                              : 'border-emerald-600/30 bg-emerald-500/10 text-emerald-700'
+                              : 'border-emerald-600/30 bg-emerald-500/15 text-emerald-800'
                             : 'border-[#FF9100]/40 bg-[#FF9100]/15 text-[#FF9100]'
                         }`}
                       >
@@ -262,15 +318,15 @@ function LandingHero({ isDark }: { isDark: boolean }) {
                       </span>
                     </div>
 
-                    <h2 className="mt-4 text-lg font-semibold tracking-tight">
+                    <h2 className="mt-4 text-lg font-bold tracking-tight text-black dark:text-white">
                       {card.title}
                     </h2>
-                    <p className="font-mono text-[11px] uppercase tracking-wider text-zinc-500">
+                    <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-500">
                       {card.subtitle}
                     </p>
                     <p
-                      className={`mt-3 text-sm leading-relaxed ${
-                        isDark ? 'text-zinc-300' : 'text-zinc-600'
+                      className={`mt-3 text-sm leading-relaxed font-medium ${
+                        isDark ? 'text-zinc-300' : 'text-zinc-800'
                       }`}
                     >
                       {card.description}
@@ -278,8 +334,8 @@ function LandingHero({ isDark }: { isDark: boolean }) {
                   </div>
 
                   <div className="mt-6 flex items-center justify-between border-t border-zinc-400/20 pt-4">
-                    <span className="font-mono text-[10px] text-zinc-400">
-                      CLICK CARD TO RANDOMIZE 3D TUBES
+                    <span className="font-mono text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                      CLICK TO RANDOMIZE 3D TUBES
                     </span>
                     <GlowCtaButton href={card.href} variant="primary" className="px-4 py-1.5">
                       {card.cta}
@@ -300,20 +356,20 @@ function LandingStickyNav({ activeSection }: { activeSection: string }) {
   return (
     <div className="sticky top-20 z-40 mx-auto my-8 flex w-full max-w-fit justify-center px-4">
       <nav
-        className="flex flex-wrap items-center justify-center gap-1 rounded-full border p-1.5 shadow-2xl backdrop-blur-xl border-zinc-200 bg-white/90 dark:border-white/[0.1] dark:bg-[#0D0F12]/85"
+        className="flex flex-wrap items-center justify-center gap-1 rounded-full border p-1.5 shadow-2xl backdrop-blur-xl border-zinc-200 bg-white/95 dark:border-white/[0.1] dark:bg-[#0D0F12]/85"
       >
         {[
           { id: 'ide', label: '01 // CORTEX IDE' },
           { id: 'classroom', label: '02 // CORTEX CLASSROOM' },
-          { id: 'browser', label: '03 // CORTEX BROWSER (IN DEVELOPMENT)' },
+          { id: 'browser', label: '03 // CORTEX BROWSER' },
         ].map((tab) => (
           <a
             key={tab.id}
             href={`#${tab.id}`}
             className={`rounded-full px-4 py-1.5 font-mono text-[11px] tracking-wider transition-all ${
               activeSection === tab.id
-                ? 'bg-[#FF9100] font-semibold text-[#08090A] shadow-[0_0_20px_-2px_rgba(255,145,0,0.6)]'
-                : 'text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white'
+                ? 'bg-[#FF9100] font-bold text-[#08090A] shadow-[0_0_20px_-2px_rgba(255,145,0,0.6)]'
+                : 'text-zinc-700 hover:text-black dark:text-zinc-400 dark:hover:text-white font-medium'
             }`}
           >
             {tab.label}
@@ -327,7 +383,7 @@ function LandingStickyNav({ activeSection }: { activeSection: string }) {
 /* ================= 4. FOOTER COMPONENT ================= */
 function LandingFooter() {
   return (
-    <footer className="border-t border-zinc-200/60 dark:border-white/[0.07] py-12 text-center font-mono text-xs text-zinc-500">
+    <footer className="border-t border-zinc-200/60 dark:border-white/[0.07] py-12 text-center font-mono text-xs font-semibold text-zinc-600 dark:text-zinc-400">
       CORTEX PLATFORM v1.0 // CODE BEYOND LIMITS // LIGHT &amp; DARK ADAPTIVE SUITE
     </footer>
   );
@@ -403,15 +459,15 @@ export default function CortexLandingPage() {
           <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12">
               <div className="lg:col-span-5">
-                <div className="inline-flex items-center rounded-full border border-[#FF9100]/40 bg-[#FF9100]/10 px-3 py-1 font-mono text-[11px] tracking-widest text-[#FF9100]">
+                <div className="inline-flex items-center rounded-full border border-[#FF9100]/40 bg-[#FF9100]/10 px-3 py-1 font-mono text-[11px] font-bold tracking-widest text-[#FF9100]">
                   PRODUCT 01 // DEVELOPER WORKSPACE
                 </div>
-                <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
+                <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl text-black dark:text-white">
                   Cortex IDE
                 </h2>
                 <p
-                  className={`mt-4 text-sm leading-relaxed sm:text-base ${
-                    isDark ? 'text-zinc-400' : 'text-zinc-600'
+                  className={`mt-4 text-sm leading-relaxed sm:text-base font-medium ${
+                    isDark ? 'text-zinc-400' : 'text-zinc-800'
                   }`}
                 >
                   Write, step-debug, and benchmark across 16 cloud runtimes with Monaco
@@ -423,22 +479,22 @@ export default function CortexLandingPage() {
                   className={`relative mt-8 overflow-hidden border p-5 [clip-path:polygon(0_0,calc(100%-20px)_0,100%_20px,100%_100%,0_100%)] ${
                     isDark
                       ? 'border-[#FF9100]/35 bg-[#0D1016]/90'
-                      : 'border-amber-500/40 bg-amber-50/70'
+                      : 'border-zinc-300 bg-white/95 shadow-md'
                   }`}
                 >
                   <InteractiveWavesBackground
                     lineColor={
-                      isDark ? 'rgba(255, 145, 0, 0.24)' : 'rgba(234, 88, 12, 0.2)'
+                      isDark ? 'rgba(255, 145, 0, 0.24)' : 'rgba(0, 0, 0, 0.12)'
                     }
                     xGap={12}
                     yGap={26}
                   />
                   <div className="relative z-10">
-                    <div className="flex items-center justify-between font-mono text-[10px] tracking-widest text-[#FF9100]">
+                    <div className="flex items-center justify-between font-mono text-xs font-bold tracking-widest text-black dark:text-[#FF9100]">
                       <span>CUT-OUT TELEMETRY // 16 RUNTIMES</span>
                       <span>EDGE SANDBOX</span>
                     </div>
-                    <p className="mt-2 text-xs leading-relaxed">
+                    <p className="mt-2 font-mono text-xs font-semibold leading-relaxed text-black dark:text-zinc-200">
                       Sub-15ms cold starts across C++20, Python 3.12, Rust, TypeScript, Go,
                       Java, C#, Kotlin, Swift, Ruby, PHP, Bash, SQL, and R.
                     </p>
@@ -469,7 +525,7 @@ export default function CortexLandingPage() {
                       isDark ? 'border-white/[0.07] bg-white/[0.02]' : 'border-zinc-200 bg-zinc-50'
                     }`}
                   >
-                    <span className="font-mono text-[11px] text-zinc-400">
+                    <span className="font-mono text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
                       cortex-ide // {currentRt.file}
                     </span>
                     <div className="flex items-center gap-1">
@@ -480,8 +536,8 @@ export default function CortexLandingPage() {
                           onClick={() => setSelectedRuntime(idx)}
                           className={`rounded-md px-2.5 py-1 font-mono text-[10px] transition-colors ${
                             selectedRuntime === idx
-                              ? 'bg-[#FF9100] font-semibold text-[#08090A]'
-                              : 'text-zinc-500 hover:text-[#FF9100]'
+                              ? 'bg-[#FF9100] font-bold text-[#08090A]'
+                              : 'text-zinc-600 hover:text-black dark:text-zinc-400 dark:hover:text-[#FF9100]'
                           }`}
                         >
                           {rt.label}
@@ -502,24 +558,24 @@ export default function CortexLandingPage() {
                       className={`relative m-3 overflow-hidden border p-4 [clip-path:polygon(0_0,calc(100%-16px)_0,100%_16px,100%_100%,16px_100%,0_calc(100%-16px))] ${
                         isDark
                           ? 'border-white/15 bg-[#090B0E]'
-                          : 'border-zinc-300 bg-zinc-50'
+                          : 'border-zinc-300 bg-white shadow-sm'
                       }`}
                     >
                       <InteractiveWavesBackground
                         lineColor={
-                          isDark ? 'rgba(255, 145, 0, 0.25)' : 'rgba(234, 88, 12, 0.22)'
+                          isDark ? 'rgba(255, 145, 0, 0.25)' : 'rgba(0, 0, 0, 0.12)'
                         }
                         xGap={10}
                         yGap={24}
                       />
                       <div className="relative z-10">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono text-[10px] font-semibold tracking-widest text-[#FF9100]">
+                          <span className="font-mono text-xs font-bold tracking-widest text-black dark:text-[#FF9100]">
                             GEMINI 2.5 FLASH
                           </span>
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                         </div>
-                        <p className="mt-3 text-[11px] leading-relaxed">
+                        <p className="mt-3 font-mono text-xs font-semibold leading-relaxed text-black dark:text-zinc-200">
                           O(n) linear pass verified. Step debugger ready at Breakpoint Line 5.
                         </p>
                       </div>
@@ -552,15 +608,15 @@ export default function CortexLandingPage() {
           <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12">
               <div className="lg:col-span-6">
-                <div className="inline-flex items-center rounded-full border border-[#FF9100]/40 bg-[#FF9100]/10 px-3 py-1 font-mono text-[11px] tracking-widest text-[#FF9100]">
+                <div className="inline-flex items-center rounded-full border border-[#FF9100]/40 bg-[#FF9100]/10 px-3 py-1 font-mono text-[11px] font-bold tracking-widest text-[#FF9100]">
                   PRODUCT 02 // ACADEMIC VIRTUAL LABS
                 </div>
-                <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
+                <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl text-black dark:text-white">
                   Cortex Classroom
                 </h2>
                 <p
-                  className={`mt-4 text-sm leading-relaxed sm:text-base ${
-                    isDark ? 'text-zinc-400' : 'text-zinc-600'
+                  className={`mt-4 text-sm leading-relaxed sm:text-base font-medium ${
+                    isDark ? 'text-zinc-400' : 'text-zinc-800'
                   }`}
                 >
                   Move your cursor across this section to preview the fluid multi-cursor
@@ -582,18 +638,18 @@ export default function CortexLandingPage() {
                   className={`rounded-2xl border p-6 backdrop-blur-xl ${
                     isDark
                       ? 'border-white/10 bg-black/55'
-                      : 'border-zinc-300 bg-white/85 shadow-xl'
+                      : 'border-zinc-300 bg-white/95 shadow-xl text-black'
                   }`}
                 >
-                  <div className="flex items-center justify-between border-b border-zinc-500/20 pb-3 font-mono text-xs">
+                  <div className="flex items-center justify-between border-b border-zinc-500/20 pb-3 font-mono text-xs font-bold">
                     <span>LAB_ROOM // CS-301-DISTRIBUTED-SYSTEMS</span>
-                    <span className="text-emerald-500">28 SYNCED</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">28 SYNCED</span>
                   </div>
-                  <div className="mt-4 space-y-2 font-mono text-xs">
-                    <div className="rounded bg-[#FF9100]/15 px-3 py-2 text-[#FF9100]">
+                  <div className="mt-4 space-y-2 font-mono text-xs font-semibold">
+                    <div className="rounded bg-[#FF9100]/15 px-3 py-2 text-black dark:text-[#FF9100]">
                       [Instructor Cursor] Line 14: raftConsensus.commit()
                     </div>
-                    <div className="rounded bg-sky-500/15 px-3 py-2 text-sky-400">
+                    <div className="rounded bg-sky-500/15 px-3 py-2 text-sky-800 dark:text-sky-300">
                       [Student_07 Cursor] Line 19: quorum.verifyAppendEntries()
                     </div>
                   </div>
@@ -603,106 +659,161 @@ export default function CortexLandingPage() {
           </div>
         </section>
 
-        {/* ================= PRODUCT 03: CORTEX BROWSER (with Aurora + Cut-Out Waves Box) ================= */}
+        {/* ================= PRODUCT 03: CORTEX BROWSER (with Aurora Stacking Cards + High-Contrast D1 Cut-Out) ================= */}
         <section
           id="browser"
-          className="relative scroll-mt-28 overflow-hidden border-t border-zinc-200/60 dark:border-white/[0.07] py-24"
+          className="relative scroll-mt-28 overflow-visible border-t border-zinc-200/60 dark:border-white/[0.07] py-24"
         >
-          {/* 7. Aurora Borealis OGL Shader Background */}
-          <div className="pointer-events-none absolute inset-0 z-0 opacity-45">
+          {/* Subtle Aurora Ambient Backdrop */}
+          <div className="pointer-events-none absolute inset-0 z-0 opacity-20 dark:opacity-30">
             <Aurora
               colorStops={
                 isDark
-                  ? ['#FF9100', '#FF3232', '#3A29FF']
-                  : ['#FDBA74', '#FB7185', '#818CF8']
+                  ? ['#3A29FF', '#FF94B4', '#FF3232']
+                  : ['#818CF8', '#FB7185', '#FDBA74']
               }
               amplitude={1.0}
-              blend={0.55}
+              blend={0.5}
               speed={0.5}
             />
           </div>
 
           <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12">
-              <div className="lg:col-span-5">
-                <div className="inline-flex items-center rounded-full border border-[#FF9100]/40 bg-[#FF9100]/10 px-3 py-1 font-mono text-[11px] tracking-widest text-[#FF9100]">
-                  PRODUCT 03 // IN DEVELOPMENT
+              
+              {/* Left Column: Sticky Summary & High-Contrast Black Cut-Out Box */}
+              <div className="lg:col-span-5 lg:sticky lg:top-28 lg:self-start space-y-6">
+                <div>
+                  <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-black dark:text-white">
+                    Cortex Browser
+                  </h2>
+                  <p className="mt-2 font-mono text-xs font-bold uppercase tracking-widest text-zinc-900 dark:text-zinc-400">
+                    Native Windows 10/11 x64 Lockdown Kiosk Engine
+                  </p>
+                  <p className="mt-4 text-sm sm:text-base leading-relaxed font-medium text-zinc-800 dark:text-zinc-300">
+                    Hardened, tamper-resistant examination security engine enforcing hardware screen capture blocking, low-level OS hotkey interception, and 1,500ms kernel watchdog.
+                  </p>
                 </div>
-                <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Cortex Browser
-                </h2>
-                <p className="mt-1 font-mono text-xs uppercase tracking-widest text-zinc-500">
-                  Native Windows 10/11 x64 Lockdown Kiosk Engine
-                </p>
 
-                {/* 3. Small Rectangular Cut-Out Side Box with InteractiveWavesBackground */}
+                {/* 3. Small Rectangular Cut-Out Side Box with High-Contrast Black Typography */}
                 <div
-                  className={`relative mt-6 overflow-hidden border p-5 [clip-path:polygon(0_0,calc(100%-22px)_0,100%_22px,100%_100%,0_100%)] ${
+                  className={`relative overflow-hidden border p-5 [clip-path:polygon(0_0,calc(100%-22px)_0,100%_22px,100%_100%,0_100%)] ${
                     isDark
-                      ? 'border-white/15 bg-black/65'
-                      : 'border-zinc-300 bg-white/85'
+                      ? 'border-white/15 bg-black/65 text-zinc-100'
+                      : 'border-zinc-300 bg-white/95 text-black shadow-md'
                   }`}
                 >
                   <InteractiveWavesBackground
                     lineColor={
-                      isDark ? 'rgba(255, 145, 0, 0.22)' : 'rgba(234, 88, 12, 0.18)'
+                      isDark ? 'rgba(255, 145, 0, 0.22)' : 'rgba(0, 0, 0, 0.12)'
                     }
                   />
                   <div className="relative z-10">
-                    <div className="font-mono text-[10px] tracking-widest text-[#FF9100]">
+                    <div className="font-mono text-xs font-bold tracking-widest text-black dark:text-[#FF9100]">
                       CLOUDFLARE D1 // 10s AUTO-SAVE ENGINE
                     </div>
-                    <p className="mt-2 font-mono text-[11px]">
+                    <p className="mt-2 font-mono text-xs font-semibold leading-relaxed text-black dark:text-zinc-200">
                       Tables: exams &bull; exam_sections &bull; exam_questions &bull;
                       exam_sessions &bull; exam_integrity_events
                     </p>
+                    <div className="mt-3 flex items-center gap-2 font-mono text-[11px] font-bold text-black dark:text-zinc-400">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Continuous 10-second transactional integrity checkpoint</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-8">
+                <div>
                   <GlowCtaButton href="/lockdown" variant="primary">
                     Open Lockdown Portal &amp; Simulator
                   </GlowCtaButton>
+                  <p className="mt-3 font-mono text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
+                    4 HARDENED KERNEL SUBSYSTEMS // SCROLL TO INSPECT STACKED DECK
+                  </p>
                 </div>
               </div>
 
-              <div className="lg:col-span-7">
-                <div
-                  className={`divide-y rounded-2xl border backdrop-blur-xl ${
-                    isDark
-                      ? 'divide-white/[0.07] border-white/15 bg-[#0C0E12]/90'
-                      : 'divide-zinc-200 border-zinc-300 bg-white/90 shadow-xl'
-                  }`}
-                >
-                  {[
-                    {
-                      file: 'DisplayAffinity.cs',
-                      api: 'SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)',
-                      desc: 'Forces black capture frames across OBS, Discord, Teams, Zoom, and Snipping Tool.',
-                    },
-                    {
-                      file: 'KeyboardHook.cs',
-                      api: 'Win32 WH_KEYBOARD_LL',
-                      desc: 'Suppresses WinKey, Alt+Tab, Ctrl+Shift+Esc, PrintScreen. Supervisor exit: Ctrl+Alt+F10.',
-                    },
-                    {
-                      file: 'ProcessWatchdog.cs',
-                      api: '1,500ms Kernel Poll',
-                      desc: 'Continuously scans active background processes against a 40+ prohibited app blacklist.',
-                    },
-                  ].map((item) => (
-                    <div key={item.file} className="p-5">
-                      <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-                        <span className="font-semibold">{item.file}</span>
-                        <span className="rounded border border-[#FF9100]/40 bg-[#FF9100]/10 px-2.5 py-0.5 text-[10px] text-[#FF9100]">
-                          {item.api}
-                        </span>
+              {/* Right Column: The "Stacking Cards" Deck with Aurora WebGL */}
+              <div className="lg:col-span-7 relative">
+                <div className="space-y-8 pb-12">
+                  {STACKING_CARDS.map((card, idx) => (
+                    <div
+                      key={card.file}
+                      style={{
+                        top: `${96 + idx * 28}px`,
+                        zIndex: 10 + idx * 10,
+                      }}
+                      className="sticky rounded-2xl border border-white/10 dark:border-white/15 bg-[#12131A] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-300"
+                    >
+                      {/* Background Gradient to blend with Aurora */}
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 z-10 pointer-events-none" />
+
+                      {/* Aurora Component with exact requested colors */}
+                      <div className="absolute inset-0 z-0">
+                        <Aurora
+                          colorStops={['#3A29FF', '#FF94B4', '#FF3232']}
+                          blend={0.5}
+                          amplitude={1.0}
+                          speed={0.5}
+                        />
                       </div>
-                      <p className="mt-2 text-xs text-zinc-400">{item.desc}</p>
+
+                      {/* Foreground Content */}
+                      <div className="relative z-20 p-6 sm:p-8 flex flex-col justify-between min-h-[300px]">
+                        {/* Header */}
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2 font-mono text-xs text-[#FF94B4]">
+                              <span className="font-bold tracking-widest">{card.index} //</span>
+                              <span className="text-white/60">{card.subsystem}</span>
+                            </div>
+                            <h3 className="mt-1 text-2xl font-bold text-white tracking-tight">
+                              {card.file}
+                            </h3>
+                            <p className="mt-2 text-white/70 text-xs sm:text-sm max-w-md leading-relaxed">
+                              {card.desc}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {card.badges.map((badge) => (
+                              <span
+                                key={badge}
+                                className="px-3 py-1 rounded-full text-xs font-mono font-medium bg-white/10 text-white/90 border border-white/10 backdrop-blur-sm shadow-sm"
+                              >
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* API Banner */}
+                        <div className="my-5 rounded-xl border border-white/10 bg-black/40 p-3.5 backdrop-blur-md">
+                          <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
+                            <div className="flex items-center gap-2 text-amber-300 font-semibold">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                              <span>{card.api}</span>
+                            </div>
+                            <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
+                              {card.spec}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Card Footer / Telemetry */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 font-mono text-[11px] text-white/60">
+                          <div>{card.metric}</div>
+                          <div className="font-semibold text-emerald-400">{card.status}</div>
+                        </div>
+                      </div>
+
+                      {/* Decorative ambient blurs outside card */}
+                      <div className="absolute -top-12 -left-12 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
+                      <div className="absolute -bottom-12 -right-12 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
                     </div>
                   ))}
                 </div>
               </div>
+
             </div>
           </div>
         </section>
