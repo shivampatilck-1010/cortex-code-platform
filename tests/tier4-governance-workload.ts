@@ -33,6 +33,8 @@ const BINARY_EXTENSIONS = [
   '.mov',
   '.mkv',
   '.avi',
+  '.bin',
+  '.part',
   '.mp3',
   '.wav',
   '.ogg',

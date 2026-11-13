@@ -11,6 +11,7 @@ import {
   Aurora,
   GlowCtaButton,
 } from '@/components/landing/EffectsSuite';
+import { InteractiveVideoShowcase } from '@/components/landing/InteractiveVideoShowcase';
 
 const RUNTIMES = [
   {
@@ -716,6 +717,9 @@ export default function CortexLandingPage() {
 
         {/* ================= HERO SECTION ================= */}
         <LandingHero isDark={isDark} />
+
+        {/* ================= LIVE REPRESENTATION VIDEO SHOWCASE ================= */}
+        <InteractiveVideoShowcase isDark={isDark} />
 
         {/* ================= STICKY PILL PROGRESS NAV ================= */}
         <LandingStickyNav
