@@ -44,57 +44,78 @@ interface VideoChannel {
 
 const CHANNELS: VideoChannel[] = [
   {
-    id: 'logo-reveal',
-    badge: '01 // 3D KINETIC LOGO',
-    title: 'Cinematic Logo Reveal',
-    subtitle: 'Neural geometry and procedural volumetric shading for the Cortex universal runtime identity.',
-    src: '/videos/cortex-logo-reveal.mp4',
-    durationLabel: '00:08 // 60 FPS',
+    id: 'ide-runtimes',
+    badge: '01 // CORTEX CLOUD IDE',
+    title: 'Cloud IDE & Compiler Engine',
+    subtitle: '16+ isolated sandbox runtimes (C++, Python, Rust, Go, TS) with Monaco syntax highlighting, step debugging, and sub-50ms compilation.',
+    src: '/videos/cortex-brand-showcase.mp4',
+    durationLabel: '00:26 // 30 FPS',
     aspectRatio: 'aspect-video',
     highlights: [
-      'Procedural vector geometry with GPU acceleration',
-      'Quantum amber photon emission model (#FF9100)',
-      'Ultra-dense 1080p 60fps high dynamic rendering'
+      '16+ isolated sandbox language runtimes',
+      'Zero-latency Monaco editor with live diagnostics',
+      'Sub-50ms Cloudflare edge compilation & execution',
+      'Interactive stdout/stderr streaming terminal'
     ],
     productLink: '/ide',
     productLabel: 'Launch Cloud IDE'
   },
   {
-    id: 'brand-showcase',
-    badge: '02 // FLAGSHIP BRAND',
-    title: 'Universal Platform Showcase',
-    subtitle: 'The flagship cinematic overview demonstrating the three unified pillars of the Cortex ecosystem.',
-    src: '/videos/cortex-brand-showcase.mp4',
+    id: 'classroom-studio',
+    badge: '02 // CORTEX LIVE CLASSROOM',
+    title: 'Collaborative Code Studio',
+    subtitle: 'Real-time multi-cursor CRDT code sharing, live teacher broadcast stage, interactive whiteboard, and automated assignment test execution.',
+    src: '/videos/cortex-screen-recording.mp4',
     durationLabel: '00:26 // 30 FPS',
     aspectRatio: 'aspect-video',
     highlights: [
-      'Decoupled Cloud IDE with 16+ isolated sandbox runtimes',
-      'Classroom peer collaboration with WebRTC and CRDT sync',
-      'Anti-cheat assessment sandbox with kernel-level interception'
+      'Conflict-free Replicated Data Type (CRDT) multi-cursor sync',
+      'Low-latency WebRTC audio/video stage & whiteboard',
+      'Automated grading test suite with instant feedback',
+      'Multi-tenant class rosters & breakout permissions'
     ],
     productLink: '/classroom',
     productLabel: 'Open Classroom'
   },
   {
-    id: 'screen-recording',
-    badge: '03 // LIVE WALKTHROUGH',
-    title: 'Antigravity Dynamic Session',
-    subtitle: 'High-density interactive interface demonstration showcasing rapid compilation, live debugging, and layout telemetry.',
-    src: '/videos/cortex-screen-recording.mp4',
+    id: 'browser-lockdown',
+    badge: '03 // CORTEX BROWSER',
+    title: 'Hardened Lockdown Kiosk',
+    subtitle: 'Tamper-resistant Windows examination security engine enforcing hardware screen-capture masking, low-level keyboard interception, and continuous process watchdog.',
+    src: '/videos/cortex-brand-showcase.mp4',
     durationLabel: '00:26 // 30 FPS',
     aspectRatio: 'aspect-video',
     highlights: [
-      'Sub-50ms distributed Cloudflare edge compilation',
-      'Real-time standard input/output streaming terminal',
-      'Live responsive breakpoint and layout verification'
+      'SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) GPU mask',
+      'WH_KEYBOARD_LL low-level kernel hotkey interception',
+      '1,500ms kernel watchdog scanning 40+ prohibited binaries',
+      'Cloudflare D1 10-second transactional integrity checkpoint'
     ],
     productLink: '/lockdown',
-    productLabel: 'Inspect Security'
+    productLabel: 'Inspect Security Engine'
+  },
+  {
+    id: 'neural-branding',
+    badge: '04 // 3D BRAND IDENTITY',
+    title: 'Procedural Neural Geometry',
+    subtitle: 'Volumetric GPU neon photon emission shaders and kinetic 3D typography capturing the speed and precision of universal execution.',
+    src: '/videos/cortex-logo-reveal.mp4',
+    durationLabel: '00:08 // 60 FPS',
+    aspectRatio: 'aspect-video',
+    highlights: [
+      'Procedural vector geometry rendered at 60 FPS via WebGL',
+      'Quantum amber photon emission model (#FF9100)',
+      'Adaptive high-contrast light and dark mode grading',
+      'Pointer-reactive glow tracking and spring physics'
+    ],
+    productLink: '/ide',
+    productLabel: 'Explore Platform'
   }
 ];
 
-export const InteractiveVideoShowcase: React.FC = () => {
-  const { isDark } = useTheme();
+export const InteractiveVideoShowcase: React.FC<{ isDark?: boolean }> = ({ isDark: propIsDark }) => {
+  const themeContext = useTheme();
+  const isDark = propIsDark !== undefined ? propIsDark : themeContext.isDark;
   const [activeChannelIndex, setActiveChannelIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(true);
@@ -200,8 +221,9 @@ export const InteractiveVideoShowcase: React.FC = () => {
 
   return (
     <section 
-      id="interactive-showcase" 
-      className={`relative py-24 sm:py-32 overflow-hidden transition-colors duration-300 ${
+      id="showcase" 
+      data-testid="interactive-video-showcase"
+      className={`relative scroll-mt-28 py-24 sm:py-32 overflow-hidden transition-colors duration-300 ${
         isDark 
           ? 'bg-[#08090A] text-[#E6EDF3]' 
           : 'bg-[#FFFFFF] text-zinc-950'
@@ -282,7 +304,7 @@ export const InteractiveVideoShowcase: React.FC = () => {
           }}
           className={`relative rounded-2xl overflow-hidden border transition-all duration-300 shadow-2xl ${
             isDark
-              ? 'bg-[#0B0C0E] border-[#1F2024] shadow-black/80'
+              ? 'bg-[#070708] border-[#1F2024] shadow-black/80'
               : 'bg-white border-slate-200 shadow-orange-500/5'
           }`}
         >
@@ -419,7 +441,7 @@ export const InteractiveVideoShowcase: React.FC = () => {
 
           {/* Contextual Video Channel Details & Deep Dive */}
           <div className={`p-6 sm:p-8 border-t grid grid-cols-1 lg:grid-cols-3 gap-6 items-center transition-colors ${
-            isDark ? 'bg-[#0E0F14] border-[#1F2024]' : 'bg-slate-50/80 border-slate-200'
+            isDark ? 'bg-[#070708] border-[#1F2024]' : 'bg-slate-50/80 border-slate-200'
           }`}>
             <div className="lg:col-span-2 space-y-3">
               <div className="flex items-center gap-2 text-xs font-mono text-[#FF9100]">

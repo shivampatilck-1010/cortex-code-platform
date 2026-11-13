@@ -11,6 +11,7 @@ import {
   Aurora,
   GlowCtaButton,
 } from '@/components/landing/EffectsSuite';
+import { InteractiveVideoShowcase } from '@/components/landing/InteractiveVideoShowcase';
 
 const RUNTIMES = [
   {
@@ -72,7 +73,7 @@ const HERO_CARDS = [
       'Native Windows Win32 display affinity, WH_KEYBOARD_LL hooks, process watchdog, and 10s auto-save.',
     href: '/lockdown',
     cta: 'View Architecture',
-    badge: 'IN DEVELOPMENT',
+    badge: 'PRODUCTION',
   },
 ];
 
@@ -182,6 +183,17 @@ function LandingHeaderNav({
         </Link>
 
         <nav className="hidden items-center gap-6 text-xs font-semibold md:flex">
+          <a
+            href="#showcase"
+            onClick={() => onSelectSection('showcase')}
+            className={`transition-colors ${
+              activeSection === 'showcase'
+                ? 'text-[#FF9100]'
+                : 'text-zinc-700 hover:text-black dark:text-zinc-300 dark:hover:text-[#FF9100]'
+            }`}
+          >
+            00 // Showcase
+          </a>
           <a
             href="#ide"
             onClick={() => onSelectSection('ide')}
@@ -433,7 +445,7 @@ export default function CortexLandingPage() {
   // Robust, accurate scroll-spy tracking for sticky pill navigation
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['ide', 'classroom', 'browser'];
+      const sections = ['showcase', 'ide', 'classroom', 'browser'];
       const scrollPos = window.scrollY + 280;
 
       // Bottom detection: if scrolled near the bottom of document, prioritize 'browser'
@@ -481,6 +493,9 @@ export default function CortexLandingPage() {
 
         {/* ================= HERO SECTION ================= */}
         <LandingHero isDark={isDark} />
+
+        {/* ================= 00. INTERACTIVE VIDEO SHOWCASE REEL ================= */}
+        <InteractiveVideoShowcase isDark={isDark} />
 
         {/* ================= STICKY PILL PROGRESS NAV ================= */}
         <LandingStickyNav
