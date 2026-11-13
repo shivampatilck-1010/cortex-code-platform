@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 
@@ -73,13 +74,24 @@ export default function LoginPage() {
       <MovingDotsBackground />
       
       <div className="max-w-md w-full bg-[#0A0A0A]/90 backdrop-blur-md border border-[#333333] rounded-2xl p-8 space-y-6 shadow-2xl relative z-10">
-        <div className="flex items-center justify-center space-x-6 mb-10">
-          <CortexLogo variant="icon" size="xl" />
-          <div className="flex flex-col items-center">
-            <h1 className="text-5xl font-bold text-white tracking-tight">Cortex</h1>
-            <p className="text-[15px] text-gray-400 font-medium mt-2">Secure Access Terminal</p>
+        <Link
+          href="/"
+          className="group flex items-center justify-center space-x-6 mb-10 focus:outline-none transition-transform hover:scale-[1.02]"
+          aria-label="Cortex Platform Home"
+          title="Return to Cortex Platform Home"
+        >
+          <div className="transition-transform duration-200 group-hover:scale-105">
+            <CortexLogo variant="icon" size="xl" />
           </div>
-        </div>
+          <div className="flex flex-col items-center">
+            <h1 className="text-5xl font-bold text-white tracking-tight transition-colors duration-200 group-hover:text-[#FF9100]">
+              Cortex
+            </h1>
+            <p className="text-[15px] text-gray-400 font-medium mt-2">
+              Secure Access Terminal
+            </p>
+          </div>
+        </Link>
 
         {error && (
           <div className="p-3 rounded-lg bg-red-900/20 border border-red-900/50 text-red-400 text-sm">

@@ -382,48 +382,12 @@ function LandingHero({ isDark }: { isDark: boolean }) {
 }
 
 /* ================= 3. STICKY PROGRESS NAV COMPONENT ================= */
-function LandingStickyNav({
-  activeSection,
-  onSelectSection,
-}: {
-  activeSection: string;
+// Removed: Redundant with sticky header bar (LandingHeaderNav)
+function LandingStickyNav(_props?: {
+  activeSection?: string;
   onSelectSection?: (id: string) => void;
 }) {
-  const tabs = [
-    { id: 'ide', label: '01 // CORTEX IDE' },
-    { id: 'classroom', label: '02 // CORTEX CLASSROOM' },
-    { id: 'browser', label: '03 // CORTEX BROWSER' },
-  ];
-
-  return (
-    <div className="sticky top-20 z-40 mx-auto my-8 flex w-full max-w-fit justify-center px-4">
-      <nav
-        className="flex items-center gap-1.5 rounded-full border border-zinc-200/90 bg-white/95 dark:border-white/10 dark:bg-[#070708]/90 backdrop-blur-2xl shadow-[0_10px_35px_-5px_rgba(0,0,0,0.12)] p-1.5 transition-all duration-300"
-      >
-        {tabs.map((tab) => {
-          const isActive = activeSection === tab.id;
-          return (
-            <a
-              key={tab.id}
-              href={`#${tab.id}`}
-              onClick={() => {
-                if (onSelectSection) {
-                  onSelectSection(tab.id);
-                }
-              }}
-              className={`relative rounded-full px-7 py-2.5 font-mono text-xs tracking-wider transition-all duration-300 select-none ${
-                isActive
-                  ? 'bg-[#FF9100] font-bold text-black shadow-[0_0_28px_rgba(255,145,0,0.65),0_2px_10px_rgba(255,145,0,0.4)]'
-                  : 'font-semibold text-zinc-800 hover:text-black dark:text-zinc-300 dark:hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </a>
-          );
-        })}
-      </nav>
-    </div>
-  );
+  return null;
 }
 
 /* ================= 4. FOOTER COMPONENT ================= */

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function ForgotPasswordPage() {
@@ -38,10 +39,17 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen bg-[#0b0c10] text-gray-200 flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full bg-[#14151d] border border-[#272a39] rounded-2xl p-8 space-y-6 shadow-2xl">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-white tracking-tight">Reset Password</h1>
+        <Link
+          href="/"
+          className="group block text-center space-y-2 focus:outline-none transition-transform hover:scale-[1.02]"
+          aria-label="Cortex Platform Home"
+          title="Return to Cortex Platform Home"
+        >
+          <h1 className="text-2xl font-bold text-white tracking-tight group-hover:text-[#FF9100] transition-colors">
+            Reset Password
+          </h1>
           <p className="text-sm text-gray-400">Enter your email to receive a reset link</p>
-        </div>
+        </Link>
 
         {error && (
           <div className="p-3 rounded-lg bg-red-900/30 border border-red-900/50 text-red-400 text-sm">
