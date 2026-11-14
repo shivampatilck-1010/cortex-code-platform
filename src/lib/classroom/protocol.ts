@@ -58,7 +58,6 @@ export type ClassroomEventType =
   | 'workspace.student.update'
   | 'workspace.state.query';
 
-
 export interface ClassroomRealtimeEvent {
   id: string;
   classroomId: string;
@@ -102,7 +101,190 @@ export type RealtimeMessageType =
   | 'start_classroom'
   | 'arena_started'
   | 'classroom_ended'
-  | 'error';
+  | 'error'
+  // WebRTC Signaling
+  | 'webrtc_offer'
+  | 'webrtc_answer'
+  | 'webrtc_ice_candidate'
+  | 'WEBRTC_OFFER'
+  | 'WEBRTC_ANSWER'
+  | 'WEBRTC_ICE_CANDIDATE'
+  // Session Hydration
+  | 'SESSION_HYDRATION_SNAPSHOT'
+  // Monaco CRDT
+  | 'MONACO_CRDT_UPDATE'
+  | 'MONACO_AWARENESS_UPDATE'
+  | 'TEACHER_EDITOR_VIEWPORT'
+  // Whiteboard Streaming
+  | 'WHITEBOARD_STROKE_START'
+  | 'WHITEBOARD_STROKE_POINT'
+  | 'WHITEBOARD_STROKE_END'
+  | 'WHITEBOARD_ELEMENT_DELTA'
+  | 'WHITEBOARD_SNAPSHOT';
+
+// ---------------------------------------------------------------------------
+// WebRTC Signaling Envelopes and Types (Milestone 1 / Milestone 3)
+// ---------------------------------------------------------------------------
+
+export interface RTCIceCandidateInitLike {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+}
+
+export interface WebRTCOfferPayload {
+  targetUserId: string;
+  sdp: string;
+  type: 'offer';
+  senderId?: string;
+}
+
+export interface WebRTCAnswerPayload {
+  targetUserId: string;
+  sdp: string;
+  type: 'answer';
+  senderId?: string;
+}
+
+export interface WebRTCIceCandidatePayload {
+  targetUserId: string;
+  candidate: RTCIceCandidateInitLike;
+  senderId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Monaco Editor CRDT Envelopes and Types (Milestone 1 / Milestone 5)
+// ---------------------------------------------------------------------------
+
+export interface MonacoCrdtUpdatePayload {
+  fileId: string;
+  update: string; // Base64 encoded Uint8Array
+  senderId?: string;
+}
+
+export interface MonacoAwarenessUpdatePayload {
+  fileId: string;
+  awarenessData: string; // Base64 encoded Uint8Array
+  senderId?: string;
+}
+
+export interface TeacherEditorViewportPayload {
+  fileId: string;
+  lineNumber: number;
+  column: number;
+  scrollTop?: number;
+  senderId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Vector Whiteboard Delta Streaming Types (Milestone 1 / Milestone 6)
+// ---------------------------------------------------------------------------
+
+export interface WhiteboardStrokeStartPayload {
+  strokeId: string;
+  tool: string;
+  color: string;
+  strokeWidth: number;
+  strokeDash?: number[];
+  startPoint: { x: number; y: number };
+  pageIndex: number;
+  senderId?: string;
+}
+
+export interface WhiteboardStrokePointPayload {
+  strokeId: string;
+  points: Array<{ x: number; y: number; pressure?: number }>;
+  pageIndex: number;
+}
+
+export interface WhiteboardStrokeEndPayload {
+  strokeId: string;
+  element: any; // WhiteboardElement
+  pageIndex: number;
+}
+
+export interface WhiteboardElementDeltaPayload {
+  action: 'UPDATE' | 'DELETE';
+  elementId?: string;
+  elementIds?: string[];
+  patch?: Record<string, any>;
+  pageIndex: number;
+}
+
+export interface WhiteboardSnapshotPayload {
+  version: number;
+  activePageIndex: number;
+  pages: any[]; // WhiteboardPage[]
+}
+
+// ---------------------------------------------------------------------------
+// Atomic Session State Hydration Snapshot (Milestone 1)
+// ---------------------------------------------------------------------------
+
+export interface ParticipantAVPresence {
+  userId: string;
+  name: string;
+  role: 'teacher' | 'student' | 'admin' | string;
+  connectedAt: number;
+  isMuted: boolean;
+  isVideoOff: boolean;
+  isScreenSharing: boolean;
+  isHandRaised: boolean;
+  currentModule: string;
+  connectionStatus: 'connected' | 'reconnecting' | 'disconnected';
+}
+
+export interface SessionHydrationSnapshotPayload {
+  sessionId: string;
+  sequence: number;
+  timestamp: number;
+
+  code: {
+    broadcastState: 'stopped' | 'broadcasting' | 'paused';
+    activeFileId: string;
+    files: Array<{
+      id: string;
+      name: string;
+      language: string;
+      content: string;
+      isReadOnly?: boolean;
+    }>;
+    output: any | null;
+    yjsDocs?: Array<{
+      fileId: string;
+      stateVector: string; // Base64 encoded Uint8Array
+      update: string; // Base64 encoded Uint8Array
+    }>;
+  };
+
+  whiteboard: {
+    version: number;
+    activePageIndex: number;
+    activePageId?: string;
+    pages: any[];
+  };
+
+  presentation: {
+    isPresenting: boolean;
+    activeSlideIndex: number;
+    slideId?: string;
+    laserActive: boolean;
+    laserPos?: { x: number; y: number };
+  };
+
+  presence: {
+    activeParticipants: ParticipantAVPresence[];
+  };
+
+  permissions: {
+    allowStudentMicrophone: boolean;
+    allowStudentCamera: boolean;
+    allowStudentScreenShare: boolean;
+    allowStudentChat: boolean;
+    allowIndependentMode: boolean;
+  };
+}
 
 export interface RealtimeMessage {
   type: RealtimeMessageType;

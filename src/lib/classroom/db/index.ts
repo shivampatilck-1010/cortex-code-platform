@@ -402,6 +402,8 @@ class ClassroomDatabase {
         started_at INTEGER NOT NULL,
         ended_at INTEGER,
         status TEXT NOT NULL DEFAULT 'active',
+        state_json TEXT,
+        updated_at INTEGER,
         FOREIGN KEY(classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE
       );
 
@@ -818,6 +820,9 @@ class ClassroomDatabase {
     await safeAlterTable('ALTER TABLE exam_sessions ADD COLUMN submission_receipt TEXT', 'add submission_receipt to exam_sessions');
     await safeAlterTable('ALTER TABLE exam_sessions ADD COLUMN answer_digest TEXT', 'add answer_digest to exam_sessions');
     await safeAlterTable("ALTER TABLE lockdown_audit_checkpoints ADD COLUMN key_id TEXT NOT NULL DEFAULT 'k1'", 'add key_id to lockdown_audit_checkpoints');
+    await safeAlterTable('ALTER TABLE live_sessions ADD COLUMN state_json TEXT', 'add state_json to live_sessions');
+    await safeAlterTable('ALTER TABLE live_sessions ADD COLUMN updated_at INTEGER', 'add updated_at to live_sessions');
+    await safeAlterTable('CREATE INDEX IF NOT EXISTS idx_live_sessions_room_status ON live_sessions(classroom_id, status)', 'create index on live_sessions(classroom_id, status)');
 
     // Backfill any legacy plaintext quit passwords into hashes and null out plaintext
     try {
@@ -1768,6 +1773,8 @@ class ClassroomDatabase {
       durationMinutes: row.ended_at ? Math.round((row.ended_at - row.started_at) / 60000) : Math.round((Date.now() - row.started_at) / 60000),
       status: row.status as any,
       activeStudentCount: 0, // Real count comes from WebSocket Durable Object
+      stateJson: row.state_json,
+      updatedAt: row.updated_at,
     };
   }
 
@@ -1779,6 +1786,79 @@ class ClassroomDatabase {
   async endLiveSession(sessionId: string) {
     if (!(await this.getDb())) return;
     await (await this.getDb()).prepare('UPDATE live_sessions SET status = ?, ended_at = ? WHERE id = ?').run('ended', Date.now(), sessionId);
+  }
+
+  async flushLiveSessionState(
+    classroomId: string,
+    state: Record<string, any> | string,
+    sessionId?: string
+  ): Promise<boolean> {
+    const db = await this.getDb();
+    if (!db) return false;
+    const normId = classroomId.toUpperCase().trim();
+    const now = Date.now();
+    const stateRaw = typeof state === 'string' ? state : JSON.stringify(state);
+
+    let res: any = null;
+    if (sessionId) {
+      res = await db.prepare(
+        'UPDATE live_sessions SET state_json = ?, updated_at = ? WHERE id = ?'
+      ).run(stateRaw, now, sessionId);
+    }
+    if (!res || (res.changes === 0 && (!res.meta || res.meta.changes === 0))) {
+      res = await db.prepare(
+        'UPDATE live_sessions SET state_json = ?, updated_at = ? WHERE classroom_id = ? AND status = ?'
+      ).run(stateRaw, now, normId, 'active');
+    }
+
+    if (!res || (res.changes === 0 && (!res.meta || res.meta.changes === 0))) {
+      const fallbackId = sessionId || ('sess_' + normId + '_' + now);
+      const classroom = await this.getClassroom(normId);
+      await db.prepare(`
+        INSERT INTO live_sessions (
+          id, classroom_id, teacher_id, teacher_name, title, topic, language,
+          starter_code, shared_code, is_broadcasting_code, started_at, status,
+          state_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        fallbackId,
+        normId,
+        classroom?.teacherId || 'system',
+        classroom?.teacherName || 'Instructor',
+        classroom?.name || 'Live Session',
+        'Collaborative Workspace',
+        'typescript',
+        typeof state === 'object' && state?.latestTeacherCode ? state.latestTeacherCode : '',
+        typeof state === 'object' && state?.latestTeacherCode ? state.latestTeacherCode : '',
+        1,
+        now,
+        'active',
+        stateRaw,
+        now
+      );
+    }
+    return true;
+  }
+
+  async getLiveSessionState(classroomId: string, sessionId?: string): Promise<any | null> {
+    const db = await this.getDb();
+    if (!db) return null;
+    const normId = classroomId.toUpperCase().trim();
+    let row: any = null;
+    if (sessionId) {
+      row = await db.prepare('SELECT state_json FROM live_sessions WHERE id = ?').get(sessionId);
+    }
+    if (!row) {
+      row = await db.prepare(
+        'SELECT state_json FROM live_sessions WHERE classroom_id = ? AND status = ? ORDER BY started_at DESC LIMIT 1'
+      ).get(normId, 'active');
+    }
+    if (!row?.state_json) return null;
+    try {
+      return JSON.parse(row.state_json);
+    } catch {
+      return null;
+    }
   }
 
   // --- RESOURCES ---

@@ -260,6 +260,8 @@ export interface LiveClassSession {
   durationMinutes: number;
   status: 'active' | 'ended';
   activeStudentCount: number;
+  stateJson?: string;
+  updatedAt?: number;
 }
 
 export interface ClassroomResource {

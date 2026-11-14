@@ -66,8 +66,24 @@ const ClassroomShell: React.FC<{ roomId: string; sessionId: string }> = ({ roomI
           </div>
           <div className="flex flex-col space-y-2.5 pt-2">
             <button
-              onClick={() => router.push('/login')}
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  const guestId = `guest_${Math.random().toString(36).substring(2, 9)}`;
+                  localStorage.setItem('cortex_guest_user', JSON.stringify({
+                    id: guestId,
+                    name: `Guest Student ${guestId.slice(-4).toUpperCase()}`,
+                    role: 'student'
+                  }));
+                  window.location.reload();
+                }
+              }}
               className="w-full py-2.5 px-4 rounded-xl bg-[#FF9100] hover:bg-[#E08000] text-black font-semibold text-xs transition"
+            >
+              Continue as Guest Student
+            </button>
+            <button
+              onClick={() => router.push('/login')}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#15161C] hover:bg-[#1D1F27] border border-[#282A36] text-white font-medium text-xs transition"
             >
               Log In to Cortex
             </button>

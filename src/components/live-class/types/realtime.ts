@@ -1,4 +1,37 @@
 import { ClassroomModule, UserRole } from './classroom';
+import type {
+  RTCIceCandidateInitLike,
+  WebRTCOfferPayload,
+  WebRTCAnswerPayload,
+  WebRTCIceCandidatePayload,
+  MonacoCrdtUpdatePayload,
+  MonacoAwarenessUpdatePayload,
+  TeacherEditorViewportPayload,
+  WhiteboardStrokeStartPayload,
+  WhiteboardStrokePointPayload,
+  WhiteboardStrokeEndPayload,
+  WhiteboardElementDeltaPayload,
+  WhiteboardSnapshotPayload,
+  ParticipantAVPresence,
+  SessionHydrationSnapshotPayload,
+} from '@/lib/classroom/protocol';
+
+export type {
+  RTCIceCandidateInitLike,
+  WebRTCOfferPayload,
+  WebRTCAnswerPayload,
+  WebRTCIceCandidatePayload,
+  MonacoCrdtUpdatePayload,
+  MonacoAwarenessUpdatePayload,
+  TeacherEditorViewportPayload,
+  WhiteboardStrokeStartPayload,
+  WhiteboardStrokePointPayload,
+  WhiteboardStrokeEndPayload,
+  WhiteboardElementDeltaPayload,
+  WhiteboardSnapshotPayload,
+  ParticipantAVPresence,
+  SessionHydrationSnapshotPayload,
+};
 
 export interface TeacherActivityContext {
   module: ClassroomModule;
@@ -70,7 +103,23 @@ export type SignalingMessageType =
   | 'PING'
   | 'PONG'
   | 'CLASSROOM_EVENT'
-  | 'PROTOCOL_ERROR';
+  | 'PROTOCOL_ERROR'
+  // WebRTC Signaling
+  | 'WEBRTC_OFFER'
+  | 'WEBRTC_ANSWER'
+  | 'WEBRTC_ICE_CANDIDATE'
+  // Hydration Snapshot
+  | 'SESSION_HYDRATION_SNAPSHOT'
+  // Monaco CRDT
+  | 'MONACO_CRDT_UPDATE'
+  | 'MONACO_AWARENESS_UPDATE'
+  | 'TEACHER_EDITOR_VIEWPORT'
+  // Whiteboard Streaming
+  | 'WHITEBOARD_STROKE_START'
+  | 'WHITEBOARD_STROKE_POINT'
+  | 'WHITEBOARD_STROKE_END'
+  | 'WHITEBOARD_ELEMENT_DELTA'
+  | 'WHITEBOARD_SNAPSHOT';
 
 export interface ProtocolEnvelope<T = any> {
   version: string;

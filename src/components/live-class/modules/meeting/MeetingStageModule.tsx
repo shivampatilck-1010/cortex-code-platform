@@ -1,5 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+'use client';
+
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useClassroom, formatInitials } from '@/context/ClassroomContext';
+import { ParticipantVideoTile } from './ParticipantVideoTile';
+import { Participant, UserRole } from '@/types/classroom';
 import {
   Mic,
   MicOff,
@@ -13,6 +17,8 @@ import {
   AlertCircle,
   X,
   Square,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 
 export const MeetingStageModule: React.FC = () => {
@@ -24,6 +30,7 @@ export const MeetingStageModule: React.FC = () => {
     deviceState,
     toggleCamera,
     toggleMicrophone,
+    toggleScreenShare,
     setIsSettingsOpen,
     localVideoStream,
     screenShareStream,
@@ -35,60 +42,75 @@ export const MeetingStageModule: React.FC = () => {
     requestStudentCamera,
     currentUserName,
     remoteStreams,
+    remoteAudioLevels,
+    activeSpeakerId: contextActiveSpeakerId,
   } = useClassroom();
 
-  const [activeSpeakerId, setActiveSpeakerId] = useState<string>(currentUserId);
+  const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<'stage' | 'grid'>('stage');
   const [dismissedError, setDismissedError] = useState<string | null>(null);
 
-  // Video element refs for real media streams
-  const localStageVideoRef = useRef<HTMLVideoElement>(null);
-  const localTileVideoRef = useRef<HTMLVideoElement>(null);
-  const screenStageVideoRef = useRef<HTMLVideoElement>(null);
+  // Active speaker selection: prioritize pinned, then context active speaker, then teacher, then local
+  const teacher = useMemo(
+    () => participants.find((p) => p.role === 'teacher') || participants[0],
+    [participants]
+  );
 
-  // Bind local camera stream to primary stage video element
-  useEffect(() => {
-    if (localStageVideoRef.current) {
-      if (localVideoStream && !deviceState.isVideoOff) {
-        localStageVideoRef.current.srcObject = localVideoStream;
-        localStageVideoRef.current.play().catch(() => {});
-      } else {
-        localStageVideoRef.current.srcObject = null;
-      }
-    }
-  }, [localVideoStream, deviceState.isVideoOff, activeSpeakerId, layoutMode]);
+  const activeSpeakerId =
+    pinnedParticipantId ||
+    contextActiveSpeakerId ||
+    (deviceState.isScreenSharing ? currentUserId : teacher?.id || currentUserId);
 
-  // Bind local camera stream to gallery preview video element
-  useEffect(() => {
-    if (localTileVideoRef.current) {
-      if (localVideoStream && !deviceState.isVideoOff) {
-        localTileVideoRef.current.srcObject = localVideoStream;
-        localTileVideoRef.current.play().catch(() => {});
-      } else {
-        localTileVideoRef.current.srcObject = null;
-      }
-    }
-  }, [localVideoStream, deviceState.isVideoOff, layoutMode]);
+  const activeSpeaker = useMemo(
+    () => participants.find((p) => p.id === activeSpeakerId) || teacher,
+    [participants, activeSpeakerId, teacher]
+  );
 
-  // Bind screen share stream to stage element
-  useEffect(() => {
-    if (screenStageVideoRef.current) {
-      if (screenShareStream && deviceState.isScreenSharing) {
-        screenStageVideoRef.current.srcObject = screenShareStream;
-        screenStageVideoRef.current.play().catch(() => {});
-      } else {
-        screenStageVideoRef.current.srcObject = null;
-      }
-    }
-  }, [screenShareStream, deviceState.isScreenSharing, layoutMode]);
-
-  const teacher = participants.find((p) => p.role === 'teacher') || participants[0];
-  const activeSpeaker = participants.find((p) => p.id === activeSpeakerId) || teacher;
   const isLocalUserActiveSpeaker = activeSpeakerId === currentUserId;
+
+  // Synthesize self participant object
+  const selfParticipant: Participant = useMemo(
+    () => ({
+      id: currentUserId,
+      name: currentUserName || (userRole === 'teacher' ? 'Prof. Shivam Patil' : 'You'),
+      email: userRole === 'teacher' ? 'teacher@cortex.edu' : 'student@cortex.edu',
+      role: userRole,
+      isMuted: deviceState.isMuted,
+      isVideoOff: deviceState.isVideoOff,
+      isScreenSharing: deviceState.isScreenSharing,
+      isHandRaised: deviceState.isHandRaised,
+      currentModule: 'meeting',
+      connectionStatus: 'connected',
+    }),
+    [currentUserId, currentUserName, userRole, deviceState]
+  );
+
+  // All remote participants (excluding local)
+  const remoteParticipants = useMemo(
+    () => participants.filter((p) => p.id !== currentUserId),
+    [participants, currentUserId]
+  );
+
+  // Combined participant list for Grid view
+  const allMeetingParticipants = useMemo(
+    () => [selfParticipant, ...remoteParticipants],
+    [selfParticipant, remoteParticipants]
+  );
 
   const activeError =
     deviceState.cameraError || deviceState.microphoneError || deviceState.screenShareError;
   const showErrorBanner = activeError && activeError !== dismissedError;
+
+  // Grid columns calculator
+  const gridLayoutClass = useMemo(() => {
+    const count = allMeetingParticipants.length + (deviceState.isScreenSharing ? 1 : 0);
+    if (count <= 1) return 'grid-cols-1 max-w-4xl';
+    if (count === 2) return 'grid-cols-1 md:grid-cols-2 max-w-5xl';
+    if (count <= 4) return 'grid-cols-2 max-w-5xl';
+    if (count <= 6) return 'grid-cols-2 md:grid-cols-3 max-w-6xl';
+    if (count <= 9) return 'grid-cols-3 max-w-6xl';
+    return 'grid-cols-3 lg:grid-cols-4 max-w-7xl';
+  }, [allMeetingParticipants.length, deviceState.isScreenSharing]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#0B0C0E] p-4 overflow-hidden select-none">
@@ -121,7 +143,7 @@ export const MeetingStageModule: React.FC = () => {
       )}
 
       {/* Stage Context Banner & View Mode Toggle */}
-      <div className="mb-3 px-4 py-2 rounded-lg bg-[#111216] border border-[#282A36] flex items-center justify-between text-xs">
+      <div className="mb-3 px-4 py-2 rounded-lg bg-[#111216] border border-[#282A36] flex items-center justify-between text-xs shrink-0">
         <div className="flex items-center space-x-2">
           <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
           <span className="font-semibold text-white">Live Classroom Audio/Video Stage</span>
@@ -131,651 +153,263 @@ export const MeetingStageModule: React.FC = () => {
             <strong className="text-white">
               {deviceState.isScreenSharing
                 ? 'Your Screen Share'
+                : pinnedParticipantId
+                ? `${allMeetingParticipants.find((p) => p.id === pinnedParticipantId)?.name || 'Pinned'} (Pinned)`
                 : isLocalUserActiveSpeaker
                 ? `You (${userRole === 'teacher' ? 'Instructor' : 'Student'})`
-                : activeSpeaker.name}
+                : activeSpeaker?.name || 'Live Stage'}
             </strong>
           </span>
-          {isLocalUserActiveSpeaker ? (
-            <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
-              Live Hardware
-            </span>
-          ) : (
-            <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#FF9100]/15 text-[#FF9100] border border-[#FF9100]/30">
-              Simulated Peer Feed
-            </span>
+          <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
+            WebRTC Encrypted
+          </span>
+          {pinnedParticipantId && (
+            <button
+              onClick={() => setPinnedParticipantId(null)}
+              className="ml-2 text-[11px] text-[#FF9100] hover:underline flex items-center space-x-1"
+            >
+              <PinOff className="w-3 h-3" />
+              <span>Unpin</span>
+            </button>
           )}
         </div>
 
         {/* View Mode Controls */}
-        <div className="flex items-center space-x-1 bg-[#15161C] border border-[#282A36] rounded p-0.5">
+        <div className="flex items-center space-x-1 bg-[#1A1C23] p-1 rounded-md border border-[#282A36]">
           <button
             onClick={() => setLayoutMode('stage')}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
               layoutMode === 'stage'
-                ? 'bg-[#1D1F27] text-white border border-[#282A36]'
-                : 'text-[#71717A] hover:text-white'
+                ? 'bg-[#FF9100] text-black font-semibold'
+                : 'text-[#A1A1AA] hover:text-white'
             }`}
-            title="Speaker Stage Focus View"
-            aria-label="Speaker Stage Focus View"
+            title="Stage View: Focus on speaker with attendee filmstrip"
           >
-            <Layout className="w-3.5 h-3.5 text-[#FF9100]" />
-            <span className="hidden sm:inline">Stage View</span>
+            <Layout className="w-3.5 h-3.5" />
+            <span>Stage</span>
           </button>
           <button
             onClick={() => setLayoutMode('grid')}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
               layoutMode === 'grid'
-                ? 'bg-[#1D1F27] text-white border border-[#282A36]'
-                : 'text-[#71717A] hover:text-white'
+                ? 'bg-[#FF9100] text-black font-semibold'
+                : 'text-[#A1A1AA] hover:text-white'
             }`}
-            title="Grid Gallery View"
-            aria-label="Grid Gallery View"
+            title="Grid View: Google Meet-style equal participant tiles"
           >
-            <Grid className="w-3.5 h-3.5 text-[#06B6D4]" />
-            <span className="hidden sm:inline">Grid View</span>
+            <Grid className="w-3.5 h-3.5" />
+            <span>Grid ({allMeetingParticipants.length})</span>
           </button>
         </div>
       </div>
 
-      {/* Main Stage Container */}
-      {layoutMode === 'stage' ? (
-        /* STAGE VIEW: Primary Stage + Participant Sidebar */
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden">
-          {/* Primary Focus Stage */}
-          <div className="flex-1 rounded-xl border border-[#282A36] bg-[#111216] relative flex flex-col items-center justify-center overflow-hidden shadow-2xl">
-            {/* Condition 1: Screen Sharing is Active */}
-            {deviceState.isScreenSharing && screenShareStream ? (
-              <div className="w-full h-full relative flex items-center justify-center bg-black">
-                <video
-                  ref={screenStageVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-contain"
+      {/* Main Video Arena */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {layoutMode === 'stage' ? (
+          /* ========================================================= */
+          /* STAGE MODE: Large Primary Stage + Side Filmstrip           */
+          /* ========================================================= */
+          <div className="flex-1 flex flex-col lg:flex-row gap-4 h-full overflow-hidden">
+            {/* Primary Focus Viewport (70% - 75% width on desktop) */}
+            <div className="flex-1 flex flex-col h-full rounded-2xl overflow-hidden border border-[#282A36] bg-[#0E0F12] relative shadow-2xl">
+              {/* Condition 1: Local Screen Share Focus */}
+              {deviceState.isScreenSharing && screenShareStream ? (
+                <div className="w-full h-full relative flex items-center justify-center bg-black">
+                  <ParticipantVideoTile
+                    participant={selfParticipant}
+                    stream={screenShareStream}
+                    isLocal={true}
+                    isScreenShare={true}
+                    className="w-full h-full border-none rounded-none"
+                  />
+                  <div className="absolute top-4 left-4 z-20 flex items-center space-x-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-white text-xs">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+                    <span>You are presenting your screen</span>
+                    <button
+                      onClick={stopScreenShare}
+                      className="ml-2 px-2 py-0.5 rounded bg-[#EF4444] hover:bg-[#DC2626] text-white text-[11px] font-medium transition"
+                    >
+                      Stop Sharing
+                    </button>
+                  </div>
+                </div>
+              ) : /* Condition 2: Active Speaker or Pinned Participant */
+              isLocalUserActiveSpeaker ? (
+                <ParticipantVideoTile
+                  participant={selfParticipant}
+                  stream={localVideoStream}
+                  isLocal={true}
+                  audioLevel={deviceState.audioLevel}
+                  isSpeaking={!deviceState.isMuted && deviceState.audioLevel > 15}
+                  isPinned={pinnedParticipantId === currentUserId}
+                  onTogglePin={() =>
+                    setPinnedParticipantId(
+                      pinnedParticipantId === currentUserId ? null : currentUserId
+                    )
+                  }
+                  className="w-full h-full border-none rounded-none"
                 />
-                <div className="absolute top-4 left-4 flex items-center space-x-2 bg-black/75 backdrop-blur px-3 py-1.5 rounded-lg border border-[#06B6D4]/40">
-                  <MonitorUp className="w-4 h-4 text-[#06B6D4] animate-pulse" />
-                  <span className="text-xs font-medium text-white">
-                    Screen Capture Stream (60fps High-DPI)
-                  </span>
-                </div>
-                <div className="absolute bottom-4 right-4 flex items-center space-x-2">
-                  <button
-                    onClick={stopScreenShare}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#EF4444] hover:bg-[#DC2626] text-white text-xs font-semibold shadow-lg transition-colors"
-                  >
-                    <Square className="w-3.5 h-3.5 fill-white" />
-                    <span>Stop Sharing</span>
-                  </button>
-                </div>
-              </div>
-            ) : isLocalUserActiveSpeaker ? (
-              /* Condition 2: Local User is Focused */
-              !deviceState.isVideoOff && localVideoStream ? (
-                /* 2A: Local Real Camera Feed */
-                <div className="w-full h-full relative flex items-center justify-center bg-black">
-                  <video
-                    ref={localStageVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover scale-x-[-1]"
-                  />
-                  <div className="absolute top-4 left-4 flex items-center space-x-2 bg-black/75 backdrop-blur px-2.5 py-1 rounded-md border border-[#10B981]/40 text-xs text-white">
-                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-                    <span>Live Local Camera Preview</span>
-                  </div>
-                  <div className="absolute bottom-4 right-4 flex items-center space-x-2">
-                    <button
-                      onClick={stopCamera}
-                      className="px-3 py-1.5 rounded-lg bg-[#111216]/90 border border-[#282A36] hover:bg-[#1D1F27] text-white text-xs font-medium backdrop-blur transition-colors"
-                    >
-                      Turn Off Camera
-                    </button>
-                  </div>
-                </div>
               ) : (
-                /* 2B: Local User Camera Off State */
-                <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
-                  <div className="relative mb-4">
-                    <div className="w-28 h-28 rounded-full bg-[#1D1F27] border-2 border-[#10B981] flex items-center justify-center shadow-lg relative z-10">
-                      <span className="text-2xl font-bold text-white tracking-wider">
-                        {formatInitials(currentUserName || (userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen'))}
-                      </span>
-                    </div>
-                    {/* Live Web Audio Pulsing Ring */}
-                    {!deviceState.isMuted && deviceState.audioLevel > 15 && (
-                      <div
-                        className="absolute inset-0 -m-3 rounded-full border-2 border-[#10B981] transition-transform duration-75"
-                        style={{
-                          transform: `scale(${1 + (deviceState.audioLevel / 100) * 0.4})`,
-                          opacity: 0.6,
-                        }}
-                      />
-                    )}
-                  </div>
-
-                  <h3 className="text-base font-semibold text-white">
-                    {(currentUserName || (userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen'))} (You)
-                  </h3>
-                  <span className="text-xs text-[#10B981] font-medium uppercase tracking-wider mt-0.5">
-                    {userRole === 'teacher' ? 'Classroom Instructor' : 'Student Participant'}
-                  </span>
-
-                  <div className="mt-3 flex items-center space-x-2 text-xs text-[#A1A1AA] bg-[#15161C] px-3.5 py-1.5 rounded-full border border-[#282A36]">
-                    {deviceState.isMuted ? (
-                      <>
-                        <MicOff className="w-3.5 h-3.5 text-[#EF4444]" />
-                        <span>Microphone is currently muted</span>
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="w-3.5 h-3.5 text-[#10B981]" />
-                        <span>
-                          Live Microphone Input: <strong>{deviceState.audioLevel}%</strong> (Web Audio API)
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="mt-5 flex items-center space-x-3">
-                    <button
-                      onClick={toggleCamera}
-                      className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-[#FF9100] hover:bg-[#E08000] text-black text-xs font-semibold shadow-md transition-colors"
-                    >
-                      <Video className="w-3.5 h-3.5" />
-                      <span>Start Camera</span>
-                    </button>
-                    <button
-                      onClick={toggleMicrophone}
-                      className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                        deviceState.isMuted
-                          ? 'border-[#282A36] bg-[#15161C] text-white hover:bg-[#1D1F27]'
-                          : 'border-[#10B981]/50 bg-[#10B981]/15 text-[#10B981]'
-                      }`}
-                    >
-                      {deviceState.isMuted ? (
-                        <>
-                          <Mic className="w-3.5 h-3.5 text-[#10B981]" />
-                          <span>Unmute Mic</span>
-                        </>
-                      ) : (
-                        <>
-                          <MicOff className="w-3.5 h-3.5 text-[#EF4444]" />
-                          <span>Mute Mic</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )
-            ) : (
-              /* Condition 3: Remote Participant Focus */
-              remoteStreams && remoteStreams.has(activeSpeaker.id) && !activeSpeaker.isVideoOff ? (
-                <div className="w-full h-full relative flex items-center justify-center bg-black">
-                  <video
-                    ref={(el) => {
-                      if (el && remoteStreams.get(activeSpeaker.id) && el.srcObject !== remoteStreams.get(activeSpeaker.id)) {
-                        el.srcObject = remoteStreams.get(activeSpeaker.id) || null;
-                        el.play().catch(() => {});
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-4 left-4 flex items-center space-x-2 bg-black/75 backdrop-blur px-2.5 py-1 rounded-md border border-[#FF9100]/40 text-xs text-white">
-                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-                    <span>Live Video ({activeSpeaker.name})</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
-                  <div className="relative mb-4">
-                    <div className="w-28 h-28 rounded-full bg-[#1D1F27] border-2 border-[#FF9100] flex items-center justify-center shadow-lg relative z-10">
-                      <span className="text-2xl font-bold text-white tracking-wider">
-                        {formatInitials(activeSpeaker.name)}
-                      </span>
-                    </div>
-                    {!activeSpeaker.isMuted && (
-                      <div className="absolute inset-0 -m-3 rounded-full border border-[#10B981]/50 animate-ping opacity-40" />
-                    )}
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <h3 className="text-base font-semibold text-white">{activeSpeaker.name}</h3>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
-                      {activeSpeaker.connectionStatus === 'connected' ? 'Connected' : 'Offline'}
-                    </span>
-                  </div>
-                  <span className="text-xs text-[#FF9100] font-medium uppercase tracking-wider mt-0.5">
-                    {activeSpeaker.role === 'teacher' ? 'Course Instructor' : 'Student Participant'}
-                  </span>
-
-                  <div className="mt-4 flex items-center space-x-2 text-xs text-[#A1A1AA] bg-[#15161C] px-3.5 py-1.5 rounded-full border border-[#282A36]">
-                    {activeSpeaker.isMuted ? (
-                      <>
-                        <MicOff className="w-3.5 h-3.5 text-[#EF4444]" />
-                        <span>Microphone is currently muted</span>
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="w-3.5 h-3.5 text-[#10B981]" />
-                        <span>Microphone active</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )
-            )}
-
-            {/* Lower Stage Badges */}
-            <div className="absolute bottom-4 left-4 flex items-center space-x-2">
-              <span className="px-2.5 py-1 rounded bg-black/70 backdrop-blur text-xs font-medium text-white flex items-center space-x-1.5 border border-[#282A36]">
-                <span className="w-2 h-2 rounded-full bg-[#10B981]" />
-                <span>
-                  {isLocalUserActiveSpeaker
-                    ? 'You (Local Preview)'
-                    : activeSpeaker.name}
-                </span>
-              </span>
-              {(isLocalUserActiveSpeaker ? deviceState.isMuted : activeSpeaker.isMuted) ? (
-                <span className="p-1 rounded bg-[#EF4444]/30 text-[#EF4444]" title="Microphone Muted">
-                  <MicOff className="w-3.5 h-3.5" />
-                </span>
-              ) : (
-                <span className="p-1 rounded bg-[#10B981]/30 text-[#10B981]" title="Microphone Active">
-                  <Mic className="w-3.5 h-3.5" />
-                </span>
+                <ParticipantVideoTile
+                  participant={activeSpeaker || teacher}
+                  stream={
+                    activeSpeaker
+                      ? remoteStreams.get(activeSpeaker.id) || null
+                      : null
+                  }
+                  isLocal={false}
+                  audioLevel={
+                    activeSpeaker
+                      ? remoteAudioLevels?.get(activeSpeaker.id) || 0
+                      : 0
+                  }
+                  isSpeaking={
+                    activeSpeaker
+                      ? (remoteAudioLevels?.get(activeSpeaker.id) || 0) > 15
+                      : false
+                  }
+                  isPinned={pinnedParticipantId === activeSpeaker?.id}
+                  onTogglePin={() =>
+                    activeSpeaker &&
+                    setPinnedParticipantId(
+                      pinnedParticipantId === activeSpeaker.id ? null : activeSpeaker.id
+                    )
+                  }
+                  isTeacherModerator={userRole === 'teacher'}
+                  onMuteStudent={
+                    activeSpeaker ? () => muteStudent(activeSpeaker.id) : undefined
+                  }
+                  onRequestUnmute={
+                    activeSpeaker ? () => requestStudentUnmute(activeSpeaker.id) : undefined
+                  }
+                  className="w-full h-full border-none rounded-none"
+                />
               )}
             </div>
 
-            <div className="absolute top-4 right-4 flex items-center space-x-2">
-              <span className="px-2 py-0.5 rounded bg-black/60 text-[10px] text-[#71717A] font-mono">
-                {isLocalUserActiveSpeaker ? 'Hardware Ingest' : '1080p 60fps • 48kHz Opus'}
-              </span>
+            {/* Filmstrip Gallery Rail (Right side on desktop, bottom on mobile) */}
+            <div className="lg:w-80 flex lg:flex-col gap-3 overflow-y-auto shrink-0 pr-1">
+              {/* Local User Preview Tile in Filmstrip (if not on main stage) */}
+              {!isLocalUserActiveSpeaker && (
+                <ParticipantVideoTile
+                  participant={selfParticipant}
+                  stream={localVideoStream}
+                  isLocal={true}
+                  audioLevel={deviceState.audioLevel}
+                  isSpeaking={!deviceState.isMuted && deviceState.audioLevel > 15}
+                  isPinned={pinnedParticipantId === currentUserId}
+                  onTogglePin={() =>
+                    setPinnedParticipantId(
+                      pinnedParticipantId === currentUserId ? null : currentUserId
+                    )
+                  }
+                  className="h-36 lg:h-44 w-full shrink-0"
+                />
+              )}
+
+              {/* Remote Participants in Filmstrip */}
+              {remoteParticipants.map((p) => {
+                // If this participant is already on the main stage, skip duplicate tile in filmstrip
+                if (p.id === activeSpeakerId && !pinnedParticipantId) return null;
+
+                const stream = remoteStreams.get(p.id) || null;
+                const audioLevel = remoteAudioLevels?.get(p.id) || 0;
+                const isSpeaking = audioLevel > 15;
+
+                return (
+                  <ParticipantVideoTile
+                    key={p.id}
+                    participant={p}
+                    stream={stream}
+                    isLocal={false}
+                    audioLevel={audioLevel}
+                    isSpeaking={isSpeaking}
+                    isPinned={pinnedParticipantId === p.id}
+                    onTogglePin={() =>
+                      setPinnedParticipantId(
+                        pinnedParticipantId === p.id ? null : p.id
+                      )
+                    }
+                    isTeacherModerator={userRole === 'teacher'}
+                    onMuteStudent={() => muteStudent(p.id)}
+                    onRequestUnmute={() => requestStudentUnmute(p.id)}
+                    className="h-36 lg:h-44 w-full shrink-0"
+                  />
+                );
+              })}
             </div>
           </div>
-
-          {/* Participant Gallery Sidebar */}
-          <div className="lg:w-80 flex lg:flex-col gap-3 overflow-y-auto">
-            {/* 1. Local User Video / Audio Preview Card */}
+        ) : (
+          /* ========================================================= */
+          /* GRID MODE: Google Meet-Class Adaptive Grid                */
+          /* ========================================================= */
+          <div className="flex-1 w-full h-full overflow-y-auto flex items-center justify-center p-2">
             <div
-              onClick={() => setActiveSpeakerId(currentUserId)}
-              className={`flex-1 lg:flex-none h-32 lg:h-40 rounded-xl border p-3 flex flex-col justify-between cursor-pointer transition-all relative overflow-hidden ${
-                activeSpeakerId === currentUserId
-                  ? 'border-[#10B981] bg-[#151D18] shadow-md ring-1 ring-[#10B981]/50'
-                  : 'border-[#282A36] bg-[#111216] hover:bg-[#15161C]'
-              }`}
+              className={`w-full grid gap-4 auto-rows-fr transition-all duration-300 ${gridLayoutClass}`}
             >
-              {/* If camera is on, render video in background */}
-              {!deviceState.isVideoOff && localVideoStream ? (
-                <div className="absolute inset-0 z-0">
-                  <video
-                    ref={localTileVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover scale-x-[-1] opacity-80"
+              {/* Active Screen Share Tile in Grid (if streaming) */}
+              {deviceState.isScreenSharing && screenShareStream && (
+                <div className="aspect-video w-full">
+                  <ParticipantVideoTile
+                    participant={selfParticipant}
+                    stream={screenShareStream}
+                    isLocal={true}
+                    isScreenShare={true}
+                    className="w-full h-full"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
-                </div>
-              ) : null}
-
-              {/* Card Header */}
-              <div className="flex items-center justify-between relative z-10">
-                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/30">
-                  You ({userRole})
-                </span>
-                <div className="flex items-center space-x-1">
-                  {deviceState.isHandRaised && (
-                    <span className="p-1 rounded bg-[#FF9100]/20 text-[#FF9100]">
-                      <Hand className="w-3 h-3" />
-                    </span>
-                  )}
-                  {deviceState.isMuted ? (
-                    <MicOff className="w-3 h-3 text-[#EF4444]" />
-                  ) : (
-                    <Mic className="w-3 h-3 text-[#10B981]" />
-                  )}
-                </div>
-              </div>
-
-              {/* Card Center Avatar (if video off) */}
-              {deviceState.isVideoOff && (
-                <div className="flex items-center space-x-2 my-auto relative z-10">
-                  <div className="w-9 h-9 rounded-full bg-[#1D1F27] border border-[#10B981]/50 text-white font-bold text-xs flex items-center justify-center">
-                    {formatInitials(userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen')}
-                  </div>
-                  <div className="truncate">
-                    <p className="text-xs font-semibold text-white truncate">
-                      {userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen'}
-                    </p>
-                    <p className="text-[10px] text-[#A1A1AA] flex items-center space-x-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
-                      <span>Local Camera Feed</span>
-                    </p>
-                  </div>
                 </div>
               )}
 
-              {/* Card Footer */}
-              <div className="flex items-center justify-between text-[10px] text-[#A1A1AA] pt-1 border-t border-[#282A36]/50 relative z-10 mt-auto">
-                <div className="flex items-center space-x-1">
-                  {deviceState.isVideoOff ? (
-                    <span className="flex items-center text-[#71717A]">
-                      <VideoOff className="w-3 h-3 mr-1" /> Cam Off
-                    </span>
-                  ) : (
-                    <span className="flex items-center text-[#10B981]">
-                      <Video className="w-3 h-3 mr-1" /> Live Cam
-                    </span>
-                  )}
-                </div>
-
-                {/* Real Live Audio Meter */}
-                <div className="flex items-center space-x-0.5" title="Live Audio Input Level">
-                  {[0, 1, 2, 3].map((idx) => {
-                    const threshold = (idx + 1) * 25;
-                    const isActive = !deviceState.isMuted && deviceState.audioLevel >= threshold;
-                    return (
-                      <span
-                        key={idx}
-                        className={`w-1 rounded-full transition-all duration-75 ${
-                          isActive
-                            ? idx === 3
-                              ? 'bg-[#FF9100] h-3'
-                              : 'bg-[#10B981] h-2.5'
-                            : 'bg-[#282A36] h-1.5'
-                        }`}
-                      />
-                    );
-                  })}
-                </div>
+              {/* Local User Tile */}
+              <div className="aspect-video w-full">
+                <ParticipantVideoTile
+                  participant={selfParticipant}
+                  stream={localVideoStream}
+                  isLocal={true}
+                  audioLevel={deviceState.audioLevel}
+                  isSpeaking={!deviceState.isMuted && deviceState.audioLevel > 15}
+                  isPinned={pinnedParticipantId === currentUserId}
+                  onTogglePin={() =>
+                    setPinnedParticipantId(
+                      pinnedParticipantId === currentUserId ? null : currentUserId
+                    )
+                  }
+                  className="w-full h-full"
+                />
               </div>
-            </div>
 
-            {/* 2. Simulated Remote Peers */}
-            {participants
-              .filter((p) => p.id !== currentUserId)
-              .map((p) => {
-                const isSelected = p.id === activeSpeakerId;
+              {/* All Remote Participant Tiles */}
+              {remoteParticipants.map((p) => {
+                const stream = remoteStreams.get(p.id) || null;
+                const audioLevel = remoteAudioLevels?.get(p.id) || 0;
+                const isSpeaking = audioLevel > 15;
+
                 return (
-                  <div
-                    key={p.id}
-                    onClick={() => setActiveSpeakerId(p.id)}
-                    className={`flex-1 lg:flex-none h-28 lg:h-36 rounded-xl border p-3 flex flex-col justify-between cursor-pointer transition-all ${
-                      isSelected
-                        ? 'border-[#FF9100] bg-[#1D1F27]/80 shadow-md ring-1 ring-[#FF9100]/50'
-                        : 'border-[#282A36] bg-[#111216] hover:bg-[#15161C]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                          p.role === 'teacher'
-                            ? 'bg-[#FF9100]/20 text-[#FF9100]'
-                            : 'bg-[#282A36] text-[#A1A1AA]'
-                        }`}
-                      >
-                        {p.role}
-                      </span>
-                      <div className="flex items-center space-x-1">
-                        {p.isHandRaised && (
-                          <span className="p-1 rounded bg-[#FF9100]/20 text-[#FF9100]">
-                            <Hand className="w-3 h-3" />
-                          </span>
-                        )}
-                        {p.isMuted ? (
-                          <MicOff className="w-3 h-3 text-[#EF4444]" />
-                        ) : (
-                          <Mic className="w-3 h-3 text-[#10B981]" />
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 my-auto">
-                      <div className="w-8 h-8 rounded-full bg-[#282A36] text-white font-bold text-xs flex items-center justify-center">
-                        {formatInitials(p.name)}
-                      </div>
-                      <div className="truncate">
-                        <p className="text-xs font-medium text-white truncate">{p.name}</p>
-                        <p className="text-[10px] text-[#71717A] truncate">
-                          {p.role === 'teacher' ? 'Course Instructor' : 'Student Participant'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-[#71717A] pt-1 border-t border-[#282A36]">
-                      <div className="flex items-center space-x-1.5">
-                        <span>On {p.currentModule}</span>
-                        {p.isScreenSharing && (
-                          <span className="flex items-center text-[#06B6D4]">
-                            <MonitorUp className="w-3 h-3 mr-0.5" /> Screen
-                          </span>
-                        )}
-                      </div>
-
-                      {userRole === 'teacher' && p.role === 'student' && (
-                        <div
-                          className="flex items-center space-x-1"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {p.isMuted ? (
-                            <button
-                              onClick={() => requestStudentUnmute(p.id)}
-                              disabled={
-                                !session.permissions.allowStudentMicrophone ||
-                                p.unmuteRequestStatus === 'pending'
-                              }
-                              className="p-1 rounded bg-[#1D1F27] hover:bg-[#282A36] text-[#A1A1AA] hover:text-white border border-[#282A36] disabled:opacity-40 transition-colors"
-                              title={
-                                p.unmuteRequestStatus === 'pending'
-                                  ? 'Unmute request pending'
-                                  : `Request ${p.name} to unmute`
-                              }
-                              aria-label={`Request ${p.name} to unmute`}
-                            >
-                              <Mic className="w-3 h-3 text-[#10B981]" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => muteStudent(p.id)}
-                              className="p-1 rounded bg-[#EF4444]/15 hover:bg-[#EF4444]/25 text-[#EF4444] border border-[#EF4444]/30 transition-colors"
-                              title={`Mute ${p.name}`}
-                              aria-label={`Mute ${p.name}`}
-                            >
-                              <MicOff className="w-3 h-3" />
-                            </button>
-                          )}
-
-                          {p.isVideoOff ? (
-                            <button
-                              onClick={() => requestStudentCamera(p.id)}
-                              disabled={
-                                !session.permissions.allowStudentCamera ||
-                                p.cameraRequestStatus === 'pending'
-                              }
-                              className="p-1 rounded bg-[#1D1F27] hover:bg-[#282A36] text-[#A1A1AA] hover:text-white border border-[#282A36] disabled:opacity-40 transition-colors"
-                              title={
-                                p.cameraRequestStatus === 'pending'
-                                  ? 'Camera request pending'
-                                  : `Request ${p.name} to start video`
-                              }
-                              aria-label={`Request ${p.name} to start camera`}
-                            >
-                              <Video className="w-3 h-3 text-[#06B6D4]" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => turnOffStudentCamera(p.id)}
-                              className="p-1 rounded bg-[#FF9100]/15 hover:bg-[#FF9100]/25 text-[#FF9100] border border-[#FF9100]/30 transition-colors"
-                              title={`Turn off ${p.name} camera`}
-                              aria-label={`Turn off ${p.name} camera`}
-                            >
-                              <VideoOff className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                  <div key={p.id} className="aspect-video w-full">
+                    <ParticipantVideoTile
+                      participant={p}
+                      stream={stream}
+                      isLocal={false}
+                      audioLevel={audioLevel}
+                      isSpeaking={isSpeaking}
+                      isPinned={pinnedParticipantId === p.id}
+                      onTogglePin={() =>
+                        setPinnedParticipantId(
+                          pinnedParticipantId === p.id ? null : p.id
+                        )
+                      }
+                      isTeacherModerator={userRole === 'teacher'}
+                      onMuteStudent={() => muteStudent(p.id)}
+                      onRequestUnmute={() => requestStudentUnmute(p.id)}
+                      className="w-full h-full"
+                    />
                   </div>
                 );
               })}
-          </div>
-        </div>
-      ) : (
-        /* GRID GALLERY VIEW: Equal Size Responsive Cards */
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto">
-          {/* Local User Card */}
-          <div
-            onClick={() => setActiveSpeakerId(currentUserId)}
-            className="rounded-xl border border-[#10B981]/50 bg-[#111216] p-4 flex flex-col justify-between relative overflow-hidden shadow-xl"
-          >
-            {!deviceState.isVideoOff && localVideoStream ? (
-              <div className="absolute inset-0 z-0">
-                <video
-                  ref={localStageVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover scale-x-[-1]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center my-auto text-center z-10">
-                <div className="w-16 h-16 rounded-full bg-[#1D1F27] border-2 border-[#10B981] flex items-center justify-center text-lg font-bold text-white mb-2">
-                  {formatInitials(userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen')}
-                </div>
-                <span className="text-xs font-semibold text-white">
-                  {userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen'} (You)
-                </span>
-                <span className="text-[10px] text-[#71717A] mt-0.5">Camera is turned off</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between relative z-10">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/30">
-                You ({userRole})
-              </span>
-              <div className="flex items-center space-x-1">
-                {deviceState.isMuted ? (
-                  <MicOff className="w-3.5 h-3.5 text-[#EF4444]" />
-                ) : (
-                  <Mic className="w-3.5 h-3.5 text-[#10B981]" />
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-white pt-2 border-t border-[#282A36]/60 relative z-10 mt-auto">
-              <span className="text-[11px] font-medium">Local Media Ingest</span>
-              <span className="text-[10px] text-[#10B981] font-mono">
-                {!deviceState.isMuted ? `RMS ${deviceState.audioLevel}%` : 'Muted'}
-              </span>
             </div>
           </div>
-
-          {/* Remote Participants */}
-          {participants
-            .filter((p) => p.id !== currentUserId)
-            .map((p) => (
-              <div
-                key={p.id}
-                onClick={() => setActiveSpeakerId(p.id)}
-                className="rounded-xl border border-[#282A36] bg-[#111216] p-4 flex flex-col justify-between hover:bg-[#15161C] transition-all cursor-pointer shadow-lg"
-              >
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                      p.role === 'teacher'
-                        ? 'bg-[#FF9100]/20 text-[#FF9100]'
-                        : 'bg-[#282A36] text-[#A1A1AA]'
-                    }`}
-                  >
-                    {p.role}
-                  </span>
-                  <div className="flex items-center space-x-1">
-                    {p.isMuted ? (
-                      <MicOff className="w-3.5 h-3.5 text-[#EF4444]" />
-                    ) : (
-                      <Mic className="w-3.5 h-3.5 text-[#10B981]" />
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center justify-center my-auto text-center">
-                  <div className="w-16 h-16 rounded-full bg-[#1D1F27] border border-[#282A36] flex items-center justify-center text-lg font-bold text-white mb-2">
-                    {formatInitials(p.name)}
-                  </div>
-                  <span className="text-xs font-semibold text-white">{p.name}</span>
-                  <span className="text-[10px] text-[#71717A] mt-0.5">Simulated demo feed</span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-[#71717A] pt-2 border-t border-[#282A36]">
-                  <span className="text-[11px]">On {p.currentModule}</span>
-                  {userRole === 'teacher' && p.role === 'student' ? (
-                    <div
-                      className="flex items-center space-x-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {p.isMuted ? (
-                        <button
-                          onClick={() => requestStudentUnmute(p.id)}
-                          disabled={
-                            !session.permissions.allowStudentMicrophone ||
-                            p.unmuteRequestStatus === 'pending'
-                          }
-                          className="px-2 py-0.5 rounded text-[10px] bg-[#1D1F27] hover:bg-[#282A36] text-[#A1A1AA] hover:text-white border border-[#282A36] disabled:opacity-40 flex items-center space-x-1 transition-colors"
-                          aria-label={`Request ${p.name} to unmute`}
-                        >
-                          <Mic className="w-3 h-3 text-[#10B981]" />
-                          <span>Ask Mic</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => muteStudent(p.id)}
-                          className="px-2 py-0.5 rounded text-[10px] bg-[#EF4444]/15 hover:bg-[#EF4444]/25 text-[#EF4444] border border-[#EF4444]/30 flex items-center space-x-1 transition-colors"
-                          aria-label={`Mute ${p.name}`}
-                        >
-                          <MicOff className="w-3 h-3" />
-                          <span>Mute</span>
-                        </button>
-                      )}
-
-                      {p.isVideoOff ? (
-                        <button
-                          onClick={() => requestStudentCamera(p.id)}
-                          disabled={
-                            !session.permissions.allowStudentCamera ||
-                            p.cameraRequestStatus === 'pending'
-                          }
-                          className="px-2 py-0.5 rounded text-[10px] bg-[#1D1F27] hover:bg-[#282A36] text-[#A1A1AA] hover:text-white border border-[#282A36] disabled:opacity-40 flex items-center space-x-1 transition-colors"
-                          aria-label={`Request ${p.name} to start camera`}
-                        >
-                          <Video className="w-3 h-3 text-[#06B6D4]" />
-                          <span>Ask Cam</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => turnOffStudentCamera(p.id)}
-                          className="px-2 py-0.5 rounded text-[10px] bg-[#FF9100]/15 hover:bg-[#FF9100]/25 text-[#FF9100] border border-[#FF9100]/30 flex items-center space-x-1 transition-colors"
-                          aria-label={`Turn off ${p.name} camera`}
-                        >
-                          <VideoOff className="w-3 h-3" />
-                          <span>Stop Cam</span>
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-[10px] font-mono">Simulated Peer</span>
-                  )}
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

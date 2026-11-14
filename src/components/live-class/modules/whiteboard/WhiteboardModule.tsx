@@ -167,20 +167,65 @@ export const WhiteboardModule: React.FC = () => {
     return () => { isMounted = false; };
   }, [classroomId]);
 
-  // 2. Real-time broadcast sync listener
+  // 2. Real-time broadcast sync listener (Delta Streaming & Snapshots)
   useEffect(() => {
     if (!signalingClient) return;
 
     const unsub = signalingClient.onMessage((envelope) => {
-      if (envelope.type === 'CLASSROOM_EVENT' && envelope.payload?.eventName === 'WHITEBOARD_PAGE_SYNC') {
+      if (envelope.type === 'CLASSROOM_EVENT') {
+        const eventName = envelope.payload?.eventName;
         const syncData = envelope.payload?.data;
-        if (syncData?.pages && Array.isArray(syncData.pages)) {
-          versionRef.current = syncData.version || versionRef.current;
-          setDoc((prev) => ({
-            ...prev,
-            pages: syncData.pages,
-            activePageId: syncData.pages[syncData.activePageIndex || 0]?.id || prev.activePageId,
-          }));
+
+        if (eventName === 'WHITEBOARD_PAGE_SYNC' || eventName === 'WHITEBOARD_SNAPSHOT') {
+          if (syncData?.pages && Array.isArray(syncData.pages)) {
+            versionRef.current = syncData.version || versionRef.current;
+            setDoc((prev) => ({
+              ...prev,
+              pages: syncData.pages,
+              activePageId: syncData.pages[syncData.activePageIndex || 0]?.id || prev.activePageId,
+            }));
+          }
+        } else if (eventName === 'WHITEBOARD_STROKE_END') {
+          if (syncData?.element) {
+            setDoc((prev) => {
+              const pageIdx = syncData.pageIndex ?? 0;
+              const targetPage = prev.pages[pageIdx] || prev.pages[0];
+              if (!targetPage) return prev;
+              const exists = targetPage.elements.some((el) => el.id === syncData.element.id);
+              if (exists) return prev;
+              const updatedPages = prev.pages.map((p, idx) =>
+                idx === pageIdx
+                  ? { ...p, elements: [...p.elements, syncData.element] }
+                  : p
+              );
+              return { ...prev, pages: updatedPages };
+            });
+          }
+        } else if (eventName === 'WHITEBOARD_ELEMENT_DELTA') {
+          if (syncData?.action === 'DELETE' && syncData?.elementId) {
+            setDoc((prev) => ({
+              ...prev,
+              pages: prev.pages.map((p, idx) =>
+                idx === (syncData.pageIndex ?? 0)
+                  ? { ...p, elements: p.elements.filter((el) => el.id !== syncData.elementId) }
+                  : p
+              ),
+            }));
+          } else if (syncData?.action === 'UPDATE' && syncData?.elementId && syncData?.patch) {
+            setDoc((prev) => ({
+              ...prev,
+              pages: prev.pages.map((p, idx) =>
+                idx === (syncData.pageIndex ?? 0)
+                  ? {
+                      ...p,
+                      elements: p.elements.map((el) =>
+                        el.id === syncData.elementId ? { ...el, ...syncData.patch } : el
+                      ),
+                    }
+                  : p
+              ),
+            }));
+          }
         }
       }
     });
@@ -513,10 +558,12 @@ export const WhiteboardModule: React.FC = () => {
     };
   }, [laserPoints]);
 
-  // Push Page History Snapshot
+  // Push Page History Snapshot & Broadcast Live Sync
   const commitPageElements = (newElements: WhiteboardElement[]) => {
     elementsRef.current = newElements;
+    versionRef.current += 1;
     setDoc((prev) => {
+      const activeIdx = Math.max(0, prev.pages.findIndex((p) => p.id === prev.activePageId));
       const updatedPages = prev.pages.map((p) => {
         if (p.id !== prev.activePageId) return p;
         return {
@@ -526,6 +573,15 @@ export const WhiteboardModule: React.FC = () => {
           elements: newElements,
         };
       });
+
+      if (signalingClient) {
+        signalingClient.emitClassroomEvent('WHITEBOARD_PAGE_SYNC', {
+          pages: updatedPages,
+          activePageIndex: activeIdx,
+          version: versionRef.current,
+        });
+      }
+
       return { ...prev, pages: updatedPages, updatedAt: Date.now() };
     });
     redraw();

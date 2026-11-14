@@ -69,6 +69,8 @@ interface ClassroomContextValue {
   authErrorMessage: string | null;
   liveSessionToken: string | null;
   remoteStreams: Map<string, MediaStream>;
+  remoteAudioLevels: Map<string, number>;
+  activeSpeakerId: string | null;
   isAuthoritativeTeacher: boolean;
   currentUserName: string;
   currentUserEmail: string;
@@ -316,10 +318,33 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   ];
   const iceServersRef = useRef<RTCIceServer[]>(defaultIceServers);
 
-  // WebRTC Peer Connection registry
+  // WebRTC Peer Connection registry & Perfect Negotiation state
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const makingOfferRef = useRef<Map<string, boolean>>(new Map());
+  const iceCandidateQueueRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
-  // WebRTC helper: get or create RTCPeerConnection for a remote peer
+  // Web Audio RMS Energy & Active Speaker Detection
+  const [remoteAudioLevels, setRemoteAudioLevels] = useState<Map<string, number>>(new Map());
+  const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
+  const audioAnalysersRef = useRef<Map<string, { analyser: AnalyserNode; source: MediaStreamAudioSourceNode }>>(new Map());
+  const lastActiveSpeakerTimeRef = useRef<number>(0);
+
+  // Drain queued ICE candidates once remote description is set
+  const drainIceCandidates = useCallback(async (peerId: string, pc: RTCPeerConnection) => {
+    const queue = iceCandidateQueueRef.current.get(peerId);
+    if (queue && queue.length > 0) {
+      iceCandidateQueueRef.current.delete(peerId);
+      for (const candidate of queue) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('[WebRTC] Error draining queued ICE candidate:', e);
+        }
+      }
+    }
+  }, []);
+
+  // WebRTC helper: get or create RTCPeerConnection for a remote peer with Perfect Negotiation
   const getOrCreatePeerConnection = useCallback((peerId: string) => {
     let pc = peerConnectionsRef.current.get(peerId);
     if (!pc || pc.signalingState === 'closed') {
@@ -327,6 +352,10 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         iceServers: iceServersRef.current,
       });
 
+      // Deterministic Politeness: lexicographical user ID comparison
+      const isPolite = currentUserId.localeCompare(peerId) > 0;
+
+      // Add local media tracks if active
       if (localAudioStreamRef.current) {
         localAudioStreamRef.current.getAudioTracks().forEach((track) => {
           try { pc!.addTrack(track, localAudioStreamRef.current!); } catch (_) {}
@@ -343,6 +372,25 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         });
       }
 
+      pc.onnegotiationneeded = async () => {
+        try {
+          makingOfferRef.current.set(peerId, true);
+          await pc!.setLocalDescription();
+          if (signalingClientRef.current) {
+            signalingClientRef.current.emitClassroomEvent('WEBRTC_OFFER', {
+              targetUserId: peerId,
+              sdp: pc!.localDescription?.sdp,
+              type: pc!.localDescription?.type,
+              senderId: currentUserId,
+            });
+          }
+        } catch (err) {
+          console.warn('[WebRTC] Negotiation needed error with', peerId, err);
+        } finally {
+          makingOfferRef.current.set(peerId, false);
+        }
+      };
+
       pc.ontrack = (event) => {
         const [remoteStream] = event.streams;
         if (remoteStream) {
@@ -358,9 +406,15 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         if (event.candidate && signalingClientRef.current) {
           signalingClientRef.current.emitClassroomEvent('WEBRTC_ICE_CANDIDATE', {
             targetUserId: peerId,
-            candidate: event.candidate,
+            candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
             senderId: currentUserId,
           });
+        }
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        if (pc!.iceConnectionState === 'failed') {
+          try { (pc as any).restartIce(); } catch (_) {}
         }
       };
 
@@ -386,6 +440,104 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       console.warn('[WebRTC] Error initiating offer to', peerId, e);
     }
   }, [getOrCreatePeerConnection, currentUserId]);
+
+  // Real-Time Audio Energy & Active Speaker Detection Loop
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const interval = setInterval(() => {
+      const levels = new Map<string, number>();
+      let maxLevel = 0;
+      let loudestSpeakerId: string | null = null;
+
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!audioContextRef.current && AudioCtx) {
+        try {
+          audioContextRef.current = new AudioCtx();
+        } catch (_) {}
+      }
+      const ctx = audioContextRef.current;
+      if (!ctx) return;
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      // 1. Analyze local microphone stream
+      if (localAudioStreamRef.current && !deviceState.isMuted) {
+        let entry = audioAnalysersRef.current.get(currentUserId);
+        if (!entry) {
+          try {
+            const source = ctx.createMediaStreamSource(localAudioStreamRef.current);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            entry = { source, analyser };
+            audioAnalysersRef.current.set(currentUserId, entry);
+          } catch (_) {}
+        }
+        if (entry) {
+          const dataArray = new Uint8Array(entry.analyser.frequencyBinCount);
+          entry.analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i] * dataArray[i];
+          }
+          const rms = Math.sqrt(sum / dataArray.length);
+          const normalized = Math.min(100, Math.round((rms / 255) * 150));
+          levels.set(currentUserId, normalized);
+          if (normalized > 15 && normalized > maxLevel) {
+            maxLevel = normalized;
+            loudestSpeakerId = currentUserId;
+          }
+        }
+      }
+
+      // 2. Analyze remote peer streams
+      remoteStreams.forEach((stream, peerId) => {
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length > 0 && audioTracks[0].enabled) {
+          let entry = audioAnalysersRef.current.get(peerId);
+          if (!entry) {
+            try {
+              const source = ctx.createMediaStreamSource(stream);
+              const analyser = ctx.createAnalyser();
+              analyser.fftSize = 256;
+              source.connect(analyser);
+              entry = { source, analyser };
+              audioAnalysersRef.current.set(peerId, entry);
+            } catch (_) {}
+          }
+          if (entry) {
+            const dataArray = new Uint8Array(entry.analyser.frequencyBinCount);
+            entry.analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i] * dataArray[i];
+            }
+            const rms = Math.sqrt(sum / dataArray.length);
+            const normalized = Math.min(100, Math.round((rms / 255) * 150));
+            levels.set(peerId, normalized);
+            if (normalized > 15 && normalized > maxLevel) {
+              maxLevel = normalized;
+              loudestSpeakerId = peerId;
+            }
+          }
+        }
+      });
+
+      setRemoteAudioLevels(levels);
+
+      const now = Date.now();
+      if (loudestSpeakerId) {
+        lastActiveSpeakerTimeRef.current = now;
+        setActiveSpeakerId(loudestSpeakerId);
+      } else if (now - lastActiveSpeakerTimeRef.current > 1500) {
+        // 1.5s silence hysteresis expired
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [remoteStreams, deviceState.isMuted, currentUserId]);
 
   // Session Authentication Effect
   useEffect(() => {
@@ -1024,6 +1176,21 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localVideoStreamRef.current = stream;
       setLocalVideoStream(stream);
+
+      // Hot-swap active video track to existing peers
+      const newVideoTrack = stream.getVideoTracks()[0];
+      if (newVideoTrack) {
+        peerConnectionsRef.current.forEach((pc) => {
+          const senders = pc.getSenders();
+          const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(newVideoTrack).catch(() => {});
+          } else {
+            try { pc.addTrack(newVideoTrack, stream); } catch (_) {}
+          }
+        });
+      }
+
       setDeviceState((prev) => ({
         ...prev,
         isVideoOff: false,
@@ -1054,6 +1221,14 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   }, [userRole, session.permissions.allowStudentCamera, deviceState.videoDeviceId, showToast, refreshDevices]);
 
   const stopCamera = useCallback(() => {
+    peerConnectionsRef.current.forEach((pc) => {
+      const senders = pc.getSenders();
+      const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+      if (videoSender) {
+        videoSender.replaceTrack(null).catch(() => {});
+      }
+    });
+
     if (localVideoStreamRef.current) {
       const stream = localVideoStreamRef.current;
       localVideoStreamRef.current = null;
@@ -1128,6 +1303,20 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       localAudioStreamRef.current = stream;
       setLocalAudioStream(stream);
 
+      // Hot-swap audio track to existing peer connections
+      const newAudioTrack = stream.getAudioTracks()[0];
+      if (newAudioTrack) {
+        peerConnectionsRef.current.forEach((pc) => {
+          const senders = pc.getSenders();
+          const audioSender = senders.find((s) => s.track && s.track.kind === 'audio');
+          if (audioSender) {
+            audioSender.replaceTrack(newAudioTrack).catch(() => {});
+          } else {
+            try { pc.addTrack(newAudioTrack, stream); } catch (_) {}
+          }
+        });
+      }
+
       setupAudioAnalyser(stream);
 
       setDeviceState((prev) => ({
@@ -1161,6 +1350,14 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   }, [userRole, session.permissions.allowStudentMicrophone, deviceState.audioDeviceId, showToast, refreshDevices, setupAudioAnalyser]);
 
   const stopMicrophone = useCallback(() => {
+    peerConnectionsRef.current.forEach((pc) => {
+      const senders = pc.getSenders();
+      const audioSender = senders.find((s) => s.track && s.track.kind === 'audio');
+      if (audioSender) {
+        audioSender.replaceTrack(null).catch(() => {});
+      }
+    });
+
     if (localAudioStreamRef.current) {
       const stream = localAudioStreamRef.current;
       localAudioStreamRef.current = null;
@@ -1649,12 +1846,27 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           showToast(`Network test ping received from ${envelope.senderId || 'peer'}`);
         }
 
-        // WebRTC Signaling Handshake
+        // WebRTC Signaling Handshake (W3C Perfect Negotiation)
         if (eventName === 'WEBRTC_OFFER' && data?.targetUserId === currentUserId && data?.sdp) {
           const senderId = envelope.senderId || data.senderId;
           const pc = getOrCreatePeerConnection(senderId);
-          pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: data.sdp }))
-            .then(async () => {
+          const isPolite = currentUserId.localeCompare(senderId) > 0;
+          const isMakingOffer = Boolean(makingOfferRef.current.get(senderId));
+          const offerCollision = isMakingOffer || pc.signalingState !== 'stable';
+
+          if (offerCollision && !isPolite) {
+            console.log('[WebRTC] Impolite peer ignoring colliding offer from', senderId);
+            return;
+          }
+
+          (async () => {
+            try {
+              if (offerCollision && isPolite) {
+                console.log('[WebRTC] Polite peer rolling back colliding offer for', senderId);
+                await pc.setLocalDescription({ type: 'rollback' });
+              }
+              await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: data.sdp }));
+              await drainIceCandidates(senderId, pc);
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
               signalingClientRef.current?.emitClassroomEvent('WEBRTC_ANSWER', {
@@ -1663,21 +1875,33 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
                 type: answer.type,
                 senderId: currentUserId,
               });
-            })
-            .catch((e) => console.warn('[WebRTC] Error handling offer:', e));
+            } catch (e) {
+              console.warn('[WebRTC] Error handling offer:', e);
+            }
+          })();
         } else if (eventName === 'WEBRTC_ANSWER' && data?.targetUserId === currentUserId && data?.sdp) {
           const senderId = envelope.senderId || data.senderId;
           const pc = peerConnectionsRef.current.get(senderId);
           if (pc) {
-            pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }))
-              .catch((e) => console.warn('[WebRTC] Error setting answer:', e));
+            (async () => {
+              try {
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }));
+                await drainIceCandidates(senderId, pc);
+              } catch (e) {
+                console.warn('[WebRTC] Error setting answer:', e);
+              }
+            })();
           }
         } else if (eventName === 'WEBRTC_ICE_CANDIDATE' && data?.targetUserId === currentUserId && data?.candidate) {
           const senderId = envelope.senderId || data.senderId;
           const pc = peerConnectionsRef.current.get(senderId);
-          if (pc) {
+          if (pc && pc.remoteDescription && pc.remoteDescription.type) {
             pc.addIceCandidate(new RTCIceCandidate(data.candidate))
               .catch((e) => console.warn('[WebRTC] Error adding candidate:', e));
+          } else {
+            const q = iceCandidateQueueRef.current.get(senderId) || [];
+            q.push(data.candidate);
+            iceCandidateQueueRef.current.set(senderId, q);
           }
         }
 
@@ -1901,6 +2125,8 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         authErrorMessage,
         liveSessionToken,
         remoteStreams,
+        remoteAudioLevels,
+        activeSpeakerId,
         isAuthoritativeTeacher,
         currentUserName,
         currentUserEmail,
