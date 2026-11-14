@@ -55,7 +55,9 @@ export async function POST(req: NextRequest) {
           suggestion = suggestion.replace(/^\s*```[a-z]*\n?/, "").replace(/\n?```\s*$/, "");
           return NextResponse.json({ suggestion });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[AI Route] Swallowed non-fatal error:', e instanceof Error ? e.message : String(e));
+      }
     }
     return NextResponse.json({ suggestion: "" });
 

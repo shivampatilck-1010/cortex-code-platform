@@ -178,7 +178,9 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
                   grantParam = `&grant=${encodeURIComponent(authData.launchGrant)}`;
                 }
               }
-            } catch (_) {}
+            } catch (err) {
+              console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
+            }
 
             setLockdownRequiredInfo({
               downloadUrl: data.downloadUrl || '/lockdown/download',
@@ -216,7 +218,9 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
                 }
               });
             }
-          } catch (_) {}
+          } catch (err) {
+            console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
+          }
         }
 
         setResponses(initialResp);
@@ -232,9 +236,9 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
         // Request browser fullscreen if supported and permitted
         try {
           if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(() => {});
+            document.documentElement.requestFullscreen().catch(() => { /* browser fullscreen request denied or unsupported */ });
           }
-        } catch (_) {}
+        } catch (_) { /* browser fullscreen request denied or unsupported */ }
       } catch (err: any) {
         setError(err.message || 'Error initializing examination session');
       } finally {
@@ -277,7 +281,9 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ eventType, details }),
         });
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
+      }
     };
 
     const handleFullscreenChange = () => {
@@ -338,7 +344,9 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
             setRemainingSeconds(rem);
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
+      }
     }, 25000);
 
     return () => clearInterval(heartbeatInterval);
@@ -439,7 +447,9 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
         currentBackup[qId] = answerVal;
         localStorage.setItem(`cortex_exam_${session.id}_responses`, JSON.stringify(currentBackup));
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
+    }
 
     if (typeof window !== 'undefined' && !window.navigator.onLine) {
       setAutosaveStatus('offline');
@@ -519,7 +529,9 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
         if (typeof window !== 'undefined') {
           localStorage.removeItem(`cortex_exam_${session.id}_responses`);
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
+      }
     } catch (err: any) {
       setAutosaveStatus('failed');
       alert(err.message || 'Failed to submit examination');

@@ -333,7 +333,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                         <a
                           href="https://aistudio.google.com/app/apikey"
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="text-[#ff9100] underline hover:text-[#e08000] inline-flex items-center space-x-0.5"
                         >
                           <span>Google AI Studio</span>

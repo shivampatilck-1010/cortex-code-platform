@@ -360,6 +360,7 @@ export function CortexLockdownPrepModal({
           <Link
             href="/lockdown#troubleshoot"
             target="_blank"
+            rel="noopener noreferrer"
             className="hover:text-[#FF9100] flex items-center gap-1 transition text-gray-400"
           >
             <HelpCircle className="w-3.5 h-3.5" />

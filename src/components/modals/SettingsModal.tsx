@@ -254,7 +254,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <a
                       href="https://aistudio.google.com/app/apikey"
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="text-[#ff9100] hover:text-[#e08000] text-[10.5px] flex items-center space-x-1 underline"
                     >
                       <span>Get free key from Google AI Studio</span>
@@ -269,7 +269,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="text-gray-400 text-[10.5px] space-y-1 bg-[#0f1015] p-2 rounded border border-[#222430]">
                     <div className="flex items-start space-x-2">
                       <span className="text-[#ff9100] font-bold">1.</span>
-                      <span>Paste your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[#ff9100] underline">Google AI Studio</a>.</span>
+                      <span>Paste your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-[#ff9100] underline">Google AI Studio</a>.</span>
                     </div>
                     <div className="flex items-start space-x-2">
                       <span className="text-[#ff9100] font-bold">2.</span>

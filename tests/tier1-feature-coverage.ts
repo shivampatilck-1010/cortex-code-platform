@@ -381,6 +381,176 @@ export async function runTier1FeatureCoverage(projectRoot = process.cwd()): Prom
     harness.endTest('failed', msg);
   }
 
+  // Test 9: TC5.1 - Next.js App Router Error Boundaries
+  harness.startTest('TC5.1 - Next.js App Router Error Boundaries (error.tsx & not-found.tsx)');
+  try {
+    const errorPath = path.join(projectRoot, 'src', 'app', 'error.tsx');
+    const notFoundPath = path.join(projectRoot, 'src', 'app', 'not-found.tsx');
+
+    harness.assert(fs.existsSync(errorPath), 'src/app/error.tsx must exist');
+    harness.assert(fs.existsSync(notFoundPath), 'src/app/not-found.tsx must exist');
+
+    const errorContent = fs.readFileSync(errorPath, 'utf8');
+    harness.assertIncludes(errorContent, "'use client'", 'src/app/error.tsx must be a client component');
+    harness.assertIncludes(errorContent, 'export default function', 'src/app/error.tsx must default export an error boundary component');
+    harness.assertIncludes(errorContent, 'reset', 'src/app/error.tsx must provide a reset handler');
+
+    const notFoundContent = fs.readFileSync(notFoundPath, 'utf8');
+    harness.assertIncludes(notFoundContent, 'export default function', 'src/app/not-found.tsx must default export a not found component');
+    harness.assertIncludes(notFoundContent, '404', 'src/app/not-found.tsx must render 404 text');
+
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
+  // Test 10: TC5.2 - Plaintext Secrets & OAuth Hardening Scan
+  harness.startTest('TC5.2 - Plaintext Secrets & OAuth Hardening Scan');
+  try {
+    const forbiddenSecrets = [
+      'cortex_lockdown_security_key_2026_prod_hmac',
+      'cortex_srv_pepper_2026_sec_h99f2a7b',
+      'mock_secret_key_lti_development_only',
+    ];
+
+    function collectSourceFiles(dir: string): string[] {
+      let results: string[] = [];
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          results = results.concat(collectSourceFiles(fullPath));
+        } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+          results.push(fullPath);
+        }
+      }
+      return results;
+    }
+
+    const srcDir = path.join(projectRoot, 'src');
+    const sourceFiles = collectSourceFiles(srcDir);
+    harness.assert(sourceFiles.length > 0, 'Source files must be discovered in src/');
+
+    for (const file of sourceFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      for (const forbidden of forbiddenSecrets) {
+        harness.assert(
+          !content.includes(forbidden),
+          `Forbidden plaintext secret "${forbidden}" must not exist in source file: ${path.relative(projectRoot, file)}`
+        );
+      }
+    }
+
+    // Verify .env.example exists and documents required variables
+    const envExamplePath = path.join(projectRoot, '.env.example');
+    harness.assert(fs.existsSync(envExamplePath), '.env.example must exist in project root');
+    const envExampleContent = fs.readFileSync(envExamplePath, 'utf8');
+    harness.assertIncludes(envExampleContent, 'LOCKDOWN_POLICY_SECRET', '.env.example must document LOCKDOWN_POLICY_SECRET');
+    harness.assertIncludes(envExampleContent, 'LTI_HMAC_SECRET', '.env.example must document LTI_HMAC_SECRET');
+    harness.assertIncludes(envExampleContent, 'GITHUB_CLIENT_ID', '.env.example must document GITHUB_CLIENT_ID');
+    harness.assertIncludes(envExampleContent, 'GITHUB_CLIENT_SECRET', '.env.example must document GITHUB_CLIENT_SECRET');
+    harness.assertIncludes(envExampleContent, 'LOCKDOWN_SERVER_PEPPER', '.env.example must document LOCKDOWN_SERVER_PEPPER');
+
+    // Verify src/worker.ts exports validateStartupSecrets
+    const workerPath = path.join(projectRoot, 'src', 'worker.ts');
+    harness.assert(fs.existsSync(workerPath), 'src/worker.ts must exist');
+    const workerContent = fs.readFileSync(workerPath, 'utf8');
+    harness.assertIncludes(workerContent, 'export function validateStartupSecrets', 'src/worker.ts must export validateStartupSecrets');
+
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
+  // Test 11: TC5.3 - Zero Bare @ts-ignore Directives in src/
+  harness.startTest('TC5.3 - Zero Bare @ts-ignore Directives in src/');
+  try {
+    function collectSourceFiles(dir: string): string[] {
+      let results: string[] = [];
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          results = results.concat(collectSourceFiles(fullPath));
+        } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+          results.push(fullPath);
+        }
+      }
+      return results;
+    }
+
+    const srcDir = path.join(projectRoot, 'src');
+    const sourceFiles = collectSourceFiles(srcDir);
+    const bareIgnoreRegex = /\/\/\s*@ts-ignore(?!\s*--|\s*:\s*[a-zA-Z])/;
+
+    for (const file of sourceFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      const lines = content.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes('@ts-ignore')) {
+          harness.assert(
+            !bareIgnoreRegex.test(line),
+            `Bare @ts-ignore without technical explanation found in ${path.relative(projectRoot, file)}:${i + 1}: ${line.trim()}`
+          );
+        }
+      }
+    }
+
+    harness.assert(true, 'Zero bare @ts-ignore directives exist across all source files in src/');
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
+  // Test 12: TC5.4 - Tab-Napping Security Attributes on target="_blank"
+  harness.startTest('TC5.4 - Tab-Napping Security Attributes on target="_blank" Anchors');
+  try {
+    function collectTsxFiles(dir: string): string[] {
+      let results: string[] = [];
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          results = results.concat(collectTsxFiles(fullPath));
+        } else if (entry.isFile() && entry.name.endsWith('.tsx')) {
+          results.push(fullPath);
+        }
+      }
+      return results;
+    }
+
+    const srcDir = path.join(projectRoot, 'src');
+    const tsxFiles = collectTsxFiles(srcDir);
+    harness.assert(tsxFiles.length > 0, 'TSX files must be discovered in src/');
+
+    let totalBlankAnchors = 0;
+    for (const file of tsxFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      const anchorRegex = /<(?:a|Link)[^>]*target=["']_blank["'][^>]*>/g;
+      let match: RegExpExecArray | null;
+      while ((match = anchorRegex.exec(content)) !== null) {
+        totalBlankAnchors++;
+        const tag = match[0];
+        const hasNoOpener = tag.includes('rel="') && tag.includes('noopener');
+        const hasNoReferrer = tag.includes('rel="') && tag.includes('noreferrer');
+        harness.assert(
+          hasNoOpener && hasNoReferrer,
+          `target="_blank" element in ${path.relative(projectRoot, file)} must include rel="noopener noreferrer": ${tag}`
+        );
+      }
+    }
+
+    harness.assertGreaterThanOrEqual(totalBlankAnchors, 10, 'All verified target="_blank" anchors must be scanned');
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
   return harness.getSummary();
 }
 

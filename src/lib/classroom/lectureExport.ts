@@ -17,7 +17,7 @@ export interface LectureExportPayload {
   session: ClassroomSession;
   participants: Participant[];
   codeFiles?: CodeFile[];
-  whiteboardPages?: any[];
+  whiteboardPages?: Array<Record<string, unknown>>;
   chatMessages?: Array<{ sender: string; text: string; timestamp: number }>;
 }
 

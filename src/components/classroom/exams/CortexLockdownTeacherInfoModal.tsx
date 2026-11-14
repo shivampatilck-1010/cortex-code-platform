@@ -136,6 +136,7 @@ export function CortexLockdownTeacherInfoModal({ onClose }: CortexLockdownTeache
           <Link
             href="/lockdown"
             target="_blank"
+            rel="noopener noreferrer"
             className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-md shadow-[#FF9100]/10"
           >
             <ExternalLink className="w-3.5 h-3.5" />

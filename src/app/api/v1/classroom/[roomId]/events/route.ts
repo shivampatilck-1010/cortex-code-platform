@@ -38,7 +38,6 @@ export async function GET(
       wsPort = await ensureNodeWsServer();
     } catch {}
 
-    // @ts-ignore
     const hasCloudflareWs = typeof WebSocketPair !== 'undefined';
 
     return new Response(
@@ -57,12 +56,9 @@ export async function GET(
   // 1. Cloudflare Workers Native WebSocket Upgrade
   const upgradeHeader = req.headers.get('Upgrade');
   if (upgradeHeader === 'websocket') {
-    // @ts-ignore
     if (typeof WebSocketPair !== 'undefined') {
-      // @ts-ignore
       const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
       
-      // @ts-ignore
       server.accept();
 
       // Send initial snapshot
@@ -228,7 +224,6 @@ export async function GET(
 
       return new Response(null, {
         status: 101,
-        // @ts-ignore
         webSocket: client,
       });
     }

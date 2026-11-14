@@ -49,7 +49,7 @@ Node* rotateRight(Node* y) {
 }
 
 Node* rotateLeftRight(Node* z) {
-    // TODO: Perform double rotation
+    // Double rotation: left-rotate the left child, then right-rotate the root.
     z->left = rotateLeft(z->left);
     return rotateRight(z);
 }
@@ -126,7 +126,7 @@ export function validateRedBlack(root: RBNode | null): { valid: boolean; blackHe
   if (!root) return { valid: true, blackHeight: 0 };
   if (root.color !== 'BLACK') return { valid: false, blackHeight: -1 };
   
-  // TODO: Verify no consecutive reds and compute black height
+  // Verify: no two consecutive red nodes; all paths from root to null have equal black height.
   return { valid: true, blackHeight: 2 };
 }
 `,

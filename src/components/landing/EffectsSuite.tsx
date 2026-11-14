@@ -767,7 +767,7 @@ export function TubesBackground({
     const initTubes = async () => {
       if (!canvasRef.current) return;
       try {
-        // @ts-ignore
+        // @ts-expect-error -- Dynamic CDN import of untyped ES module; bundler cannot resolve external URL at build time.
         const module = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/npm/threejs-components@0.0.19/build/cursors/tubes1.min.js');
         const TubesCursor = module.default;
         if (!mounted || !canvasRef.current) return;

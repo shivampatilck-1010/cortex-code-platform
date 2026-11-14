@@ -640,9 +640,13 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         setLiveSessionToken(data.liveSessionToken);
         if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
           iceServersRef.current = data.iceServers;
-          console.log('[WebRTC] Loaded ICE servers: mode=' + (data.iceMode || 'stun-only') + ', turnConfigured=' + Boolean(data.isTurnConfigured));
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[WebRTC] Loaded ICE servers: mode=' + (data.iceMode || 'stun-only') + ', turnConfigured=' + Boolean(data.isTurnConfigured));
+          }
         } else {
-          console.log('[WebRTC] Development Mode: Running with STUN-only configuration (TURN relay not configured).');
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[WebRTC] Development Mode: Running with STUN-only configuration (TURN relay not configured).');
+          }
         }
         setAuthStatus('authenticated');
 
@@ -1956,14 +1960,18 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           const offerCollision = isMakingOffer || pc.signalingState !== 'stable';
 
           if (offerCollision && !isPolite) {
-            console.log('[WebRTC] Impolite peer ignoring colliding offer from', senderId);
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('[WebRTC] Impolite peer ignoring colliding offer from', senderId);
+            }
             return;
           }
 
           (async () => {
             try {
               if (offerCollision && isPolite) {
-                console.log('[WebRTC] Polite peer rolling back colliding offer for', senderId);
+                if (process.env.NODE_ENV !== 'production') {
+                  console.log('[WebRTC] Polite peer rolling back colliding offer for', senderId);
+                }
                 await pc.setLocalDescription({ type: 'rollback' });
               }
               await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: data.sdp }));

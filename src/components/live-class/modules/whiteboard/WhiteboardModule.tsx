@@ -1597,7 +1597,7 @@ export const WhiteboardModule: React.FC = () => {
         setEditingText(null);
         if (isFullscreen || isFullscreenFallback) {
           if (document.fullscreenElement && document.exitFullscreen) {
-            document.exitFullscreen().catch(() => {});
+            document.exitFullscreen().catch(() => { /* browser may already be in windowed mode */ });
           }
           setIsFullscreen(false);
           setIsFullscreenFallback(false);

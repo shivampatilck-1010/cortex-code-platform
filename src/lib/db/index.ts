@@ -22,7 +22,7 @@ export interface DBInstance {
 }
 
 export class D1Wrapper implements DBInstance {
-  constructor(private d1: any) {}
+  constructor(private d1: D1Database) {}
   async exec(sql: string): Promise<void> {
     const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
     if (statements.length === 0) return;
@@ -100,11 +100,8 @@ export async function getDbInstance(dbPath: string): Promise<DBInstance | null> 
     let path: any;
 
     if (typeof require !== 'undefined') {
-      // @ts-ignore
       DatabaseSync = require('node:sqlite').DatabaseSync;
-      // @ts-ignore
       fs = require('fs');
-      // @ts-ignore
       path = require('path');
     } else {
       const customReq = createRequire(import.meta.url);

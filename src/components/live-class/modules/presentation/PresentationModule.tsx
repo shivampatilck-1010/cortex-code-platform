@@ -620,7 +620,7 @@ export const PresentationModule: React.FC = () => {
       } else if (e.key === 'Escape') {
         if (isFullscreen || isFullscreenFallback) {
           if (document.fullscreenElement && document.exitFullscreen) {
-            document.exitFullscreen().catch(() => {});
+            document.exitFullscreen().catch(() => { /* browser may already be in windowed mode */ });
           }
           setIsFullscreen(false);
           setIsFullscreenFallback(false);

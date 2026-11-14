@@ -56,7 +56,9 @@ export async function POST(
           if (body && typeof body.launchGrant === 'string') {
             grantToken = body.launchGrant;
           }
-        } catch (_) {}
+        } catch (e) {
+          console.warn('[Classroom Exam Start] Non-fatal error reading launchGrant body:', e instanceof Error ? e.message : String(e));
+        }
       }
 
       if (!grantToken) {

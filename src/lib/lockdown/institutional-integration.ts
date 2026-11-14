@@ -981,7 +981,13 @@ export function createLtiIdToken(
   }
 
   // Fallback HS256 for backward compatibility test fixtures
-  const sig = crypto.createHmac('sha256', 'mock_secret_key_lti_development_only').update(signingInput).digest('base64url');
+  const ltiHmacKey = process.env.LTI_HMAC_SECRET;
+  if (!ltiHmacKey || ltiHmacKey.trim().length === 0) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[institutional-integration] LTI_HMAC_SECRET is not configured. HS256 signing refused in production.');
+    }
+  }
+  const sig = crypto.createHmac('sha256', ltiHmacKey ?? '__dev_lti_hmac_not_for_production__').update(signingInput).digest('base64url');
   return `${signingInput}.${sig}`;
 }
 
@@ -1052,8 +1058,18 @@ export function validateLtiLaunchJwt(
         };
       }
     } else if (header.alg === 'HS256') {
+      const ltiHmacKey = process.env.LTI_HMAC_SECRET;
+      if (!ltiHmacKey || ltiHmacKey.trim().length === 0) {
+        if (process.env.NODE_ENV === 'production') {
+          return {
+            valid: false,
+            errorCode: 'LTI_CONFIGURATION_ERROR',
+            reason: 'LTI_HMAC_SECRET is not configured',
+          };
+        }
+      }
       const expectedSig = crypto
-        .createHmac('sha256', 'mock_secret_key_lti_development_only')
+        .createHmac('sha256', ltiHmacKey ?? '__dev_lti_hmac_not_for_production__')
         .update(signingInput)
         .digest('base64url');
       if (signatureB64 !== expectedSig) {

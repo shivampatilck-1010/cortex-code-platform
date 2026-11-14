@@ -16,7 +16,13 @@ export async function GET(req: NextRequest) {
     }
 
     const env = (typeof globalThis !== 'undefined' ? (globalThis as any).env : null) || process.env || {};
-    const clientId = env.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID || 'mock_client_id';
+    const clientId = env.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID;
+    if (!clientId) {
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'GitHub OAuth is not configured' }, { status: 503 });
+      }
+      return NextResponse.json({ error: 'GitHub OAuth not configured in development. Set GITHUB_CLIENT_ID.' }, { status: 503 });
+    }
     
     // Generate a cryptographically secure, unpredictable state token
     const state = ClassroomAuth.generateSecureToken(32);

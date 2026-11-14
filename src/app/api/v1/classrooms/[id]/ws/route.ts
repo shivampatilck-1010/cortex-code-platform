@@ -33,8 +33,8 @@ export async function GET(
   }
 
   // Cloudflare Workers Native WebSocket forwarding to Durable Object
-  // @ts-ignore
-  if (upgrade === 'websocket' && typeof process.env.CLASSROOM_ROOM_DO !== 'undefined') {
+  const classroomDo = (process.env as unknown as { CLASSROOM_ROOM_DO?: DurableObjectNamespace }).CLASSROOM_ROOM_DO;
+  if (upgrade === 'websocket' && typeof classroomDo !== 'undefined') {
     const authContext: AuthenticatedClassroomUser = {
       userId: user.id,
       classroomId: id.toUpperCase().trim(),
@@ -51,11 +51,8 @@ export async function GET(
       headers: cleanHeaders,
     });
 
-    // @ts-ignore
-    const doId = process.env.CLASSROOM_ROOM_DO.idFromName(id);
-    // @ts-ignore
-    const stub = process.env.CLASSROOM_ROOM_DO.get(doId);
-    // @ts-ignore
+    const doId = classroomDo.idFromName(id);
+    const stub = classroomDo.get(doId);
     return stub.fetch(internalReq);
   }
 

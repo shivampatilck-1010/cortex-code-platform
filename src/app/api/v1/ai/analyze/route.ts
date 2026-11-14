@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
           } catch(e) { parsed = { convertedCode: code, explanation: text }; }
           return NextResponse.json(parsed);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[AI Route] Swallowed non-fatal error:', e instanceof Error ? e.message : String(e));
+      }
     }
     return NextResponse.json({ convertedCode: code, explanation: "AI Analysis unavailable" });
 

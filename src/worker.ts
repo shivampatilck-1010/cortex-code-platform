@@ -18,6 +18,45 @@ export interface Env {
   [key: string]: any;
 }
 
+/**
+ * Asserts that all required production secrets are configured.
+ * Fails closed if any required secret is missing when running in production.
+ */
+export function validateStartupSecrets(env?: Env): void {
+  const isProduction =
+    (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') ||
+    (typeof process !== 'undefined' && process.env?.APP_ENV === 'production') ||
+    (env as any)?.APP_ENV === 'production';
+
+  if (!isProduction) {
+    return;
+  }
+
+  const requiredSecrets: string[] = [
+    'LOCKDOWN_POLICY_SECRET',
+    'LTI_HMAC_SECRET',
+    'GITHUB_CLIENT_ID',
+    'GITHUB_CLIENT_SECRET',
+    'LOCKDOWN_SERVER_PEPPER',
+  ];
+
+  const missing: string[] = [];
+  for (const secretName of requiredSecrets) {
+    const val =
+      (env as any)?.[secretName] ||
+      (typeof process !== 'undefined' ? process.env?.[secretName] : undefined);
+    if (!val || typeof val !== 'string' || val.trim().length === 0) {
+      missing.push(secretName);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `[Startup Validation] Fatal: Missing required production secrets: ${missing.join(', ')}. Server failing closed.`
+    );
+  }
+}
+
 export default {
   async queue(batch: any, env: Env): Promise<void> {
     setEnv(env);
@@ -67,6 +106,9 @@ export default {
   },
 
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
+    // Assert required production secrets are configured before accepting traffic
+    validateStartupSecrets(env);
+
     // Inject env globally so database wrappers can find D1 bindings
     setEnv(env);
     const url = new URL(request.url);

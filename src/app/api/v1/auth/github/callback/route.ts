@@ -31,15 +31,15 @@ export async function GET(req: NextRequest) {
     }
 
     const env = (typeof globalThis !== 'undefined' ? (globalThis as any).env : null) || process.env || {};
-    const clientId = env.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID || 'mock_client_id';
-    const clientSecret = env.GITHUB_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET || 'mock_client_secret';
+    const clientId = env.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID;
+    const clientSecret = env.GITHUB_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET;
 
-    let accessToken = 'mock_access_token';
-    let githubUserId = 'mock_gh_uid';
-    let githubUsername = 'mock_gh_user';
+    let accessToken: string;
+    let githubUserId: string;
+    let githubUsername: string;
 
     // Real OAuth exchange if configured
-    if (clientId !== 'mock_client_id' && clientSecret !== 'mock_client_secret') {
+    if (clientId && clientSecret && clientId !== 'mock_client_id' && clientSecret !== 'mock_client_secret') {
       const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
         method: 'POST',
         headers: {
@@ -69,6 +69,14 @@ export async function GET(req: NextRequest) {
       const userData = await userRes.json();
       githubUserId = userData.id.toString();
       githubUsername = userData.login;
+    } else {
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'GitHub OAuth is not configured for this environment' }, { status: 503 });
+      }
+      // Dev-mode synthetic placeholder - only reached in non-production
+      accessToken = '__dev_mock_access_token__';
+      githubUserId = '__dev_mock_gh_uid__';
+      githubUsername = '__dev_mock_gh_user__';
     }
 
     // Save connection securely (server-side only)

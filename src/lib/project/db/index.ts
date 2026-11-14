@@ -25,6 +25,28 @@ export interface ProjectFile {
   updatedAt: number;
 }
 
+export interface ProjectRow {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string | null;
+  language: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ProjectFileRow {
+  id: string;
+  project_id: string;
+  name: string;
+  path: string;
+  content: string;
+  is_folder: number;
+  created_at: number;
+  updated_at: number;
+}
+
 
 class SqliteWrapper implements DBInstance {
   constructor(private sqlite: any) {}
@@ -136,7 +158,7 @@ class ProjectDatabase {
 
   async getProject(id: string): Promise<Project | null> {
     if (!(await this.getDb())) return null;
-    const row = await (await this.getDb()).prepare('SELECT * FROM projects WHERE id = ?').get(id) as any;
+    const row = await (await this.getDb()).prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | null;
     if (!row) return null;
     return {
       id: row.id,
@@ -152,7 +174,7 @@ class ProjectDatabase {
 
   async listProjectsForUser(ownerId: string): Promise<Project[]> {
     if (!(await this.getDb())) return [];
-    const rows = await (await this.getDb()).prepare('SELECT * FROM projects WHERE owner_id = ? ORDER BY updated_at DESC').all(ownerId) as any[];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM projects WHERE owner_id = ? ORDER BY updated_at DESC').all(ownerId) as ProjectRow[];
     return rows.map(row => ({
       id: row.id,
       ownerId: row.owner_id,
@@ -193,7 +215,7 @@ class ProjectDatabase {
 
   async getFile(id: string): Promise<ProjectFile | null> {
     if (!(await this.getDb())) return null;
-    const row = await (await this.getDb()).prepare('SELECT * FROM project_files WHERE id = ?').get(id) as any;
+    const row = await (await this.getDb()).prepare('SELECT * FROM project_files WHERE id = ?').get(id) as ProjectFileRow | null;
     if (!row) return null;
     return {
       id: row.id,
@@ -209,7 +231,7 @@ class ProjectDatabase {
 
   async listFilesForProject(projectId: string): Promise<ProjectFile[]> {
     if (!(await this.getDb())) return [];
-    const rows = await (await this.getDb()).prepare('SELECT * FROM project_files WHERE project_id = ? ORDER BY path ASC').all(projectId) as any[];
+    const rows = await (await this.getDb()).prepare('SELECT * FROM project_files WHERE project_id = ? ORDER BY path ASC').all(projectId) as ProjectFileRow[];
     return rows.map(row => ({
       id: row.id,
       projectId: row.project_id,

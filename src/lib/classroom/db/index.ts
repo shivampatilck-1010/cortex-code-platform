@@ -61,7 +61,7 @@ import { ClassroomIdentity } from '../identity';
 
 
 class D1Wrapper implements DBInstance {
-  constructor(private d1: any) {}
+  constructor(private d1: D1Database) {}
   async exec(sql: string): Promise<void> {
     await this.d1.exec(sql);
   }
@@ -176,7 +176,6 @@ class ClassroomDatabase {
       // Dynamically load node:sqlite safely across ESM and CJS
       let DatabaseSync: any = null;
       if (typeof require !== 'undefined') {
-        // @ts-ignore
         DatabaseSync = require('node:sqlite').DatabaseSync;
       } else {
         const customReq = createRequire(import.meta.url);
@@ -2306,7 +2305,7 @@ class ClassroomDatabase {
     await db.prepare('UPDATE users SET professional_email = ?, updated_at = ? WHERE id = ?').run(profEmail.toLowerCase().trim(), now, userId);
     try {
       await db.prepare('UPDATE classroom_members SET user_professional_email = ? WHERE user_id = ?').run(profEmail.toLowerCase().trim(), userId);
-    } catch (_) {}
+    } catch (err) { console.warn('[ClassroomDB] Non-fatal background operation failed:', err); }
   }
 
   async migrateProfessionalIdentities(): Promise<{
@@ -2351,7 +2350,7 @@ class ClassroomDatabase {
 
         try {
           await db.prepare('UPDATE classroom_members SET user_professional_email = ? WHERE user_id = ?').run(generated, u.id);
-        } catch (_) {}
+        } catch (err) { console.warn('[ClassroomDB] Non-fatal error migrating member professional email:', err); }
 
         migratedCount++;
         records.push({
@@ -2434,7 +2433,7 @@ class ClassroomDatabase {
         now,
         now
       );
-    } catch (_) {}
+    } catch (err) { console.warn('[ClassroomDB] Non-fatal background operation failed:', err); }
 
     return defaultSettings;
   }
@@ -2783,7 +2782,7 @@ class ClassroomDatabase {
 
     return results.map((r: any) => {
       let details: any = {};
-      try { details = JSON.parse(r.details_json); } catch (_) {}
+      try { details = JSON.parse(r.details_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       return {
         id: r.id,
         classroomId: r.classroom_id,
@@ -2912,7 +2911,7 @@ class ClassroomDatabase {
     if (!row) return null;
 
     let assignedStudentIds: string[] = [];
-    try { assignedStudentIds = JSON.parse(row.assigned_student_ids_json || '[]'); } catch (_) {}
+    try { assignedStudentIds = JSON.parse(row.assigned_student_ids_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
 
     const sections = await this.listExamSections(examId);
     const questions = await this.listExamQuestions(examId);
@@ -2969,7 +2968,7 @@ class ClassroomDatabase {
     const exams: Exam[] = [];
     for (const row of results) {
       let assignedStudentIds: string[] = [];
-      try { assignedStudentIds = JSON.parse(row.assigned_student_ids_json || '[]'); } catch (_) {}
+      try { assignedStudentIds = JSON.parse(row.assigned_student_ids_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
 
       const qCountRow: any = await db.prepare('SELECT COUNT(*) as count FROM exam_questions WHERE exam_id = ?').get(row.id);
       const questionCount = qCountRow?.count || 0;
@@ -3211,9 +3210,9 @@ class ClassroomDatabase {
     let options: any[] = [];
     let correctAnswer: any = {};
     let testCases: any[] = [];
-    try { options = JSON.parse(r.options_json || '[]'); } catch (_) {}
-    try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (_) {}
-    try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (_) {}
+    try { options = JSON.parse(r.options_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+    try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+    try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
 
     return {
       id: r.id,
@@ -3245,9 +3244,9 @@ class ClassroomDatabase {
       let options: any[] = [];
       let correctAnswer: any = {};
       let testCases: any[] = [];
-      try { options = JSON.parse(r.options_json || '[]'); } catch (_) {}
-      try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (_) {}
-      try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (_) {}
+      try { options = JSON.parse(r.options_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+      try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+      try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
 
       return {
         id: r.id,
@@ -3367,15 +3366,15 @@ class ClassroomDatabase {
 
     let questionOrder: string[] | undefined = undefined;
     if (r.question_order_json) {
-      try { questionOrder = JSON.parse(r.question_order_json); } catch (_) {}
+      try { questionOrder = JSON.parse(r.question_order_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
     }
     let optionOrder: Record<string, string[]> | undefined = undefined;
     if (r.option_order_json) {
-      try { optionOrder = JSON.parse(r.option_order_json); } catch (_) {}
+      try { optionOrder = JSON.parse(r.option_order_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
     }
     let traversedRoute: string[] | undefined = undefined;
     if (r.traversed_route_json) {
-      try { traversedRoute = JSON.parse(r.traversed_route_json); } catch (_) {}
+      try { traversedRoute = JSON.parse(r.traversed_route_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
     }
 
     return {
@@ -3420,15 +3419,15 @@ class ClassroomDatabase {
     return results.map((r: any) => {
       let questionOrder: string[] | undefined = undefined;
       if (r.question_order_json) {
-        try { questionOrder = JSON.parse(r.question_order_json); } catch (_) {}
+        try { questionOrder = JSON.parse(r.question_order_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       }
       let optionOrder: Record<string, string[]> | undefined = undefined;
       if (r.option_order_json) {
-        try { optionOrder = JSON.parse(r.option_order_json); } catch (_) {}
+        try { optionOrder = JSON.parse(r.option_order_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       }
       let traversedRoute: string[] | undefined = undefined;
       if (r.traversed_route_json) {
-        try { traversedRoute = JSON.parse(r.traversed_route_json); } catch (_) {}
+        try { traversedRoute = JSON.parse(r.traversed_route_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       }
 
       return {
@@ -3474,15 +3473,15 @@ class ClassroomDatabase {
     return results.map((r: any) => {
       let questionOrder: string[] | undefined = undefined;
       if (r.question_order_json) {
-        try { questionOrder = JSON.parse(r.question_order_json); } catch (_) {}
+        try { questionOrder = JSON.parse(r.question_order_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       }
       let optionOrder: Record<string, string[]> | undefined = undefined;
       if (r.option_order_json) {
-        try { optionOrder = JSON.parse(r.option_order_json); } catch (_) {}
+        try { optionOrder = JSON.parse(r.option_order_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       }
       let traversedRoute: string[] | undefined = undefined;
       if (r.traversed_route_json) {
-        try { traversedRoute = JSON.parse(r.traversed_route_json); } catch (_) {}
+        try { traversedRoute = JSON.parse(r.traversed_route_json); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       }
 
       return {
@@ -3633,7 +3632,7 @@ class ClassroomDatabase {
       ).get(resp.sessionId, resp.questionId);
       if (existing) {
         let existingRespJson: any = {};
-        try { existingRespJson = JSON.parse(existing.response_json || '{}'); } catch (_) {}
+        try { existingRespJson = JSON.parse(existing.response_json || '{}'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
         return {
           id: existing.id,
           sessionId: existing.session_id,
@@ -3669,7 +3668,7 @@ class ClassroomDatabase {
 
     return results.map((r: any) => {
       let response: any = {};
-      try { response = JSON.parse(r.response_json || '{}'); } catch (_) {}
+      try { response = JSON.parse(r.response_json || '{}'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       return {
         id: r.id,
         sessionId: r.session_id,
@@ -3712,7 +3711,7 @@ class ClassroomDatabase {
 
     return results.map((r: any) => {
       let details: any = {};
-      try { details = JSON.parse(r.details_json || '{}'); } catch (_) {}
+      try { details = JSON.parse(r.details_json || '{}'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
       return {
         id: r.id,
         sessionId: r.session_id,
@@ -3779,10 +3778,10 @@ class ClassroomDatabase {
     let testCases: any[] = [];
     let tags: string[] = [];
 
-    try { options = JSON.parse(r.options_json || '[]'); } catch (_) {}
-    try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (_) {}
-    try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (_) {}
-    try { tags = JSON.parse(r.tags_json || '[]'); } catch (_) {}
+    try { options = JSON.parse(r.options_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+    try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+    try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+    try { tags = JSON.parse(r.tags_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
 
     return {
       id: r.id,
@@ -3853,10 +3852,10 @@ class ClassroomDatabase {
       let testCases: any[] = [];
       let tags: string[] = [];
 
-      try { options = JSON.parse(r.options_json || '[]'); } catch (_) {}
-      try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (_) {}
-      try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (_) {}
-      try { tags = JSON.parse(r.tags_json || '[]'); } catch (_) {}
+      try { options = JSON.parse(r.options_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+      try { correctAnswer = JSON.parse(r.correct_answer_json || '{}'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+      try { testCases = JSON.parse(r.test_cases_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+      try { tags = JSON.parse(r.tags_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
 
       return {
         id: r.id,
@@ -4999,7 +4998,7 @@ class ClassroomDatabase {
         await db.exec('COMMIT;');
         return { id, sequenceNum, entryHash };
       } catch (err: any) {
-        try { await db.exec('ROLLBACK;'); } catch (_) {}
+        try { await db.exec('ROLLBACK;'); } catch (rollbackErr) { console.warn('[ClassroomDB] ROLLBACK failed -- connection may be in inconsistent state:', rollbackErr); }
         const msg = String(err?.message || err);
         if (msg.includes('busy') || msg.includes('locked') || msg.includes('UNIQUE constraint failed')) {
           attempts++;
@@ -5173,7 +5172,7 @@ class ClassroomDatabase {
           createdAt,
         };
       } catch (err: any) {
-        try { await db.exec('ROLLBACK;'); } catch (_) {}
+        try { await db.exec('ROLLBACK;'); } catch (rollbackErr) { console.warn('[ClassroomDB] ROLLBACK failed -- connection may be in inconsistent state:', rollbackErr); }
         const msg = String(err?.message || err);
         if (msg.includes('empty audit log')) throw err;
         if (msg.includes('busy') || msg.includes('locked') || msg.includes('UNIQUE constraint failed')) {

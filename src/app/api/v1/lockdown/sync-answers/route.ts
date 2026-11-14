@@ -28,7 +28,9 @@ export async function POST(req: NextRequest) {
       if (user && user.id) {
         authenticatedUserId = user.id;
       }
-    } catch (_) {}
+    } catch (e) {
+      console.warn('[Lockdown Route] Non-fatal error checking session authentication:', e instanceof Error ? e.message : String(e));
+    }
 
     // 2. Authenticate via cryptographic launch grant header or body
     const body = await req.json().catch(() => ({}));

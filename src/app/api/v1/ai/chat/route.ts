@@ -121,7 +121,9 @@ Cortex AI:`;
           const reply = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "No response generated.";
           return NextResponse.json({ reply, model });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[AI Route] Swallowed non-fatal error:', e instanceof Error ? e.message : String(e));
+      }
     }
 
     return NextResponse.json(

@@ -85,7 +85,7 @@ export interface PilotConfiguration {
 export const DEFAULT_PILOT_CONFIG: PilotConfiguration = {
   pilotEnabled: true,
   tier: 'controlled_pilot',
-  mode: (process.env.CORTEX_LOCKDOWN_MODE as any) || 'demonstration',
+  mode: (process.env.CORTEX_LOCKDOWN_MODE as PilotConfiguration['mode']) || 'demonstration',
   defaultConcurrentQuota: 50,
   institutions: {
     inst_cit_01: {

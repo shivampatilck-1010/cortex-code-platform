@@ -272,7 +272,7 @@ export const InlineQuickFixWidget: React.FC<InlineQuickFixWidgetProps> = ({
               <a
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="text-[#ff9100] hover:underline text-xs font-heading font-semibold flex items-center space-x-1"
               >
                 <span>Get free key</span>

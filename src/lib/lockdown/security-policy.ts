@@ -42,7 +42,19 @@ export const DEFAULT_LOCKDOWN_POLICY: LockdownSecurityPolicy = {
   ]
 };
 
-const LOCKDOWN_SECRET = process.env.LOCKDOWN_POLICY_SECRET || 'cortex_lockdown_security_key_2026_prod_hmac';
+// LOCKDOWN_SECRET must be provisioned via environment variable; there is no plaintext fallback.
+// If LOCKDOWN_POLICY_SECRET is absent in production, the module fails closed.
+const LOCKDOWN_SECRET: string = (() => {
+  const secret = process.env.LOCKDOWN_POLICY_SECRET;
+  if (!secret || secret.trim().length === 0) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[security-policy] LOCKDOWN_POLICY_SECRET is not set. Refusing to start in production without a configured secret.');
+    }
+    // Dev/test environments get a clearly synthetic placeholder that cannot be confused for a real secret.
+    return '__dev_lockdown_secret_not_for_production__';
+  }
+  return secret.trim();
+})();
 
 /**
  * Computes a SHA-256 hash of a security policy to detect any tampering.
@@ -60,7 +72,7 @@ export function getServerPepper(): string {
     if (process.env.NODE_ENV === 'production' || process.env.LOCKDOWN_FAIL_CLOSED_TEST === 'true' || process.env.LOCKDOWN_SERVER_PEPPER === '') {
       throw new Error('CRITICAL: Server cryptographic pepper is not configured. Recovery authorization failed closed.');
     }
-    return 'cortex_srv_pepper_2026_sec_h99f2a7b';
+    return '__dev_pepper_not_for_production__';
   }
   return pepper.trim();
 }
@@ -213,7 +225,9 @@ export function revokeSession(sessionId: string, reason: string = 'Session expli
   _revokedSessionsRegistry.set(sessionId, { revokedAt: Date.now(), reason });
   try {
     classroomDb.revokeSession({ sessionId, reason }).catch(() => {});
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[security-policy] Background operation failed non-fatally:', err);
+  }
 }
 
 export async function revokeSessionAsync(
@@ -475,7 +489,9 @@ export function issueEmergencyRecoveryAuthorization(params: {
       expiresAt: authRecord.expiresAt,
       reason: authRecord.reason,
     }).catch(() => {});
-  } catch (e) {}
+  } catch (err) {
+    console.warn('[security-policy] Background operation failed non-fatally:', err);
+  }
 
   return { success: true, authorization: authRecord };
 }
@@ -566,7 +582,9 @@ export function redeemEmergencyRecoveryAuthorization(params: {
     record.attempts++;
     try {
       classroomDb.atomicIncrementLockdownFailedAttempts(params.challenge, now).catch(() => {});
-    } catch (e) {}
+    } catch (err) {
+      console.warn('[security-policy] Background operation failed non-fatally:', err);
+    }
 
     if (record.attempts >= record.maxAttempts) {
       record.used = true; // Burn on failure limit
@@ -587,7 +605,9 @@ export function redeemEmergencyRecoveryAuthorization(params: {
       candidateId: record.candidateId,
       now,
     }).catch(() => {});
-  } catch (e) {}
+  } catch (err) {
+    console.warn('[security-policy] Background operation failed non-fatally:', err);
+  }
 
   return {
     authorized: true,

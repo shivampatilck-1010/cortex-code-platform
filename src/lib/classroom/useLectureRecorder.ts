@@ -36,7 +36,7 @@ export function useLectureRecorder(options: UseLectureRecorderOptions = {}): Lec
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
-  const timerIntervalRef = useRef<any>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
 
   // Format seconds to HH:MM:SS

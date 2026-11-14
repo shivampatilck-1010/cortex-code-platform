@@ -151,15 +151,25 @@ export async function executeJavaScriptInWorker(
   });
 }
 
-// Global Pyodide singleton promise to prevent parallel download/initialization
-let pyodideInstancePromise: Promise<any> | null = null;
+export interface PyodideInstance {
+  setStdout(opts: { batched: (text: string) => void }): void;
+  setStderr(opts: { batched: (text: string) => void }): void;
+  setStdin(opts: { stdin: () => string }): void;
+  runPythonAsync(code: string): Promise<unknown>;
+}
 
-async function loadPyodideInstance(): Promise<any> {
+// Global Pyodide singleton promise to prevent parallel download/initialization
+let pyodideInstancePromise: Promise<PyodideInstance> | null = null;
+
+async function loadPyodideInstance(): Promise<PyodideInstance> {
   if (typeof window === 'undefined') {
     throw new Error('Pyodide can only run in a browser environment');
   }
 
-  const win = window as any;
+  const win = window as Window & {
+    loadPyodide?: (opts: { indexURL: string }) => Promise<PyodideInstance>;
+    pyodideInstance?: PyodideInstance;
+  };
   if (win.pyodideInstance) {
     return win.pyodideInstance;
   }

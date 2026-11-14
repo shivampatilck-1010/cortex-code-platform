@@ -176,7 +176,7 @@ export class ClassroomRoomDO {
   private getNextSequence(): number {
     this.currentSequence += 1;
     if (this.state?.storage) {
-      this.state.storage.put('currentSequence', this.currentSequence).catch(() => {});
+      this.state.storage.put('currentSequence', this.currentSequence).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
     }
     return this.currentSequence;
   }
@@ -188,7 +188,7 @@ export class ClassroomRoomDO {
       this.eventLog.shift();
     }
     if (this.state?.storage) {
-      this.state.storage.put('recentEvents', this.eventLog.slice(-100)).catch(() => {});
+      this.state.storage.put('recentEvents', this.eventLog.slice(-100)).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
     }
   }
 
@@ -1060,7 +1060,7 @@ export class ClassroomRoomDO {
           }
           this.whiteboardPages[pageIndex].elements.push(data.element);
           if (this.state?.storage) {
-            this.state.storage.put('whiteboardPages', this.whiteboardPages).catch(() => {});
+            this.state.storage.put('whiteboardPages', this.whiteboardPages).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
           }
         } else if (eventName === 'WHITEBOARD_ELEMENT_DELTA') {
           const pageIndex = typeof data?.pageIndex === 'number' ? data.pageIndex : this.activeWhiteboardPageIndex;
@@ -1076,14 +1076,14 @@ export class ClassroomRoomDO {
               );
             }
             if (this.state?.storage) {
-              this.state.storage.put('whiteboardPages', this.whiteboardPages).catch(() => {});
+              this.state.storage.put('whiteboardPages', this.whiteboardPages).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
             }
           }
         } else if (eventName === 'WHITEBOARD_PAGE_CHANGED') {
           if (typeof data?.pageIndex === 'number') {
             this.activeWhiteboardPageIndex = data.pageIndex;
             if (this.state?.storage) {
-              this.state.storage.put('activeWhiteboardPageIndex', this.activeWhiteboardPageIndex).catch(() => {});
+              this.state.storage.put('activeWhiteboardPageIndex', this.activeWhiteboardPageIndex).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
             }
           }
         }
@@ -1094,7 +1094,7 @@ export class ClassroomRoomDO {
             this.activeSlideIndex = data.slideIndex;
             this.isPresenting = true;
             if (this.state?.storage) {
-              this.state.storage.put('activeSlideIndex', this.activeSlideIndex).catch(() => {});
+              this.state.storage.put('activeSlideIndex', this.activeSlideIndex).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
             }
           }
         } else if (eventName === 'LASER_MOVED') {
@@ -1121,41 +1121,41 @@ export class ClassroomRoomDO {
         } else if (eventName === 'PERMISSIONS_UPDATED' && data) {
           this.permissions = { ...this.permissions, ...data };
           if (this.state?.storage) {
-            this.state.storage.put('permissions', this.permissions).catch(() => {});
+            this.state.storage.put('permissions', this.permissions).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
           }
         }
 
         // Teacher broadcast state transitions
         if (eventName === 'TEACHER_START_BROADCAST') {
           this.broadcastState = 'broadcasting';
-          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => {});
+          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
         } else if (eventName === 'TEACHER_PAUSE_BROADCAST') {
           this.broadcastState = 'paused';
-          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => {});
+          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
         } else if (eventName === 'TEACHER_RESUME_BROADCAST') {
           this.broadcastState = 'broadcasting';
-          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => {});
+          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
         } else if (eventName === 'TEACHER_STOP_BROADCAST') {
           this.broadcastState = 'stopped';
-          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => {});
+          if (this.state?.storage) this.state.storage.put('broadcastState', this.broadcastState).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
         } else if (eventName === 'TEACHER_CODE_BROADCAST') {
           if (Array.isArray(data?.files)) {
             this.publishedTeacherFiles = data.files;
-            if (this.state?.storage) this.state.storage.put('publishedTeacherFiles', this.publishedTeacherFiles).catch(() => {});
+            if (this.state?.storage) this.state.storage.put('publishedTeacherFiles', this.publishedTeacherFiles).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
           }
           if (data?.activeFileId) {
             this.publishedActiveFileId = data.activeFileId;
-            if (this.state?.storage) this.state.storage.put('publishedActiveFileId', this.publishedActiveFileId).catch(() => {});
+            if (this.state?.storage) this.state.storage.put('publishedActiveFileId', this.publishedActiveFileId).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
           }
           if (data?.code !== undefined) {
             this.latestTeacherCode = data.code;
-            if (this.state?.storage) this.state.storage.put('latestTeacherCode', this.latestTeacherCode).catch(() => {});
+            if (this.state?.storage) this.state.storage.put('latestTeacherCode', this.latestTeacherCode).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
           }
         } else if (eventName === 'TEACHER_SHARE_OUTPUT') {
           if (data?.output !== undefined) {
             this.publishedOutput = data.output;
             this.latestTeacherOutput = data.output;
-            if (this.state?.storage) this.state.storage.put('latestTeacherOutput', this.latestTeacherOutput).catch(() => {});
+            if (this.state?.storage) this.state.storage.put('latestTeacherOutput', this.latestTeacherOutput).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
           }
         }
 
@@ -1377,11 +1377,11 @@ export class ClassroomRoomDO {
 
         if (fullEvent.type === 'teacher.code.changed' && fullEvent.payload.code !== undefined) {
           this.latestTeacherCode = fullEvent.payload.code;
-          if (this.state?.storage) this.state.storage.put('latestTeacherCode', this.latestTeacherCode).catch(() => {});
+          if (this.state?.storage) this.state.storage.put('latestTeacherCode', this.latestTeacherCode).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
         }
         if (fullEvent.type === 'teacher.output.created' && fullEvent.payload.output !== undefined) {
           this.latestTeacherOutput = fullEvent.payload.output;
-          if (this.state?.storage) this.state.storage.put('latestTeacherOutput', this.latestTeacherOutput).catch(() => {});
+          if (this.state?.storage) this.state.storage.put('latestTeacherOutput', this.latestTeacherOutput).catch(() => { /* non-critical storage write; session state recovers on reconnect */ });
         }
 
         this.recordAndStoreEvent(fullEvent);
