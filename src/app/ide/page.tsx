@@ -164,8 +164,13 @@ export default function CloudIDEPage() {
               const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
               if (targetLang) setCurrentLang(targetLang);
             }
+          } else if (res.status === 401) {
+            // Unauthenticated: preserve projectId and route to login
+            const returnUrl = `/ide?projectId=${encodeURIComponent(id)}`;
+            router.replace(`/login?redirect=${encodeURIComponent(returnUrl)}`);
+            return;
           } else {
-            // Bad ID, let's just strip it
+            // Bad ID or not found, strip it
             router.replace('/ide');
           }
         } else {

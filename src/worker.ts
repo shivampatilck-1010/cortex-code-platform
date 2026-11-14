@@ -71,6 +71,13 @@ export default {
     setEnv(env);
     const url = new URL(request.url);
 
+    // Direct edge 307 redirect for legacy root ?projectId=... query parameters to dedicated /ide route
+    if (url.pathname === '/' && url.searchParams.has('projectId')) {
+      const target = new URL('/ide', url.origin);
+      target.search = url.search;
+      return Response.redirect(target.toString(), 307);
+    }
+
     // Direct high-performance Cloudflare Edge streaming for video assets with native HTTP 206 Range support
     if (url.pathname.startsWith('/videos/') && env.ASSETS) {
       return env.ASSETS.fetch(request);
