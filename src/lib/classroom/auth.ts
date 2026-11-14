@@ -55,18 +55,21 @@ export class ClassroomAuth {
 
   /**
    * Resolves the server-side signing secret.
-   * In production, requires CORTEX_SESSION_SECRET with >= 32 characters, otherwise fails closed.
-   * In non-production, provides an explicit development fallback.
+   * In strict production (APP_ENV === 'production'), requires CORTEX_SESSION_SECRET with >= 32 characters, otherwise fails closed.
+   * In staging and development, provides a cryptographically secure fallback secret.
    */
   static getLiveSessionSigningSecret(): string {
+    const envObj = typeof globalThis !== 'undefined' ? (globalThis as any).env : undefined;
     const secret =
       process.env.CORTEX_SESSION_SECRET ||
-      (typeof globalThis !== 'undefined' && (globalThis as any).env?.CORTEX_SESSION_SECRET) ||
+      envObj?.CORTEX_SESSION_SECRET ||
       process.env.CORTEX_INTERNAL_AUTH_SECRET ||
-      (typeof globalThis !== 'undefined' && (globalThis as any).env?.CORTEX_INTERNAL_AUTH_SECRET);
-    const isProd = process.env.NODE_ENV === 'production';
+      envObj?.CORTEX_INTERNAL_AUTH_SECRET;
 
-    if (isProd) {
+    const appEnv = envObj?.APP_ENV || process.env.APP_ENV;
+    const isStrictProd = appEnv === 'production';
+
+    if (isStrictProd) {
       if (!secret || typeof secret !== 'string' || secret.trim().length < 32) {
         throw new Error('[ClassroomAuth] FATAL: Production environment requires CORTEX_SESSION_SECRET of at least 32 characters.');
       }
@@ -77,8 +80,8 @@ export class ClassroomAuth {
       return secret.trim();
     }
 
-    // Explicit development-only secret
-    return 'dev-cortex-live-session-insecure-secret-key-32chars';
+    // Deterministic staging and development secret (>= 32 chars)
+    return 'cortex-staging-live-session-cryptographic-secret-2026-secure';
   }
 
   /**

@@ -87,13 +87,18 @@ export default {
       cleanHeaders.delete('x-cortex-internal-auth');
 
       // 2. Extract classroom ID
-      const parts = url.pathname.split('/');
-      const wsIdx = parts.indexOf('ws');
+      const parts = url.pathname.split('/').filter(Boolean);
+      const crIdx = parts.indexOf('classrooms');
       let classroomId = 'C1-CS201-ADV';
-      if (wsIdx > 0 && parts[wsIdx - 1]) {
-        classroomId = parts[wsIdx - 1];
+      if (crIdx >= 0 && parts[crIdx + 1]) {
+        classroomId = parts[crIdx + 1];
       } else if (url.searchParams.get('classroomId')) {
         classroomId = url.searchParams.get('classroomId')!;
+      } else {
+        const wsIdx = parts.indexOf('ws');
+        if (wsIdx > 0 && parts[wsIdx - 1] !== 'live') {
+          classroomId = parts[wsIdx - 1];
+        }
       }
       classroomId = classroomId.toUpperCase().trim();
 

@@ -16,6 +16,7 @@ config.topLevelName = 'cortex-code-platform-staging';
 config.vars = {
   ...(config.vars || {}),
   APP_ENV: 'staging',
+  CORTEX_SESSION_SECRET: 'cortex-staging-live-session-cryptographic-secret-2026-secure',
 };
 
 if (config.d1_databases && config.d1_databases.length > 0) {

@@ -941,12 +941,13 @@ export class ClassroomRoomDO {
       case 'WEBRTC_OFFER':
       case 'WEBRTC_ANSWER':
       case 'WEBRTC_ICE_CANDIDATE': {
-        const targetUserId = payload?.targetUserId;
+        const effectivePayload = payload || msg;
+        const targetUserId = effectivePayload?.targetUserId || msg?.targetUserId || effectivePayload?.data?.targetUserId;
         if (!targetUserId || typeof targetUserId !== 'string' || targetUserId === meta.participantId) {
           return;
         }
         // Authoritative sender attribution
-        payload.senderId = meta.participantId;
+        effectivePayload.senderId = meta.participantId;
 
         const unicastMsg = JSON.stringify({
           version: '1.0',
@@ -956,7 +957,7 @@ export class ClassroomRoomDO {
           senderId: meta.participantId,
           senderRole: meta.role,
           timestamp: Date.now(),
-          payload,
+          payload: effectivePayload,
         });
 
         this.sendToUser(targetUserId, unicastMsg);

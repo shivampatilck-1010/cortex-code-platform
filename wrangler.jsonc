@@ -44,7 +44,8 @@
         "staging": {
             "name": "cortex-code-platform-staging",
             "vars": {
-                "APP_ENV": "staging"
+                "APP_ENV": "staging",
+                "CORTEX_SESSION_SECRET": "cortex-staging-live-session-cryptographic-secret-2026-secure"
             },
             "d1_databases": [
                 {
