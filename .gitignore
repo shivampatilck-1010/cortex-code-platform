@@ -48,3 +48,4 @@ data/
 *_backup.*
 backups/
 scratch/
+.agents/

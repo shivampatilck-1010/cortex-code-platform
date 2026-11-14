@@ -1,3 +1,4 @@
+import { Classroom, User } from '@/lib/classroom/models';
 import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
@@ -18,6 +19,37 @@ import { ClassroomIdentity } from '@/lib/classroom/identity';
  * 4. Returns non-secret session context and an ephemeral HMAC-signed live token.
  * 5. Never leaks password_hash, session cookie values, or internal DB secrets.
  */
+
+function createDemoClassroom(id: string): Classroom {
+  return {
+    id,
+    name: `${id}: Advanced Live Interactive Studio`,
+    subject: 'Computer Science',
+    description: 'Interactive real-time collaborative classroom session.',
+    coursecode: id,
+    academicYear: '2026-2027',
+    section: 'A',
+    teacherId: 'usr_prof_cortex',
+    teacherName: 'Professor Cortex',
+    joinEnabled: true,
+    status: 'active',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    settings: {
+      allowStudentPosting: true,
+      allowStudentMessaging: true,
+      allowCodeSharing: true,
+      leaderboardEnabled: true,
+      defaultAIPolicy: 'full',
+      allowStudentMicrophone: true,
+      allowStudentCamera: true,
+      allowStudentScreenShare: true,
+      allowStudentChat: true,
+      allowIndependentMode: true,
+    },
+  };
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -44,22 +76,16 @@ export async function GET(
       isGuest = true;
     }
 
-    let classroom: any = (await classroomDb.getClassroom(normId)) || (await classroomDb.getClassroom(id));
+    const appEnv = (globalThis as any).env?.APP_ENV || process.env.APP_ENV || 'development';
+    let classroom: Classroom | null = (await classroomDb.getClassroom(normId)) || (await classroomDb.getClassroom(id));
     if (!classroom) {
-      classroom = {
-        id: normId,
-        courseCode: normId,
-        title: `${normId}: Advanced Live Interactive Studio`,
-        teacherId: 'usr_prof_cortex',
-        status: 'active',
-        settings: {
-          allowStudentMicrophone: true,
-          allowStudentCamera: true,
-          allowStudentScreenShare: true,
-          allowStudentChat: true,
-          allowIndependentMode: true,
-        },
-      } as any;
+      if (appEnv === 'production') {
+        return NextResponse.json(
+          { authorized: false, error: `Classroom '${normId}' not found.` },
+          { status: 404 }
+        );
+      }
+      classroom = createDemoClassroom(normId);
     }
 
     // 3. Status check: archived classrooms cannot host live sessions
@@ -88,7 +114,7 @@ export async function GET(
     const effectiveRole: 'teacher' | 'student' = isTeacher ? 'teacher' : 'student';
 
     // 6. Look up teacher info for live session display
-    let teacherUser: any = null;
+    let teacherUser: User | null = null;
     if (classroom.teacherId) {
       teacherUser = await classroomDb.getUser(classroom.teacherId).catch(() => null);
     }
@@ -96,18 +122,18 @@ export async function GET(
     // 7. Derive permissions from classroom settings
     const settings = classroom.settings || ({} as any);
     const permissions = {
-      allowStudentMicrophone: (settings as any).allowStudentMicrophone ?? true,
-      allowStudentCamera: (settings as any).allowStudentCamera ?? true,
-      allowStudentScreenShare: (settings as any).allowStudentScreenShare ?? false,
-      allowStudentChat: (settings as any).allowStudentChat ?? settings.allowStudentMessaging ?? true,
-      allowIndependentMode: (settings as any).allowIndependentMode ?? settings.allowCodeSharing ?? true,
+      allowStudentMicrophone: settings.allowStudentMicrophone ?? true,
+      allowStudentCamera: settings.allowStudentCamera ?? true,
+      allowStudentScreenShare: settings.allowStudentScreenShare ?? false,
+      allowStudentChat: settings.allowStudentChat ?? settings.allowStudentMessaging ?? true,
+      allowIndependentMode: settings.allowIndependentMode ?? settings.allowCodeSharing ?? true,
     };
 
     const tokenLifetimeMs = 1000 * 60 * 60 * 12; // 12h lifetime for live signaling
     const now = Date.now();
 
     // 8. Ephemeral Live Session Token (valid for signaling, zero exposure of cortex_session)
-    const effectiveEmail = (user as any).professional_email || (user as any).professionalEmail || ClassroomIdentity.generateProfessionalIdentity(user);
+    const effectiveEmail = user.professional_email || user.professionalEmail || ClassroomIdentity.generateProfessionalIdentity(user);
     const liveSessionToken = isGuest && guestToken
       ? guestToken
       : ClassroomAuth.createLiveSessionToken({
@@ -129,8 +155,8 @@ export async function GET(
       user: {
         id: user.id,
         name: user.name,
-        email: (user as any).professional_email || (user as any).professionalEmail || ClassroomIdentity.generateProfessionalIdentity(user),
-        professionalEmail: (user as any).professional_email || (user as any).professionalEmail || ClassroomIdentity.generateProfessionalIdentity(user),
+        email: user.professional_email || user.professionalEmail || ClassroomIdentity.generateProfessionalIdentity(user),
+        professionalEmail: user.professional_email || user.professionalEmail || ClassroomIdentity.generateProfessionalIdentity(user),
         cortexId: user.cortex_id || user.cortexId || user.id,
         role: effectiveRole,
       },

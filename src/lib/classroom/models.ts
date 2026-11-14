@@ -25,6 +25,7 @@ export interface User {
   cortexId?: string;
   professional_email?: string;
   professionalEmail?: string;
+  isGuest?: boolean;
   role: UserGlobalRole;
   password_hash?: string;
   avatar?: string;
@@ -62,6 +63,11 @@ export interface ClassroomSettingsConfig {
   leaderboardEnabled: boolean;
   defaultAIPolicy: AIPolicy;
   memberVisibility?: boolean | 'all' | 'teachers_only' | string;
+  allowStudentMicrophone?: boolean;
+  allowStudentCamera?: boolean;
+  allowStudentScreenShare?: boolean;
+  allowStudentChat?: boolean;
+  allowIndependentMode?: boolean;
 }
 
 export interface ClassroomMember {

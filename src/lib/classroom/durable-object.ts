@@ -1,3 +1,5 @@
+import { setEnv } from '../env';
+import type { Env } from '../../worker';
 import * as Y from 'yjs';
 import {
   RealtimeMessage,
@@ -57,9 +59,9 @@ const TEACHER_MODERATION_EVENTS = new Set([
 ]);
 
 export class ClassroomRoomDO {
-  state: any;
-  env: any;
-  sessions: Map<any, SessionAttachment>;
+  state: DurableObjectState;
+  env: Env;
+  sessions: Map<WebSocket | any, SessionAttachment>;
   yDocs: Map<string, Y.Doc>;
   private currentSequence: number = 0;
   private eventLog: ClassroomRealtimeEvent[] = [];
@@ -109,7 +111,7 @@ export class ClassroomRoomDO {
     allowIndependentMode: true,
   };
 
-  constructor(state: any, env: any) {
+  constructor(state: DurableObjectState | any, env: Env | any) {
     this.state = state;
     this.env = env;
     this.sessions = new Map();
@@ -244,7 +246,9 @@ export class ClassroomRoomDO {
             }
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ClassroomRoomDO] Failed to retrieve hibernated WebSockets for tag:', err);
+      }
     }
 
     if (tag) {
@@ -357,7 +361,7 @@ export class ClassroomRoomDO {
         map.set(meta.participantId, {
           userId: meta.participantId,
           name: meta.name,
-          role: (meta.role as any) || 'student',
+          role: meta.role || 'student',
           connectedAt: meta.lastActive,
           isMuted: meta.isMuted ?? true,
           isVideoOff: meta.isVideoOff ?? true,
@@ -419,7 +423,7 @@ export class ClassroomRoomDO {
   }
 
   async fetch(request: Request): Promise<Response> {
-    if (this.env) { (globalThis as any).env = this.env; }
+    if (this.env) { setEnv(this.env); }
     await this.ensureInitialized();
     const upgradeHeader = request.headers.get('Upgrade');
 
@@ -482,6 +486,7 @@ export class ClassroomRoomDO {
         const pair = new WsPairClass();
         [client, server] = Object.values(pair) as [any, any];
       } else {
+        console.warn('[ClassroomRoomDO] WebSocketPair not available -- using mock pair (test environment only)');
         const makeMockWs = () => ({
           readyState: 1,
           send: () => {},
@@ -497,8 +502,8 @@ export class ClassroomRoomDO {
 
       const sessionMeta: SessionAttachment = {
         auth,
-        participantId: auth.userId || (auth as any).id,
-        name: auth.displayName || (auth as any).name || 'Participant',
+        participantId: auth.userId,
+        name: auth.displayName || 'Participant',
         role: auth.role, // Derived authoritatively from server membership
         authenticated: true,
         lastActive: Date.now(),
@@ -510,7 +515,9 @@ export class ClassroomRoomDO {
       if (typeof server.serializeAttachment === 'function') {
         try {
           server.serializeAttachment(sessionMeta);
-        } catch (_) {}
+        } catch (err) {
+          console.warn('[ClassroomRoomDO] Failed to serialize session attachment:', err);
+        }
       }
 
       // 2. Accept into hibernation runtime with tags
@@ -583,7 +590,9 @@ export class ClassroomRoomDO {
             },
           })
         );
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ClassroomRoomDO] Failed to send initial connected message:', err);
+      }
 
       // Broadcast student.joined event
       const joinSeq = this.getNextSequence();
@@ -608,14 +617,13 @@ export class ClassroomRoomDO {
       try {
         return new Response(null, {
           status: 101,
-          // @ts-ignore
           webSocket: client,
         });
-      } catch (_) {
+      } catch (err) {
         // Fallback for Node.js test environments where Response disallows 101
+        console.warn('[ClassroomRoomDO] Response 101 status failed, falling back to 200 for test environment:', err);
         return new Response(null, {
           status: 200,
-          // @ts-ignore
           webSocket: client,
         });
       }
@@ -717,7 +725,9 @@ export class ClassroomRoomDO {
       let parsedLiveMsg: any = null;
       try {
         parsedLiveMsg = JSON.parse(raw);
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ClassroomRoomDO] Failed to parse incoming message as JSON:', err);
+      }
 
       if (
         parsedLiveMsg &&
@@ -795,7 +805,9 @@ export class ClassroomRoomDO {
         },
       });
       this.broadcastRaw(leaveMsg);
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[ClassroomRoomDO] Failed to broadcast participant leave message:', err);
+    }
 
     if (remainingCount === 0) {
       await this.flushToD1(classroomId);
@@ -838,7 +850,7 @@ export class ClassroomRoomDO {
       }
 
       case 'JOIN_CLASSROOM': {
-        const participantId = meta.auth?.userId || (meta.auth as any)?.id || meta.participantId;
+        const participantId = meta.auth?.userId || meta.participantId;
         const finalName = (payload?.participantName && typeof payload.participantName === 'string' && payload.participantName.trim())
           ? payload.participantName.trim().slice(0, 50)
           : meta.name || 'Participant';
@@ -1489,7 +1501,9 @@ export class ClassroomRoomDO {
         }
         try {
           ws.send(raw);
-        } catch (_) {}
+        } catch (err) {
+          console.warn('[ClassroomRoomDO] Failed to send broadcast message to socket:', err);
+        }
       }
     }
   }
@@ -1500,7 +1514,9 @@ export class ClassroomRoomDO {
       if (ws !== excludeWs && ws.readyState === 1 /* OPEN */) {
         try {
           ws.send(raw);
-        } catch (_) {}
+        } catch (err) {
+          console.warn('[ClassroomRoomDO] Failed to send broadcast message to socket:', err);
+        }
       }
     }
   }

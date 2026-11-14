@@ -1,24 +1,26 @@
+import { setEnv } from './lib/env';
 import { classroomDb } from './lib/classroom/db';
 import { ClassroomRoomDO } from './lib/classroom/durable-object';
 import { ClassroomAuth, AuthenticatedClassroomUser } from './lib/classroom/auth';
 import { executeInCloudRunner } from './lib/execution/cloud-runner';
 import { arenaDb } from './lib/arena/db';
 import { projectDb } from './lib/project/db';
-// @ts-ignore
 import vinextHandler from 'vinext/server/fetch-handler';
 
 export { ClassroomRoomDO };
 
 export interface Env {
-  CLASSROOM_ROOM_DO: any;
-  ASSETS?: any;
-  CF_VERSION_METADATA?: any;
+  CLASSROOM_ROOM_DO: DurableObjectNamespace;
+  ASSETS?: Fetcher;
+  CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
+  APP_ENV?: string;
+  CORTEX_SESSION_SECRET?: string;
   [key: string]: any;
 }
 
 export default {
   async queue(batch: any, env: Env): Promise<void> {
-    (globalThis as any).env = env;
+    setEnv(env);
     for (const msg of batch.messages) {
       const { jobId, userId, benchmarkId, runType, langA, langB, workspaceAProjectId, workspaceBProjectId } = msg.body;
       try {
@@ -66,7 +68,7 @@ export default {
 
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
     // Inject env globally so database wrappers can find D1 bindings
-    (globalThis as any).env = env;
+    setEnv(env);
     const url = new URL(request.url);
 
     // Direct high-performance Cloudflare Edge streaming for video assets with native HTTP 206 Range support
@@ -89,7 +91,7 @@ export default {
       // 2. Extract classroom ID
       const parts = url.pathname.split('/').filter(Boolean);
       const crIdx = parts.indexOf('classrooms');
-      let classroomId = 'C1-CS201-ADV';
+      let classroomId: string | null = null;
       if (crIdx >= 0 && parts[crIdx + 1]) {
         classroomId = parts[crIdx + 1];
       } else if (url.searchParams.get('classroomId')) {
@@ -99,6 +101,16 @@ export default {
         if (wsIdx > 0 && parts[wsIdx - 1] !== 'live') {
           classroomId = parts[wsIdx - 1];
         }
+      }
+      if (!classroomId) {
+        return new Response(
+          JSON.stringify({
+            error: 'Bad Request',
+            code: 'MISSING_CLASSROOM_ID',
+            message: 'Classroom ID could not be determined from the request URL.',
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
       }
       classroomId = classroomId.toUpperCase().trim();
 
@@ -184,7 +196,6 @@ export default {
       const internalReq = new Request(request.url, {
         method: request.method,
         headers: cleanHeaders,
-        // @ts-ignore
         cf: (request as any).cf,
       });
 

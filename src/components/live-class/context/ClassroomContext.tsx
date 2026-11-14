@@ -1,3 +1,9 @@
+import type {
+  JoinAcceptedPayload,
+  ParticipantJoinedPayload,
+  ParticipantLeftPayload,
+  ClassroomEventPayload,
+} from '@/components/live-class/types/realtime';
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
   ClassroomModule,
@@ -358,17 +364,17 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       // Add local media tracks if active
       if (localAudioStreamRef.current) {
         localAudioStreamRef.current.getAudioTracks().forEach((track) => {
-          try { pc!.addTrack(track, localAudioStreamRef.current!); } catch (_) {}
+          try { pc!.addTrack(track, localAudioStreamRef.current!); } catch (err) { console.warn('[WebRTC] Failed to add local audio track:', err); }
         });
       }
       if (localVideoStreamRef.current) {
         localVideoStreamRef.current.getVideoTracks().forEach((track) => {
-          try { pc!.addTrack(track, localVideoStreamRef.current!); } catch (_) {}
+          try { pc!.addTrack(track, localVideoStreamRef.current!); } catch (err) { console.warn('[WebRTC] Failed to add local video track:', err); }
         });
       }
       if (screenShareStreamRef.current) {
         screenShareStreamRef.current.getVideoTracks().forEach((track) => {
-          try { pc!.addTrack(track, screenShareStreamRef.current!); } catch (_) {}
+          try { pc!.addTrack(track, screenShareStreamRef.current!); } catch (err) { console.warn('[WebRTC] Failed to add screen share track:', err); }
         });
       }
 
@@ -414,7 +420,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
 
       pc.oniceconnectionstatechange = () => {
         if (pc!.iceConnectionState === 'failed') {
-          try { (pc as any).restartIce(); } catch (_) {}
+          try { (pc as any).restartIce(); } catch (err) { console.warn('[WebRTC] Failed to restart ICE:', err); }
         }
       };
 
@@ -449,11 +455,13 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       let maxLevel = 0;
       let loudestSpeakerId: string | null = null;
 
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!audioContextRef.current && AudioCtx) {
         try {
           audioContextRef.current = new AudioCtx();
-        } catch (_) {}
+        } catch (err) {
+          console.warn('[WebAudio] Failed to initialize AudioContext:', err);
+        }
       }
       const ctx = audioContextRef.current;
       if (!ctx) return;
@@ -473,7 +481,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
             source.connect(analyser);
             entry = { source, analyser };
             audioAnalysersRef.current.set(currentUserId, entry);
-          } catch (_) {}
+          } catch (err) {
+            console.warn('[WebAudio] Failed to create local audio analyser:', err);
+          }
         }
         if (entry) {
           const dataArray = new Uint8Array(entry.analyser.frequencyBinCount);
@@ -505,7 +515,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
               source.connect(analyser);
               entry = { source, analyser };
               audioAnalysersRef.current.set(peerId, entry);
-            } catch (_) {}
+            } catch (err) {
+              console.warn('[WebAudio] Failed to create remote audio analyser for peer:', err);
+            }
           }
           if (entry) {
             const dataArray = new Uint8Array(entry.analyser.frequencyBinCount);
@@ -708,11 +720,15 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       const ch = new BroadcastChannel('cortex_classroom_control');
       ch.postMessage({ type: 'TEACHER_MUTE_ALL' });
       ch.close();
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[BroadcastChannel] Failed to post TEACHER_MUTE_ALL:', err);
+    }
 
     try {
       signalingClientRef.current?.emitClassroomEvent('TEACHER_MUTE_ALL', {}, true);
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[Signaling] Failed to emit TEACHER_MUTE_ALL:', err);
+    }
 
     showToast('All student microphones muted');
   }, [userRole, showToast]);
@@ -737,11 +753,15 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       const ch = new BroadcastChannel('cortex_classroom_control');
       ch.postMessage({ type: 'TEACHER_STOP_ALL_CAMERAS' });
       ch.close();
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[BroadcastChannel] Failed to post TEACHER_STOP_ALL_CAMERAS:', err);
+    }
 
     try {
       signalingClientRef.current?.emitClassroomEvent('TEACHER_STOP_ALL_CAMERAS', {}, true);
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[Signaling] Failed to emit TEACHER_STOP_ALL_CAMERAS:', err);
+    }
 
     showToast('All student cameras turned off');
   }, [userRole, showToast]);
@@ -777,7 +797,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         const ch = new BroadcastChannel('cortex_classroom_control');
         ch.postMessage({ type: 'TEACHER_MUTE_STUDENT', payload: { targetStudentId: studentId } });
         ch.close();
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post TEACHER_MUTE_STUDENT:', err);
+      }
 
       try {
         signalingClientRef.current?.emitClassroomEvent(
@@ -785,7 +807,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           { targetStudentId: studentId },
           true
         );
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit TEACHER_MUTE_STUDENT:', err);
+      }
 
       showToast(`Muted ${target.name}'s microphone`);
     },
@@ -820,7 +844,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         const ch = new BroadcastChannel('cortex_classroom_control');
         ch.postMessage({ type: 'TEACHER_STOP_CAMERA', payload: { targetStudentId: studentId } });
         ch.close();
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post TEACHER_STOP_CAMERA:', err);
+      }
 
       try {
         signalingClientRef.current?.emitClassroomEvent(
@@ -828,7 +854,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           { targetStudentId: studentId },
           true
         );
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit TEACHER_STOP_CAMERA:', err);
+      }
 
       showToast(`Turned off ${target.name}'s camera`);
     },
@@ -866,7 +894,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         const ch = new BroadcastChannel('cortex_classroom_control');
         ch.postMessage({ type: 'TEACHER_REQUEST_UNMUTE', payload: { targetStudentId: studentId } });
         ch.close();
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post TEACHER_REQUEST_UNMUTE:', err);
+      }
 
       try {
         signalingClientRef.current?.emitClassroomEvent(
@@ -874,7 +904,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           { targetStudentId: studentId },
           true
         );
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit TEACHER_REQUEST_UNMUTE:', err);
+      }
 
       showToast(`Requested ${target.name} to unmute microphone`);
 
@@ -923,7 +955,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         const ch = new BroadcastChannel('cortex_classroom_control');
         ch.postMessage({ type: 'TEACHER_REQUEST_CAMERA', payload: { targetStudentId: studentId } });
         ch.close();
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post TEACHER_REQUEST_CAMERA:', err);
+      }
 
       try {
         signalingClientRef.current?.emitClassroomEvent(
@@ -931,7 +965,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           { targetStudentId: studentId },
           true
         );
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit TEACHER_REQUEST_CAMERA:', err);
+      }
 
       showToast(`Requested ${target.name} to turn on camera`);
 
@@ -966,7 +1002,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           payload: { allowStudentMicrophone: nextAllowed },
         });
         ch.close();
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post PERMISSIONS_UPDATED (allowStudentMicrophone):', err);
+      }
 
       try {
         signalingClientRef.current?.emitClassroomEvent(
@@ -974,7 +1012,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           { allowStudentMicrophone: nextAllowed },
           true
         );
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit PERMISSIONS_UPDATED (allowStudentMicrophone):', err);
+      }
 
       return {
         ...prev,
@@ -1003,7 +1043,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           payload: { allowStudentCamera: nextAllowed },
         });
         ch.close();
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post PERMISSIONS_UPDATED (allowStudentCamera):', err);
+      }
 
       try {
         signalingClientRef.current?.emitClassroomEvent(
@@ -1011,7 +1053,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           { allowStudentCamera: nextAllowed },
           true
         );
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit PERMISSIONS_UPDATED (allowStudentCamera):', err);
+      }
 
       return {
         ...prev,
@@ -1045,7 +1089,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
     try {
       const AudioCtx =
         typeof window !== 'undefined'
-          ? window.AudioContext || (window as any).webkitAudioContext
+          ? window.AudioContext || window.webkitAudioContext
           : null;
       if (!AudioCtx) return;
 
@@ -1186,7 +1230,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           if (videoSender) {
             videoSender.replaceTrack(newVideoTrack).catch(() => {});
           } else {
-            try { pc.addTrack(newVideoTrack, stream); } catch (_) {}
+            try { pc.addTrack(newVideoTrack, stream); } catch (err) { console.warn('[WebRTC] Failed to add hot-swapped video track:', err); }
           }
         });
       }
@@ -1312,7 +1356,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           if (audioSender) {
             audioSender.replaceTrack(newAudioTrack).catch(() => {});
           } else {
-            try { pc.addTrack(newAudioTrack, stream); } catch (_) {}
+            try { pc.addTrack(newAudioTrack, stream); } catch (err) { console.warn('[WebRTC] Failed to add hot-swapped audio track:', err); }
           }
         });
       }
@@ -1552,18 +1596,22 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           const ch = new BroadcastChannel('cortex_classroom_control');
           ch.postMessage({
             type: 'MEDIA_REQUEST_RESPONSE',
-            payload: { targetStudentId: currentUserId, type, accepted: true },
-          });
-          ch.close();
-        } catch (_) {}
+          payload: { targetStudentId: currentUserId, type, accepted: true },
+        });
+        ch.close();
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post MEDIA_REQUEST_RESPONSE (accepted):', err);
+      }
 
         try {
           signalingClientRef.current?.emitClassroomEvent('MEDIA_REQUEST_RESPONSE', {
-            targetStudentId: currentUserId,
-            type,
-            accepted: true,
-          });
-        } catch (_) {}
+          targetStudentId: currentUserId,
+          type,
+          accepted: true,
+        });
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit MEDIA_REQUEST_RESPONSE (accepted):', err);
+      }
       } else {
         setParticipants((prev) =>
           prev.map((p) =>
@@ -1583,18 +1631,22 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           const ch = new BroadcastChannel('cortex_classroom_control');
           ch.postMessage({
             type: 'MEDIA_REQUEST_RESPONSE',
-            payload: { targetStudentId: currentUserId, type, accepted: false },
-          });
-          ch.close();
-        } catch (_) {}
+          payload: { targetStudentId: currentUserId, type, accepted: false },
+        });
+        ch.close();
+      } catch (err) {
+        console.warn('[BroadcastChannel] Failed to post MEDIA_REQUEST_RESPONSE (declined):', err);
+      }
 
         try {
           signalingClientRef.current?.emitClassroomEvent('MEDIA_REQUEST_RESPONSE', {
-            targetStudentId: currentUserId,
-            type,
-            accepted: false,
-          });
-        } catch (_) {}
+          targetStudentId: currentUserId,
+          type,
+          accepted: false,
+        });
+      } catch (err) {
+        console.warn('[Signaling] Failed to emit MEDIA_REQUEST_RESPONSE (declined):', err);
+      }
       }
     },
     [session.permissions, currentUserId, startMicrophone, startCamera, showToast]
@@ -1715,7 +1767,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           }
         }
       };
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[BroadcastChannel] Failed to initialize BroadcastChannel control listener:', err);
+    }
 
     return () => {
       if (channel) channel.close();
@@ -1725,7 +1779,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   // Step 1: Real-time WebSocket Signaling connection & event handling
   useEffect(() => {
     const isTest = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
-    const allowConnect = !isTest || (typeof window !== 'undefined' && Boolean((window as any).__ENABLE_TEST_WS__));
+    const allowConnect = !isTest || (typeof window !== 'undefined' && Boolean(window.__ENABLE_TEST_WS__));
 
     let wsUrl: string | undefined = undefined;
     if (typeof window !== 'undefined' && window.location) {
@@ -1759,11 +1813,11 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
 
     const unsubMessage = client.onMessage((envelope) => {
       if (envelope.type === 'JOIN_ACCEPTED') {
-        const payload = envelope.payload as any;
+        const payload = envelope.payload as JoinAcceptedPayload;
         if (payload?.activeParticipants && Array.isArray(payload.activeParticipants)) {
           setParticipants((prev) => {
             const existingMap = new Map(prev.map((p) => [p.id, p]));
-            payload.activeParticipants.forEach((ap: any) => {
+            payload.activeParticipants.forEach((ap) => {
               if (ap.id === currentUserId) return;
               if (existingMap.has(ap.id)) {
                 const ex = existingMap.get(ap.id)!;
@@ -1787,7 +1841,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           });
         }
       } else if (envelope.type === 'PARTICIPANT_JOINED') {
-        const p = (envelope.payload as any)?.participant;
+        const p = (envelope.payload as ParticipantJoinedPayload)?.participant;
         if (p && p.id !== currentUserId) {
           setParticipants((prev) => {
             if (prev.some((x) => x.id === p.id)) {
@@ -1814,14 +1868,14 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           }
         }
       } else if (envelope.type === 'PARTICIPANT_LEFT') {
-        const leftId = (envelope.payload as any)?.participantId;
+        const leftId = (envelope.payload as ParticipantLeftPayload)?.participantId;
         if (leftId) {
           setParticipants((prev) =>
             prev.map((x) => (x.id === leftId ? { ...x, connectionStatus: 'disconnected' } : x))
           );
           const pc = peerConnectionsRef.current.get(leftId);
           if (pc) {
-            try { pc.close(); } catch (_) {}
+            try { pc.close(); } catch (err) { console.warn('[WebRTC] Failed to close peer connection for departed participant:', err); }
             peerConnectionsRef.current.delete(leftId);
           }
           setRemoteStreams((prev) => {
@@ -1834,7 +1888,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
           });
         }
       } else if (envelope.type === 'CLASSROOM_EVENT') {
-        const { eventName, data } = envelope.payload || {};
+        const eventPayload = envelope.payload as ClassroomEventPayload | undefined;
+        const eventName = eventPayload?.eventName || '';
+        const data = eventPayload?.data;
         setLastNetworkEvent({
           eventName,
           payload: data,

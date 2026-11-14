@@ -13,6 +13,9 @@ export async function GET(
   try {
     const { id } = await params;
     const user = await ClassroomAuth.authenticateRequest(req);
+    // Security model: STUN-only configuration does not authenticate or incur server relay bandwidth.
+    // Unauthenticated fallback to 'cortex-participant' is safe in STUN mode; if TURN relay is
+    // enabled in the future, strict authentication will be required before issuing credentials.
     const userId = user?.id || req.nextUrl.searchParams.get('userId') || 'cortex-participant';
     const result = getAuthoritativeIceServers(userId);
     return NextResponse.json(result, {

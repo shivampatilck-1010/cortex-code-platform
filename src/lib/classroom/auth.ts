@@ -45,9 +45,21 @@ export class ClassroomAuth {
     })).toString('base64');
   }
 
-  static verifyInternalAuthToken(token: string): any {
+  static verifyInternalAuthToken(token: string): AuthenticatedClassroomUser | null {
     try {
-      return JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+      const parsed = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+      if (!parsed || typeof parsed !== 'object') return null;
+      const userId = parsed.userId || parsed.id;
+      const displayName = parsed.displayName || parsed.name || 'Participant';
+      if (!userId) return null;
+      return {
+        userId,
+        displayName,
+        email: parsed.email || '',
+        role: parsed.role === 'teacher' ? 'teacher' : 'student',
+        classroomId: parsed.classroomId || '',
+        authenticatedAt: parsed.authenticatedAt || Date.now(),
+      };
     } catch {
       return null;
     }
@@ -142,6 +154,7 @@ export class ClassroomAuth {
       id: guestId,
       name: guestName,
       email,
+      isGuest: true,
       role: 'student',
       status: 'active',
       createdAt: Date.now(),
@@ -385,7 +398,7 @@ export class ClassroomAuth {
     }
 
     const normClassroomId = classroomId.toUpperCase().trim();
-    if (user.id.startsWith('guest_') || (user as any).isGuest) {
+    if (user.id.startsWith('guest_') || user.isGuest) {
       return { authorized: true, role: 'student' };
     }
 
@@ -413,7 +426,7 @@ export class ClassroomAuth {
 
     // Server-side suspension check (includes expiry evaluation)
     if (member.status === 'suspended') {
-      const expiresAt = (member as any).suspensionExpiresAt;
+      const expiresAt = member.suspensionExpiresAt;
       const isExpired = expiresAt && Date.now() >= expiresAt;
       if (!isExpired) {
         return {
@@ -446,7 +459,7 @@ export class ClassroomAuth {
     }
 
     const isAdmin = user.role === 'admin';
-    let membership: any = undefined;
+    let membership: AuthContext['membership'] = undefined;
     let isTeacher = false;
 
     if (isAdmin) {

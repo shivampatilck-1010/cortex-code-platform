@@ -16,6 +16,8 @@ config.topLevelName = 'cortex-code-platform-staging';
 config.vars = {
   ...(config.vars || {}),
   APP_ENV: 'staging',
+  // Staging secret is intentionally a non-secret test fixture for non-production environments.
+  // Production strictly enforces runtime secret keys via Cloudflare Workers Secrets.
   CORTEX_SESSION_SECRET: 'cortex-staging-live-session-cryptographic-secret-2026-secure',
 };
 

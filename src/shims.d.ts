@@ -3,3 +3,9 @@
 interface Body {
   json(): Promise<any>;
 }
+
+// Global Window extensions for live classroom WebRTC & audio
+interface Window {
+  webkitAudioContext?: typeof AudioContext;
+  __ENABLE_TEST_WS__?: boolean;
+}
