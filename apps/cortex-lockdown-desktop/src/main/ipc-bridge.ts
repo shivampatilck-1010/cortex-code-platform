@@ -18,6 +18,7 @@ import { TelemetryClient } from './security/telemetry-client';
 import { ScreenGuard } from './security/screen-guard';
 import { ClipboardGuard } from './security/clipboard-guard';
 import type { ProcessWatchdog } from './security/process-watchdog';
+import { ConfigManager, CodexConfig } from './config/config-loader';
 
 export interface IpcBridgeDependencies {
   window: BrowserWindow;
@@ -32,6 +33,25 @@ export interface IpcBridgeDependencies {
 }
 
 export function registerIpcHandlers(deps: IpcBridgeDependencies): void {
+  const configManager = ConfigManager.getInstance();
+
+  // Config Handlers
+  ipcMain.handle('cortex:get-config', async (): Promise<CodexConfig> => {
+    return configManager.getConfig();
+  });
+
+  ipcMain.handle('cortex:save-config', async (_event, newConfig: Partial<CodexConfig>): Promise<boolean> => {
+    return configManager.saveConfig(newConfig);
+  });
+
+  ipcMain.handle('cortex:get-custom-css', async (): Promise<string> => {
+    return configManager.getCustomCss();
+  });
+
+  ipcMain.handle('cortex:get-custom-preload-path', async (): Promise<string> => {
+    return configManager.getCustomPreloadPath();
+  });
+
   // 1. System Info Query
   ipcMain.handle('cortex:get-system-info', async (): Promise<SystemInfo> => {
     const allDisplays = screen.getAllDisplays();

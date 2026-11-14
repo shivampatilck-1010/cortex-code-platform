@@ -75,7 +75,24 @@ const api: CortexLockdownApi = {
 
   enableScreenShare: async (): Promise<boolean> => {
     return await ipcRenderer.invoke('cortex:enable-screen-share');
+  },
+
+  getConfig: async (): Promise<any> => {
+    return await ipcRenderer.invoke('cortex:get-config');
+  },
+
+  saveConfig: async (newConfig: any): Promise<boolean> => {
+    return await ipcRenderer.invoke('cortex:save-config', newConfig);
+  },
+
+  getCustomCss: async (): Promise<string> => {
+    return await ipcRenderer.invoke('cortex:get-custom-css');
+  },
+
+  getCustomPreloadPath: async (): Promise<string> => {
+    return await ipcRenderer.invoke('cortex:get-custom-preload-path');
   }
 };
 
 contextBridge.exposeInMainWorld('cortexLockdown', api);
+contextBridge.exposeInMainWorld('codex', api);

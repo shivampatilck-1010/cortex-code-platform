@@ -10,6 +10,7 @@ import { isAllowedUrl, DEFAULT_TARGET_URL, PROTOCOL_SCHEME } from '../shared/con
 import { ParsedLaunchArguments } from '../shared/types';
 import { KioskWindowManager } from './kiosk-window';
 import type { ProcessWatchdog } from './security/process-watchdog';
+import { ConfigManager } from './config/config-loader';
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,7 +21,11 @@ app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 // Immediate process-level exit handler for any renderer exit signal
 ipcMain.on('cortex:exit-app', () => {
-  app.exit(0);
+  if (kioskManager) {
+    kioskManager.teardownAndExit();
+  } else {
+    app.exit(0);
+  }
 });
 
 const debugLogPath = path.join(app.getPath('userData'), 'cortex_debug.log');
@@ -40,7 +45,8 @@ let kioskManager: KioskWindowManager | null = null;
  * Parses protocol URLs (cortex-lockdown://launch?examId=...&grant=...) and CLI arguments.
  */
 export function parseLaunchArguments(argv: string[]): ParsedLaunchArguments {
-  let targetUrl = DEFAULT_TARGET_URL;
+  const config = ConfigManager.getInstance().getConfig();
+  let targetUrl = config.exam?.targetUrl || DEFAULT_TARGET_URL;
   let examId = '';
   let launchGrant = '';
   let isProtocolLaunch = false;

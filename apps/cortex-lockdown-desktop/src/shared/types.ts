@@ -96,6 +96,10 @@ export interface CortexLockdownApi {
   minimizeApp: () => void;
   checkProcesses: () => Promise<ProhibitedProcessInfo[]>;
   enableScreenShare: () => Promise<boolean>;
+  getConfig: () => Promise<any>;
+  saveConfig: (config: any) => Promise<boolean>;
+  getCustomCss: () => Promise<string>;
+  getCustomPreloadPath: () => Promise<string>;
 }
 
 export type IpcChannel =
@@ -106,4 +110,5 @@ export type IpcChannel =
   | 'cortex:on-screen-capture-attempt'
   | 'cortex:on-prohibited-process'
   | 'cortex:on-restriction-warning'
-  | 'cortex:on-force-submit';
+  | 'cortex:on-force-submit'
+  | 'cortex:get-custom-preload-path';

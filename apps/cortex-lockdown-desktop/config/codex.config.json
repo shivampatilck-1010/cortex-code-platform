@@ -1,0 +1,63 @@
+{
+  "$schema": "./codex.config.schema.json",
+  "app": {
+    "name": "Codex Browser",
+    "version": "2.0.10",
+    "theme": {
+      "accentColor": "#00e5c9",
+      "backgroundColor": "#041c17",
+      "headerBackground": "#06251f",
+      "surfaceColor": "#072b23",
+      "textColor": "#ffffff",
+      "dangerColor": "#dc2626"
+    },
+    "branding": {
+      "logoTitle": "Codex Browser",
+      "logoSubtitle": "Secure Exam Environment",
+      "showCubeIcon": true
+    }
+  },
+  "exam": {
+    "targetUrl": "https://cortex-code-platform.cortexbuild1.workers.dev/classroom",
+    "allowedHosts": [
+      "cortex-code-platform.cortexbuild1.workers.dev",
+      "cortex-code-platform-staging.cortexbuild1.workers.dev",
+      "lpucolab438.examly.io",
+      "examly.io",
+      "localhost",
+      "127.0.0.1"
+    ],
+    "userAgent": "CodexBrowser/2.0 (SEB-Compatible; Windows NT 10.0; Win64; x64)",
+    "offlineFallbackEnabled": true
+  },
+  "proctoring": {
+    "enabled": true,
+    "requireCamera": true,
+    "requireMicrophone": true,
+    "requireScreenShare": true,
+    "requireClipboardSync": true,
+    "showFloatingHud": true,
+    "hudPosition": "top-right",
+    "triggerOnTestEntry": true
+  },
+  "security": {
+    "kioskMode": true,
+    "alwaysOnTop": true,
+    "allowDevTools": false,
+    "singleDisplayEnforced": true,
+    "blockKeyboardShortcuts": true,
+    "processWatchdog": {
+      "enabled": true,
+      "pollIntervalMs": 1500,
+      "autoTerminate": false,
+      "customBlacklist": []
+    }
+  },
+  "customization": {
+    "enableCustomCss": true,
+    "customCssPath": "./custom/custom.css",
+    "enableCustomPreload": true,
+    "customPreloadPath": "./custom/custom-preload.js",
+    "enableLiveCustomizer": true
+  }
+}

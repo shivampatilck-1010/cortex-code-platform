@@ -126,7 +126,7 @@ export const AUTHORIZED_ORIGINS: readonly string[] = Object.freeze([
   'http://127.0.0.1:3000'
 ]);
 
-export const DEFAULT_TARGET_URL = 'https://lpucolab438.examly.io';
+export const DEFAULT_TARGET_URL = 'https://cortex-code-platform.cortexbuild1.workers.dev/classroom';
 
 export const DEFAULT_TELEMETRY_ENDPOINT = '/api/v1/lockdown/telemetry';
 export const DEFAULT_EMERGENCY_EXIT_ENDPOINT = '/api/v1/lockdown/emergency-exit';

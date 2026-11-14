@@ -11,10 +11,22 @@ export class ScreenGuard {
   private window: BrowserWindow;
   private telemetry?: TelemetryClient;
   private isActive = false;
+  private isScreenSharingActive = false;
 
   constructor(window: BrowserWindow, telemetry?: TelemetryClient) {
     this.window = window;
     this.telemetry = telemetry;
+  }
+
+  public setScreenSharingActive(active: boolean): void {
+    this.isScreenSharingActive = active;
+    if (active) {
+      this.disable();
+    }
+  }
+
+  public getScreenSharingActive(): boolean {
+    return this.isScreenSharingActive;
   }
 
   /**
@@ -23,6 +35,10 @@ export class ScreenGuard {
    * On macOS: Excludes window surface from ScreenCaptureKit and Quartz Display Services.
    */
   public enable(): boolean {
+    // If screen sharing is actively occurring for proctoring, do not black out screen
+    if (this.isScreenSharingActive) {
+      return false;
+    }
     try {
       if (this.window && !this.window.isDestroyed()) {
         this.window.setContentProtection(true);
@@ -41,7 +57,7 @@ export class ScreenGuard {
   }
 
   /**
-   * Disables screen capture protection (e.g. during clean proctor teardown).
+   * Disables screen capture protection (e.g. during clean proctor teardown or active screen sharing).
    */
   public disable(): void {
     try {
@@ -59,14 +75,14 @@ export class ScreenGuard {
    * Verifies if screen capture protection is currently enabled.
    */
   public isProtectionActive(): boolean {
-    return this.isActive;
+    return this.isActive && !this.isScreenSharingActive;
   }
 
   /**
    * Reasserts screen capture protection if the window state changes.
    */
   public reassert(): void {
-    if (this.isActive) {
+    if (this.isActive && !this.isScreenSharingActive) {
       this.enable();
     }
   }

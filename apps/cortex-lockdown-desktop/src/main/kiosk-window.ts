@@ -8,7 +8,7 @@ import { app, BrowserWindow, screen, dialog, session, desktopCapturer, ipcMain }
 import * as path from 'path';
 import * as fs from 'fs';
 import { KioskWindowOptions } from '../shared/types';
-import { DEFAULT_TARGET_URL } from '../shared/constants';
+import { DEFAULT_TARGET_URL, isAllowedUrl } from '../shared/constants';
 import { TelemetryClient } from './security/telemetry-client';
 import { ScreenGuard } from './security/screen-guard';
 import { KeyboardGuard } from './security/keyboard-guard';
@@ -116,6 +116,19 @@ export class KioskWindowManager {
     const setupProctoringSession = (ses: any) => {
       try {
         ses.setPermissionRequestHandler((_webContents: any, permission: string, callback: (granted: boolean) => void) => {
+          const proctoringPermissions = [
+            'media',
+            'display-capture',
+            'clipboard-read',
+            'clipboard-sanitized-write',
+            'clipboard-write',
+            'fullscreen',
+            'pointerLock',
+            'notifications'
+          ];
+          if (proctoringPermissions.includes(permission)) {
+            return callback(true);
+          }
           callback(true);
         });
         ses.setPermissionCheckHandler(() => true);
@@ -123,9 +136,17 @@ export class KioskWindowManager {
         if (typeof ses.setDisplayMediaRequestHandler === 'function') {
           ses.setDisplayMediaRequestHandler(async (_request: any, callback: any) => {
             try {
+              // Automatically relax screen protection during proctoring screen capture
+              this.screenGuard?.setScreenSharingActive(true);
+              this.screenGuard?.disable();
+
               const sources = await desktopCapturer.getSources({ types: ['screen'] });
-              if (sources && sources.length > 0) {
-                callback({ video: sources[0] });
+              const primary = screen.getPrimaryDisplay();
+              const primarySource =
+                sources.find((s) => s.display_id === primary.id.toString()) || sources[0];
+
+              if (primarySource) {
+                callback({ video: primarySource });
               } else {
                 callback({});
               }
@@ -144,10 +165,50 @@ export class KioskWindowManager {
       const examlySession = session.fromPartition('persist:examly_session');
       setupProctoringSession(examlySession);
     } catch {}
+    try {
+      const cortexSession = session.fromPartition('persist:cortex_session');
+      setupProctoringSession(cortexSession);
+    } catch {}
+
+    // Attach NavigationGuard and security controls to guest webviews
+    this.window.webContents.on('did-attach-webview', (_event, webviewContents) => {
+      fs.appendFileSync(logFile, 'Guest webview attached — registering navigation guard & proctoring\n');
+      setupProctoringSession(webviewContents.session);
+
+      webviewContents.on('will-navigate', (event, targetUrl) => {
+        if (!isAllowedUrl(targetUrl)) {
+          event.preventDefault();
+          this.telemetry.dispatchEvent('navigation_blocked', {
+            url: targetUrl,
+            reason: 'unauthorized_origin_guest'
+          });
+        }
+      });
+
+      webviewContents.setWindowOpenHandler((details) => {
+        this.telemetry.dispatchEvent('navigation_blocked', {
+          url: details.url,
+          disposition: details.disposition,
+          reason: 'guest_window_open_denied'
+        });
+        return { action: 'deny' };
+      });
+
+      webviewContents.on('will-redirect', (event, targetUrl) => {
+        if (!isAllowedUrl(targetUrl)) {
+          event.preventDefault();
+          this.telemetry.dispatchEvent('navigation_blocked', {
+            url: targetUrl,
+            reason: 'unauthorized_redirect_guest'
+          });
+        }
+      });
+    });
 
     // Allow screen sharing without black-screen capture
     ipcMain.handle('cortex:enable-screen-share', async () => {
       fs.appendFileSync(logFile, 'cortex:enable-screen-share invoked: Disabling setContentProtection for proctoring\n');
+      this.screenGuard?.setScreenSharingActive(true);
       this.screenGuard?.disable();
       return true;
     });

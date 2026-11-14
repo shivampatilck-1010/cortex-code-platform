@@ -1,0 +1,12 @@
+/* ==========================================================================
+   CODEX BROWSER — CUSTOM USER STYLES
+   Add any custom CSS rules here to personalize your browser UI.
+   These styles are automatically injected into the browser shell on startup.
+   ========================================================================== */
+
+/* Example: Change accent glow or font */
+:root {
+  /* You can override CSS variables here */
+  /* --teal-primary: #38bdf8; */
+  /* --bg-dark: #0f172a; */
+}

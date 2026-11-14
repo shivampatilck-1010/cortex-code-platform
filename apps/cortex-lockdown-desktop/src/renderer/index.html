@@ -909,7 +909,311 @@
       background: var(--red-hover);
       box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
     }
+
+    /* ========================================================================
+       MODULAR CUSTOMIZER DRAWER (R1)
+       ======================================================================== */
+    .customizer-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      z-index: 1999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .customizer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .customizer-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 410px;
+      max-width: 90vw;
+      height: 100vh;
+      background: var(--bg-surface);
+      backdrop-filter: blur(18px);
+      border-left: 1px solid var(--border-teal);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: -14px 0 35px rgba(0, 0, 0, 0.7);
+    }
+
+    .customizer-drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-teal);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-base);
+    }
+
+    .drawer-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--teal-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .drawer-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .drawer-close-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .drawer-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-teal);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--teal-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .drawer-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-subtle);
+    }
+
+    .drawer-input {
+      background: var(--bg-card-inner);
+      border: 1px solid var(--border-teal);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .drawer-input:focus {
+      border-color: var(--teal-primary);
+      box-shadow: 0 0 6px var(--teal-glow);
+    }
+
+    .preset-btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .preset-btn {
+      background: rgba(0, 229, 201, 0.08);
+      border: 1px solid var(--border-teal);
+      color: var(--teal-primary);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .preset-btn:hover {
+      background: var(--teal-primary);
+      color: #041c17;
+    }
+
+    .color-picker-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .color-picker-label {
+      font-size: 12px;
+      color: var(--text-subtle);
+    }
+
+    .color-picker-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .color-picker-swatch {
+      -webkit-appearance: none;
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      background: none;
+      padding: 0;
+    }
+
+    .color-picker-swatch::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    .color-picker-swatch::-webkit-color-swatch {
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+    }
+
+    .color-hex-label {
+      font-size: 11px;
+      font-family: monospace;
+      color: var(--text-dim);
+      width: 58px;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.2);
+      transition: .2s;
+      border-radius: 20px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: var(--teal-primary);
+    }
+
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(16px);
+      background-color: #041c17;
+    }
+
+    .drawer-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-teal);
+      background: var(--bg-base);
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-apply-customizer {
+      flex: 1;
+      background: var(--teal-primary);
+      color: #041c17;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-apply-customizer:hover {
+      background: var(--teal-hover);
+      box-shadow: 0 0 12px var(--teal-glow);
+    }
+
+    .btn-reset-customizer {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #e2e8f0;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-reset-customizer:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
   </style>
+  <style id="codex-custom-styles"></style>
 </head>
 <body>
 
@@ -1173,7 +1477,7 @@
           <svg fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
           </svg>
-          <span id="urlDisplay" class="url-text">https://lpucolab438.examly.io</span>
+          <span id="urlDisplay" class="url-text">https://cortex-code-platform.cortexbuild1.workers.dev/classroom</span>
           <span class="url-lock-badge">Secure Portal</span>
         </div>
       </div>
@@ -1189,7 +1493,14 @@
           Lockdown Active
         </div>
 
-        <button class="exit-circle-btn" title="Exit Assessment" onclick="showExitModal()">
+        <button id="btnOpenCustomizer" class="nav-btn" title="Customize Browser (Ctrl+Shift+S)" onclick="toggleCustomizerDrawer()" style="display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:8px; background:rgba(0,229,201,0.12); border:1px solid rgba(0,229,201,0.3); color:var(--teal-primary); cursor:pointer;">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
+
+        <button class="exit-circle-btn" title="Exit Assessment" onclick="executeAppExit()">
           &#10005;
         </button>
       </div>
@@ -1198,7 +1509,7 @@
     <main class="browser-viewport">
       <webview
         id="examWebview"
-        src="https://lpucolab438.examly.io"
+        src="https://cortex-code-platform.cortexbuild1.workers.dev/classroom"
         partition="persist:examly_session"
         allowpopups
       ></webview>
@@ -1248,6 +1559,145 @@
     </footer>
   </section>
 
+  <!-- ========================================================================
+       MODULAR CUSTOMIZER DRAWER (R1)
+       ======================================================================== -->
+  <div id="customizerBackdrop" class="customizer-backdrop" onclick="closeCustomizerDrawer()"></div>
+  <aside id="customizerDrawer" class="customizer-drawer">
+    <div class="drawer-header">
+      <div class="drawer-title">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Codex Browser Customizer
+      </div>
+      <button class="drawer-close-btn" title="Close Drawer (Esc)" onclick="closeCustomizerDrawer()">&#10005;</button>
+    </div>
+
+    <div class="drawer-body">
+      <!-- Section 1: Target Platform URL -->
+      <div class="drawer-section">
+        <div class="section-title">Target Exam URL</div>
+        <div class="drawer-field">
+          <label class="field-label" for="customizerUrlInput">Classroom / Assessment Endpoint</label>
+          <input id="customizerUrlInput" class="drawer-input" type="text" value="https://cortex-code-platform.cortexbuild1.workers.dev/classroom" />
+          <div class="preset-btn-row">
+            <button class="preset-btn" type="button" onclick="setTargetUrlPreset('https://cortex-code-platform.cortexbuild1.workers.dev/classroom')">Classroom</button>
+            <button class="preset-btn" type="button" onclick="setTargetUrlPreset('https://cortex-code-platform-staging.cortexbuild1.workers.dev/classroom')">Staging</button>
+            <button class="preset-btn" type="button" onclick="setTargetUrlPreset('https://lpucolab438.examly.io')">Examly</button>
+            <button class="preset-btn" type="button" onclick="setTargetUrlPreset('http://localhost:3000')">Localhost</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Live Theme Colors -->
+      <div class="drawer-section">
+        <div class="section-title">Theme & Color Branding</div>
+        <div class="color-picker-row">
+          <span class="color-picker-label">Accent Color</span>
+          <div class="color-picker-input-wrap">
+            <span id="hexAccent" class="color-hex-label">#00e5c9</span>
+            <input id="colorAccent" class="color-picker-swatch" type="color" value="#00e5c9" oninput="updateLiveThemeColor('--teal-primary', this.value, 'hexAccent')" />
+          </div>
+        </div>
+        <div class="color-picker-row">
+          <span class="color-picker-label">Background Dark</span>
+          <div class="color-picker-input-wrap">
+            <span id="hexBgDark" class="color-hex-label">#041c17</span>
+            <input id="colorBgDark" class="color-picker-swatch" type="color" value="#041c17" oninput="updateLiveThemeColor('--bg-dark', this.value, 'hexBgDark')" />
+          </div>
+        </div>
+        <div class="color-picker-row">
+          <span class="color-picker-label">Header Background</span>
+          <div class="color-picker-input-wrap">
+            <span id="hexBgHeader" class="color-hex-label">#06251f</span>
+            <input id="colorBgHeader" class="color-picker-swatch" type="color" value="#06251f" oninput="updateLiveThemeColor('--bg-base', this.value, 'hexBgHeader')" />
+          </div>
+        </div>
+        <div class="color-picker-row">
+          <span class="color-picker-label">Surface Color</span>
+          <div class="color-picker-input-wrap">
+            <span id="hexBgSurface" class="color-hex-label">#072b23</span>
+            <input id="colorBgSurface" class="color-picker-swatch" type="color" value="#072b23" oninput="updateLiveThemeColor('--bg-surface', this.value, 'hexBgSurface')" />
+          </div>
+        </div>
+        <div class="color-picker-row">
+          <span class="color-picker-label">Danger Color</span>
+          <div class="color-picker-input-wrap">
+            <span id="hexDanger" class="color-hex-label">#dc2626</span>
+            <input id="colorDanger" class="color-picker-swatch" type="color" value="#dc2626" oninput="updateLiveThemeColor('--red-danger', this.value, 'hexDanger')" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Proctoring Streams -->
+      <div class="drawer-section">
+        <div class="section-title">Proctoring Services</div>
+        <label class="toggle-row">
+          <span class="field-label">Camera Surveillance</span>
+          <div class="toggle-switch">
+            <input id="toggleCam" type="checkbox" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        <label class="toggle-row">
+          <span class="field-label">Microphone Audio Monitoring</span>
+          <div class="toggle-switch">
+            <input id="toggleMic" type="checkbox" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        <label class="toggle-row">
+          <span class="field-label">Screen Display Capture</span>
+          <div class="toggle-switch">
+            <input id="toggleScr" type="checkbox" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        <label class="toggle-row">
+          <span class="field-label">Clipboard Sync & Protection</span>
+          <div class="toggle-switch">
+            <input id="toggleClp" type="checkbox" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        <label class="toggle-row">
+          <span class="field-label">Floating Proctor HUD</span>
+          <div class="toggle-switch">
+            <input id="toggleHud" type="checkbox" checked onchange="toggleHudVisibility(this.checked)" />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+      </div>
+
+      <!-- Section 4: Branding -->
+      <div class="drawer-section">
+        <div class="section-title">Branding & Titles</div>
+        <div class="drawer-field">
+          <label class="field-label" for="inputBrandTitle">Application Title</label>
+          <input id="inputBrandTitle" class="drawer-input" type="text" value="Codex Browser" />
+        </div>
+        <div class="drawer-field">
+          <label class="field-label" for="inputBrandSubtitle">Subtitle</label>
+          <input id="inputBrandSubtitle" class="drawer-input" type="text" value="Secure Exam Environment" />
+        </div>
+        <label class="toggle-row">
+          <span class="field-label">Show Isometric Cube Icon</span>
+          <div class="toggle-switch">
+            <input id="toggleCubeIcon" type="checkbox" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      <button id="btnSaveCustomizer" class="btn-apply-customizer" type="button" onclick="saveAndApplyCustomizer()">Save & Apply</button>
+      <button id="btnResetCustomizer" class="btn-reset-customizer" type="button" onclick="resetCustomizerDefaults()">Reset</button>
+    </div>
+  </aside>
+
   <!-- EXIT CONFIRMATION MODAL -->
   <div id="exitConfirmModal" class="modal-overlay">
     <div class="modal-box">
@@ -1282,7 +1732,8 @@
   </div>
 
   <script>
-    const TARGET_EXAM_URL = 'https://lpucolab438.examly.io';
+    let TARGET_EXAM_URL = 'https://cortex-code-platform.cortexbuild1.workers.dev/classroom';
+    let activeConfig = null;
     let detectedProcesses = [];
     const generatedSessionId = Math.random().toString(16).substring(2, 14);
 
@@ -1670,7 +2121,7 @@
     }
 
     function confirmExitDirectly() {
-      showExitModal();
+      executeAppExit();
     }
 
     function executeAppExit() {
@@ -1705,12 +2156,311 @@
       });
     }
 
+    // ========================================================================
+    // MODULAR CUSTOMIZER DRAWER HANDLERS (R1)
+    // ========================================================================
+    let isCustomizerOpen = false;
+
+    function toggleCustomizerDrawer() {
+      if (isCustomizerOpen) {
+        closeCustomizerDrawer();
+      } else {
+        openCustomizerDrawer();
+      }
+    }
+
+    function openCustomizerDrawer() {
+      isCustomizerOpen = true;
+      const drawer = document.getElementById('customizerDrawer');
+      const backdrop = document.getElementById('customizerBackdrop');
+      if (drawer) drawer.classList.add('open');
+      if (backdrop) backdrop.classList.add('open');
+    }
+
+    function closeCustomizerDrawer() {
+      isCustomizerOpen = false;
+      const drawer = document.getElementById('customizerDrawer');
+      const backdrop = document.getElementById('customizerBackdrop');
+      if (drawer) drawer.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('open');
+    }
+
+    function setTargetUrlPreset(url) {
+      const input = document.getElementById('customizerUrlInput');
+      if (input) {
+        input.value = url;
+      }
+    }
+
+    function updateLiveThemeColor(cssVar, colorHex, labelId) {
+      document.documentElement.style.setProperty(cssVar, colorHex);
+      if (cssVar === '--teal-primary') {
+        document.documentElement.style.setProperty('--teal-glow', colorHex + '47');
+      }
+      if (labelId) {
+        const lbl = document.getElementById(labelId);
+        if (lbl) lbl.textContent = colorHex;
+      }
+    }
+
+    function toggleHudVisibility(show) {
+      const hud = document.getElementById('proctorHudWidget');
+      if (hud) {
+        hud.style.display = show ? 'block' : 'none';
+      }
+    }
+
+    async function saveAndApplyCustomizer() {
+      const btn = document.getElementById('btnSaveCustomizer');
+      const originalText = btn ? btn.textContent : 'Save & Apply';
+      if (btn) {
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+      }
+
+      const newUrl = document.getElementById('customizerUrlInput')?.value.trim() || TARGET_EXAM_URL;
+      const accentColor = document.getElementById('colorAccent')?.value || '#00e5c9';
+      const bgColor = document.getElementById('colorBgDark')?.value || '#041c17';
+      const headerColor = document.getElementById('colorBgHeader')?.value || '#06251f';
+      const surfaceColor = document.getElementById('colorBgSurface')?.value || '#072b23';
+      const dangerColor = document.getElementById('colorDanger')?.value || '#dc2626';
+
+      const requireCam = document.getElementById('toggleCam')?.checked ?? true;
+      const requireMic = document.getElementById('toggleMic')?.checked ?? true;
+      const requireScr = document.getElementById('toggleScr')?.checked ?? true;
+      const requireClp = document.getElementById('toggleClp')?.checked ?? true;
+      const showHud = document.getElementById('toggleHud')?.checked ?? true;
+
+      const brandTitle = document.getElementById('inputBrandTitle')?.value.trim() || 'Codex Browser';
+      const brandSubtitle = document.getElementById('inputBrandSubtitle')?.value.trim() || 'Secure Exam Environment';
+      const showCubeIcon = document.getElementById('toggleCubeIcon')?.checked ?? true;
+
+      const updatedConfig = {
+        app: {
+          name: brandTitle,
+          theme: {
+            accentColor,
+            backgroundColor: bgColor,
+            headerBackground: headerColor,
+            surfaceColor,
+            dangerColor
+          },
+          branding: {
+            logoTitle: brandTitle,
+            logoSubtitle: brandSubtitle,
+            showCubeIcon
+          }
+        },
+        exam: {
+          targetUrl: newUrl
+        },
+        proctoring: {
+          requireCamera: requireCam,
+          requireMicrophone: requireMic,
+          requireScreenShare: requireScr,
+          requireClipboardSync: requireClp,
+          showFloatingHud: showHud
+        }
+      };
+
+      if (window.cortexLockdown && window.cortexLockdown.saveConfig) {
+        try {
+          await window.cortexLockdown.saveConfig(updatedConfig);
+        } catch (e) {
+          console.warn('[Customizer] Error saving config:', e);
+        }
+      }
+
+      // Update active target URL and navigate webview if changed
+      if (newUrl && newUrl !== TARGET_EXAM_URL) {
+        TARGET_EXAM_URL = newUrl;
+        const webview = document.getElementById('examWebview');
+        const urlDisplay = document.getElementById('urlDisplay');
+        if (webview) webview.src = newUrl;
+        if (urlDisplay) urlDisplay.textContent = newUrl;
+      }
+
+      toggleHudVisibility(showHud);
+
+      if (btn) {
+        btn.textContent = '✓ Saved & Applied!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.disabled = false;
+          closeCustomizerDrawer();
+        }, 700);
+      }
+    }
+
+    async function resetCustomizerDefaults() {
+      const defaults = {
+        url: 'https://cortex-code-platform.cortexbuild1.workers.dev/classroom',
+        accent: '#00e5c9',
+        bgDark: '#041c17',
+        bgHeader: '#06251f',
+        bgSurface: '#072b23',
+        danger: '#dc2626',
+        title: 'Codex Browser',
+        subtitle: 'Secure Exam Environment',
+        cube: true,
+        cam: true,
+        mic: true,
+        scr: true,
+        clp: true,
+        hud: true
+      };
+
+      setTargetUrlPreset(defaults.url);
+      const cAcc = document.getElementById('colorAccent'); if (cAcc) cAcc.value = defaults.accent;
+      updateLiveThemeColor('--teal-primary', defaults.accent, 'hexAccent');
+      const cBg = document.getElementById('colorBgDark'); if (cBg) cBg.value = defaults.bgDark;
+      updateLiveThemeColor('--bg-dark', defaults.bgDark, 'hexBgDark');
+      const cHdr = document.getElementById('colorBgHeader'); if (cHdr) cHdr.value = defaults.bgHeader;
+      updateLiveThemeColor('--bg-base', defaults.bgHeader, 'hexBgHeader');
+      const cSurf = document.getElementById('colorBgSurface'); if (cSurf) cSurf.value = defaults.bgSurface;
+      updateLiveThemeColor('--bg-surface', defaults.bgSurface, 'hexBgSurface');
+      const cDan = document.getElementById('colorDanger'); if (cDan) cDan.value = defaults.danger;
+      updateLiveThemeColor('--red-danger', defaults.danger, 'hexDanger');
+
+      const bTit = document.getElementById('inputBrandTitle'); if (bTit) bTit.value = defaults.title;
+      const bSub = document.getElementById('inputBrandSubtitle'); if (bSub) bSub.value = defaults.subtitle;
+      const bCube = document.getElementById('toggleCubeIcon'); if (bCube) bCube.checked = defaults.cube;
+
+      const tCam = document.getElementById('toggleCam'); if (tCam) tCam.checked = defaults.cam;
+      const tMic = document.getElementById('toggleMic'); if (tMic) tMic.checked = defaults.mic;
+      const tScr = document.getElementById('toggleScr'); if (tScr) tScr.checked = defaults.scr;
+      const tClp = document.getElementById('toggleClp'); if (tClp) tClp.checked = defaults.clp;
+      const tHud = document.getElementById('toggleHud'); if (tHud) tHud.checked = defaults.hud;
+      toggleHudVisibility(defaults.hud);
+    }
+
+    // Hotkey listener for Customizer Drawer (Ctrl+Shift+S)
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
+        e.preventDefault();
+        toggleCustomizerDrawer();
+      } else if (e.key === 'Escape' && isCustomizerOpen) {
+        closeCustomizerDrawer();
+      }
+    });
+
+    // Dynamic configuration & custom assets loader
+    async function loadStartupCustomizations() {
+      if (!window.cortexLockdown) return;
+
+      try {
+        const config = await window.cortexLockdown.getConfig();
+        if (config) {
+          activeConfig = config;
+
+          // Apply Target URL
+          if (config.exam && config.exam.targetUrl) {
+            TARGET_EXAM_URL = config.exam.targetUrl;
+            const webview = document.getElementById('examWebview');
+            const urlDisplay = document.getElementById('urlDisplay');
+            if (webview) webview.src = TARGET_EXAM_URL;
+            if (urlDisplay) urlDisplay.textContent = TARGET_EXAM_URL;
+            const inputUrl = document.getElementById('customizerUrlInput');
+            if (inputUrl) inputUrl.value = TARGET_EXAM_URL;
+          }
+
+          // Apply Theme Colors
+          if (config.app && config.app.theme) {
+            const theme = config.app.theme;
+            if (theme.accentColor) {
+              updateLiveThemeColor('--teal-primary', theme.accentColor, 'hexAccent');
+              const el = document.getElementById('colorAccent'); if (el) el.value = theme.accentColor;
+            }
+            if (theme.backgroundColor) {
+              updateLiveThemeColor('--bg-dark', theme.backgroundColor, 'hexBgDark');
+              const el = document.getElementById('colorBgDark'); if (el) el.value = theme.backgroundColor;
+            }
+            if (theme.headerBackground) {
+              updateLiveThemeColor('--bg-base', theme.headerBackground, 'hexBgHeader');
+              const el = document.getElementById('colorBgHeader'); if (el) el.value = theme.headerBackground;
+            }
+            if (theme.surfaceColor) {
+              updateLiveThemeColor('--bg-surface', theme.surfaceColor, 'hexBgSurface');
+              const el = document.getElementById('colorBgSurface'); if (el) el.value = theme.surfaceColor;
+            }
+            if (theme.dangerColor) {
+              updateLiveThemeColor('--red-danger', theme.dangerColor, 'hexDanger');
+              const el = document.getElementById('colorDanger'); if (el) el.value = theme.dangerColor;
+            }
+          }
+
+          // Apply Branding
+          if (config.app && config.app.branding) {
+            const b = config.app.branding;
+            if (b.logoTitle) {
+              const el = document.getElementById('inputBrandTitle'); if (el) el.value = b.logoTitle;
+            }
+            if (b.logoSubtitle) {
+              const el = document.getElementById('inputBrandSubtitle'); if (el) el.value = b.logoSubtitle;
+            }
+            if (b.showCubeIcon !== undefined) {
+              const el = document.getElementById('toggleCubeIcon'); if (el) el.checked = b.showCubeIcon;
+            }
+          }
+
+          // Apply Proctoring Toggles
+          if (config.proctoring) {
+            const p = config.proctoring;
+            const cCam = document.getElementById('toggleCam'); if (cCam) cCam.checked = p.requireCamera ?? true;
+            const cMic = document.getElementById('toggleMic'); if (cMic) cMic.checked = p.requireMicrophone ?? true;
+            const cScr = document.getElementById('toggleScr'); if (cScr) cScr.checked = p.requireScreenShare ?? true;
+            const cClp = document.getElementById('toggleClp'); if (cClp) cClp.checked = p.requireClipboardSync ?? true;
+            const cHud = document.getElementById('toggleHud'); if (cHud) cHud.checked = p.showFloatingHud ?? true;
+            toggleHudVisibility(p.showFloatingHud ?? true);
+          }
+        }
+      } catch (err) {
+        console.warn('[Codex Shell] Error loading config:', err);
+      }
+
+      // Fetch and inject Custom CSS
+      try {
+        const customCss = await window.cortexLockdown.getCustomCss();
+        if (customCss) {
+          let styleTag = document.getElementById('codex-custom-styles');
+          if (!styleTag) {
+            styleTag = document.createElement('style');
+            styleTag.id = 'codex-custom-styles';
+            document.head.appendChild(styleTag);
+          }
+          styleTag.textContent = customCss;
+        }
+      } catch (err) {
+        console.warn('[Codex Shell] Error loading custom CSS:', err);
+      }
+
+      // Fetch and attach Custom Preload to Webview
+      try {
+        if (window.cortexLockdown.getCustomPreloadPath) {
+          const preloadPath = await window.cortexLockdown.getCustomPreloadPath();
+          if (preloadPath) {
+            const webview = document.getElementById('examWebview');
+            if (webview) {
+              webview.setAttribute('preload', preloadPath);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Codex Shell] Error setting custom preload path:', err);
+      }
+    }
+
     const styleSheet = document.createElement('style');
     styleSheet.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
     document.head.appendChild(styleSheet);
 
-    window.addEventListener('DOMContentLoaded', () => {
-      startPreflightSecurityScan();
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadStartupCustomizations();
+      if (activeConfig && activeConfig.proctoring && activeConfig.proctoring.requirePreflightCheck === true) {
+        startPreflightSecurityScan();
+      } else {
+        transitionToExamBrowser();
+      }
     });
   </script>
 </body>

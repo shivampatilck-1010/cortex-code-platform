@@ -163,7 +163,7 @@ export class KeyboardGuard {
       return { keyName: 'PrintDialog' };
     }
 
-    if ((isCtrl || isMeta) && (key === 's' || code === 'keys')) {
+    if ((isCtrl || isMeta) && !input.shift && (key === 's' || code === 'keys')) {
       return { keyName: 'SavePage' };
     }
 
