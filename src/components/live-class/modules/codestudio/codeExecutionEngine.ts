@@ -1,4 +1,5 @@
 import { CodeLanguage, CodeFile, ExecutionResult, LanguageConfig } from '@/types/codestudio';
+import { executeJavaScriptInWorker, executePythonInPyodide } from '@/lib/execution/wasm-runner';
 
 export const LANGUAGE_CONFIGS: Record<CodeLanguage, LanguageConfig> = {
   typescript: {
@@ -528,9 +529,8 @@ export function cancelActiveExecution(): void {
 }
 
 /**
- * Executes a code file safely using the authoritative Cortex Cloud Runner (/api/v1/execute).
- * If the backend is unreachable or returns an error, an honest failure is returned.
- * Silent Web Worker fallbacks for production execution are eliminated.
+ * Executes a code file safely using client-side WebAssembly / Web Workers for instant $0 execution,
+ * with graceful fallback to the authoritative Cortex Cloud Runner (/api/v1/execute).
  */
 export async function executeCode(
   file: CodeFile,
@@ -540,7 +540,45 @@ export async function executeCode(
   cancelActiveExecution();
   const startTime = performance.now();
 
-  // Primary: Authoritative backend execution service (/api/v1/execute)
+  // 1. Instant Client-Side Web Worker Execution for JavaScript & TypeScript
+  if (file.language === 'javascript' || file.language === 'typescript') {
+    if (typeof window !== 'undefined' && typeof Worker !== 'undefined') {
+      try {
+        const wasmRes = await executeJavaScriptInWorker(file.content, stdin, timeoutMs);
+        return {
+          status: wasmRes.status,
+          stdout: wasmRes.stdout ? `[INSTANT CLIENT WORKER]\n${wasmRes.stdout}` : '',
+          stderr: wasmRes.stderr,
+          executionTimeMs: wasmRes.executionTimeMs,
+          exitCode: wasmRes.exitCode,
+          engine: 'client-worker',
+        };
+      } catch (err: any) {
+        console.warn('[ExecutionEngine] Web Worker execution failed, falling back to backend:', err);
+      }
+    }
+  }
+
+  // 2. Instant In-Browser Python Execution via Pyodide WebAssembly
+  if (file.language === 'python') {
+    if (typeof window !== 'undefined') {
+      try {
+        const pyRes = await executePythonInPyodide(file.content, stdin, timeoutMs);
+        return {
+          status: pyRes.status,
+          stdout: pyRes.stdout ? `[INSTANT PYTHON WASM]\n${pyRes.stdout}` : '',
+          stderr: pyRes.stderr,
+          executionTimeMs: pyRes.executionTimeMs,
+          exitCode: pyRes.exitCode,
+          engine: 'client-wasm',
+        };
+      } catch (err: any) {
+        console.warn('[ExecutionEngine] Pyodide Wasm execution failed, falling back to backend:', err);
+      }
+    }
+  }
+
+  // 3. Authoritative backend execution service (/api/v1/execute) for native compiled languages (C++, Rust) or fallbacks
   if (typeof fetch !== 'undefined') {
     try {
       const res = await fetch('/api/v1/execute', {
@@ -566,6 +604,7 @@ export async function executeCode(
           stderr: typeof data.stderr === 'string' ? data.stderr : (data.error || ''),
           executionTimeMs,
           exitCode: typeof data.exitCode === 'number' ? data.exitCode : (isSuccess ? 0 : 1),
+          engine: 'cloud-runner',
         };
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -575,16 +614,17 @@ export async function executeCode(
           stderr: errData.message || errData.error || `Execution failed with HTTP status ${res.status}\n`,
           executionTimeMs: Math.round(performance.now() - startTime),
           exitCode: 1,
+          engine: 'cloud-runner',
         };
       }
     } catch (err: any) {
-      // Honest error reporting when backend is unreachable - NO silent fallback to Web Worker
       return {
         status: 'error',
         stdout: '',
         stderr: 'Cortex Cloud Runner Error: Unable to reach backend execution service at /api/v1/execute. Execution failed.\n',
         executionTimeMs: Math.round(performance.now() - startTime),
         exitCode: 1,
+        engine: 'cloud-runner',
       };
     }
   }

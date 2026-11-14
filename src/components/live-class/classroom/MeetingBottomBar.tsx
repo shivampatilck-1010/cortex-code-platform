@@ -20,7 +20,10 @@ import {
   Lock,
   Maximize2,
   Minimize2,
+  CircleDot,
+  Square,
 } from 'lucide-react';
+import { useLectureRecorder } from '@/lib/classroom/useLectureRecorder';
 
 export const MeetingBottomBar: React.FC = () => {
   const router = useRouter();
@@ -43,10 +46,18 @@ export const MeetingBottomBar: React.FC = () => {
     isFullscreen,
     toggleFullscreen,
     exitFullscreen,
+    showToast,
   } = useClassroom();
 
   const { followMode, setFollowMode, returnToTeacher } = useFollowTeacher();
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
+  const recorder = useLectureRecorder({
+    roomId: session.id || session.courseCode || 'class',
+    onNotification: (msg) => showToast?.(msg),
+  });
+
+  const canRecord = userRole === 'teacher' || Boolean((session.permissions as any)?.allowStudentRecording);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -106,7 +117,7 @@ export const MeetingBottomBar: React.FC = () => {
             <button
               onClick={toggleMicrophone}
               disabled={deviceState.isMicrophoneLoading}
-              className={`flex items-center justify-center w-9 h-9 rounded transition-all disabled:opacity-50 relative ${
+              className={`flex items-center justify-center w-9 h-9 rounded transition-all disabled:opacity-50 relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9100] ${
                 deviceState.isMuted
                   ? 'bg-[#EF4444]/20 text-[#EF4444] hover:bg-[#EF4444]/30'
                   : 'bg-[#15161C] text-white hover:bg-[#1D1F27]'
@@ -177,7 +188,7 @@ export const MeetingBottomBar: React.FC = () => {
           <button
             onClick={toggleCamera}
             disabled={deviceState.isCameraLoading}
-            className={`flex items-center justify-center w-10 h-10 rounded-lg border transition-all disabled:opacity-50 relative ${
+            className={`flex items-center justify-center w-10 h-10 rounded-lg border transition-all disabled:opacity-50 relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9100] ${
               deviceState.isVideoOff
                 ? 'bg-[#EF4444]/20 border-[#EF4444]/40 text-[#EF4444] hover:bg-[#EF4444]/30'
                 : 'bg-[#111216] border-[#282A36] text-white hover:bg-[#15161C]'
@@ -266,6 +277,51 @@ export const MeetingBottomBar: React.FC = () => {
               {deviceState.isHandRaised ? 'Hand Raised' : 'Raise Hand'}
             </span>
           </button>
+
+          {/* In-Browser Lecture Recorder (Zero-Cost Client Recording) */}
+          {canRecord && (
+            <button
+              onClick={() => {
+                if (recorder.isRecording) {
+                  recorder.stopRecording();
+                } else {
+                  recorder.startRecording();
+                }
+              }}
+              className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg border text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9100] ${
+                recorder.isRecording
+                  ? 'bg-[#EF4444]/20 border-[#EF4444] text-[#EF4444] hover:bg-[#EF4444]/30'
+                  : 'bg-[#111216] border-[#282A36] text-[#F5F5F5] hover:bg-[#15161C]'
+              }`}
+              title={
+                recorder.isRecording
+                  ? `Recording active: ${recorder.formattedDuration}. Click to stop and download.`
+                  : 'Record lecture locally (Zero cloud storage cost)'
+              }
+              aria-label={
+                recorder.isRecording
+                  ? `Stop recording lecture, current duration ${recorder.formattedDuration}`
+                  : 'Start local lecture recording'
+              }
+              aria-live="polite"
+            >
+              {recorder.isRecording ? (
+                <>
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#EF4444]" />
+                  </span>
+                  <span className="font-mono font-semibold">{recorder.formattedDuration}</span>
+                  <span className="hidden xl:inline text-[11px] opacity-80">(Stop & Save)</span>
+                </>
+              ) : (
+                <>
+                  <CircleDot className="w-4 h-4 text-[#EF4444]" />
+                  <span className="hidden md:inline">Record</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Follow Teacher Quick Toggle for Students */}
           {userRole === 'student' && (

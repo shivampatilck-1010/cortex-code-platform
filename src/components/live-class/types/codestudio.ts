@@ -33,6 +33,7 @@ export interface ExecutionResult {
   executionTimeMs?: number;
   memoryKb?: number;
   exitCode?: number;
+  engine?: 'client-wasm' | 'client-worker' | 'cloud-runner';
 }
 
 export interface WorkspaceState {

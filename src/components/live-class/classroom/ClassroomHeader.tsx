@@ -14,8 +14,10 @@ import {
   Crown,
   Users,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Download,
 } from 'lucide-react';
+import { exportLectureBundle } from '@/lib/classroom/lectureExport';
 
 export const ClassroomHeader: React.FC = () => {
   const { 
@@ -29,9 +31,28 @@ export const ClassroomHeader: React.FC = () => {
     isFullscreen,
     toggleFullscreen,
     exitFullscreen,
+    showToast,
   } = useClassroom();
 
   const { followMode, teacherActivity } = useFollowTeacher();
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  const handleExportNotes = async () => {
+    setIsExporting(true);
+    try {
+      showToast?.('Packaging lecture notes & code bundle...');
+      await exportLectureBundle({
+        session,
+        participants,
+      });
+      showToast?.('Lecture bundle downloaded successfully!');
+    } catch (err: any) {
+      console.warn('[ClassroomHeader] Export notes error:', err);
+      showToast?.('Failed to export lecture bundle');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <header className="h-14 bg-bg-surface border-b border-border-subtle px-4 flex items-center justify-between select-none z-20 shrink-0">
@@ -162,6 +183,18 @@ export const ClassroomHeader: React.FC = () => {
             <span>Student</span>
           </div>
         )}
+
+        {/* Unified Notes Exporter */}
+        <button
+          onClick={handleExportNotes}
+          disabled={isExporting}
+          className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-border-subtle bg-bg-secondary hover:bg-bg-tertiary text-text-secondary hover:text-white transition text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9100] disabled:opacity-50"
+          title="Download Complete Lecture Notes & Code Bundle (ZIP)"
+          aria-label="Download Complete Lecture Notes and Code Bundle"
+        >
+          <Download className="w-3.5 h-3.5 text-[#FF9100]" />
+          <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export Notes'}</span>
+        </button>
 
         {/* Fullscreen Toggle */}
         <button

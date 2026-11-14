@@ -447,6 +447,26 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
     }
   }, [getOrCreatePeerConnection, currentUserId]);
 
+  // Adaptive Video Bandwidth: Dynamically downscale resolution and bitrate for non-speaking peers in grid
+  const updateAdaptiveVideoBitrates = useCallback((currentSpeakerId: string | null) => {
+    peerConnectionsRef.current.forEach((pc, peerId) => {
+      try {
+        const senders = pc.getSenders();
+        const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (videoSender && typeof videoSender.getParameters === 'function' && typeof videoSender.setParameters === 'function') {
+          const params = videoSender.getParameters();
+          if (params && params.encodings && params.encodings.length > 0) {
+            const isSpeaker = currentSpeakerId === currentUserId || currentSpeakerId === peerId;
+            // Full 720p 1.2Mbps for active speaker; 240p 200kbps for background grid tiles
+            params.encodings[0].scaleResolutionDownBy = isSpeaker ? 1.0 : 2.0;
+            params.encodings[0].maxBitrate = isSpeaker ? 1_200_000 : 200_000;
+            videoSender.setParameters(params).catch(() => {});
+          }
+        }
+      } catch (_) {}
+    });
+  }, [currentUserId]);
+
   // Real-Time Audio Energy & Active Speaker Detection Loop
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -543,13 +563,15 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       if (loudestSpeakerId) {
         lastActiveSpeakerTimeRef.current = now;
         setActiveSpeakerId(loudestSpeakerId);
+        updateAdaptiveVideoBitrates(loudestSpeakerId);
       } else if (now - lastActiveSpeakerTimeRef.current > 1500) {
         // 1.5s silence hysteresis expired
+        updateAdaptiveVideoBitrates(null);
       }
     }, 100);
 
     return () => clearInterval(interval);
-  }, [remoteStreams, deviceState.isMuted, currentUserId]);
+  }, [remoteStreams, deviceState.isMuted, currentUserId, updateAdaptiveVideoBitrates]);
 
   // Session Authentication Effect
   useEffect(() => {

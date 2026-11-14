@@ -236,7 +236,8 @@ const ClassroomShell: React.FC<{ roomId: string; sessionId: string }> = ({ roomI
         {toastMessage && (
           <div
             role="alert"
-            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-[#1D1F27] border border-[#282A36] text-white px-4 py-2.5 rounded-xl text-xs shadow-2xl flex items-center space-x-2.5 transition-all"
+            aria-live="polite"
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-[#1D1F27] border border-[#282A36] text-white px-4 py-2.5 rounded-xl text-xs shadow-2xl flex items-center space-x-2.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9100]"
           >
             <span className="w-2 h-2 rounded-full bg-[#FF9100] animate-pulse" />
             <span className="font-medium">{toastMessage}</span>
