@@ -144,19 +144,23 @@ export function useLectureRecorder(options: UseLectureRecorderOptions = {}): Lec
         });
       }
 
-      // Determine best supported MIME type
-      let mimeType = 'video/webm;codecs=vp9,opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm;codecs=vp8,opus';
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm';
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/mp4';
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = '';
+      // Determine best supported MIME type with comprehensive Safari/WebKit & Chromium/Firefox compatibility
+      const candidateTypes = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4;codecs=avc1,mp4a.40.2',
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+      ];
+      let mimeType = '';
+      if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
+        for (const type of candidateTypes) {
+          if (MediaRecorder.isTypeSupported(type)) {
+            mimeType = type;
+            break;
+          }
+        }
       }
 
       try {
@@ -172,14 +176,16 @@ export function useLectureRecorder(options: UseLectureRecorderOptions = {}): Lec
         recorder.onstop = () => {
           const recordedChunks = recordedChunksRef.current;
           if (recordedChunks.length > 0) {
-            const finalBlob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
+            const effectiveMime = recorder.mimeType || mimeType || 'video/webm';
+            const finalBlob = new Blob(recordedChunks, { type: effectiveMime });
             onRecordingStop?.(finalBlob);
 
             // Automatically trigger local file download
             const url = URL.createObjectURL(finalBlob);
             const a = document.createElement('a');
             const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+            const isMp4 = effectiveMime.toLowerCase().includes('mp4');
+            const ext = isMp4 ? 'mp4' : 'webm';
             a.href = url;
             a.download = `cortex_lecture_${roomId}_${dateStr}.${ext}`;
             a.style.display = 'none';

@@ -332,6 +332,8 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   // Web Audio RMS Energy & Active Speaker Detection
   const [remoteAudioLevels, setRemoteAudioLevels] = useState<Map<string, number>>(new Map());
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
+  const remoteAudioLevelsRef = useRef<Map<string, number>>(new Map());
+  const activeSpeakerIdRef = useRef<string | null>(null);
   const audioAnalysersRef = useRef<Map<string, { analyser: AnalyserNode; source: MediaStreamAudioSourceNode }>>(new Map());
   const lastActiveSpeakerTimeRef = useRef<number>(0);
 
@@ -557,16 +559,37 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
         }
       });
 
-      setRemoteAudioLevels(levels);
+      // Only dispatch state update if audio levels meaningfully changed or transitioned from/to silence
+      const prevLevels = remoteAudioLevelsRef.current;
+      let hasChanged = levels.size !== prevLevels.size;
+      if (!hasChanged) {
+        for (const [id, val] of levels.entries()) {
+          if (!prevLevels.has(id) || Math.abs((prevLevels.get(id) || 0) - val) >= 5) {
+            hasChanged = true;
+            break;
+          }
+        }
+      }
+      if (hasChanged) {
+        remoteAudioLevelsRef.current = levels;
+        setRemoteAudioLevels(levels);
+      }
 
       const now = Date.now();
       if (loudestSpeakerId) {
         lastActiveSpeakerTimeRef.current = now;
-        setActiveSpeakerId(loudestSpeakerId);
-        updateAdaptiveVideoBitrates(loudestSpeakerId);
+        if (activeSpeakerIdRef.current !== loudestSpeakerId) {
+          activeSpeakerIdRef.current = loudestSpeakerId;
+          setActiveSpeakerId(loudestSpeakerId);
+          updateAdaptiveVideoBitrates(loudestSpeakerId);
+        }
       } else if (now - lastActiveSpeakerTimeRef.current > 1500) {
         // 1.5s silence hysteresis expired
-        updateAdaptiveVideoBitrates(null);
+        if (activeSpeakerIdRef.current !== null) {
+          activeSpeakerIdRef.current = null;
+          setActiveSpeakerId(null);
+          updateAdaptiveVideoBitrates(null);
+        }
       }
     }, 100);
 

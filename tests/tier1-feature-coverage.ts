@@ -301,6 +301,86 @@ export async function runTier1FeatureCoverage(projectRoot = process.cwd()): Prom
     harness.endTest('failed', msg);
   }
 
+  // Test 7: Zero-Cost Client WASM and Worker Code Sandbox
+  harness.startTest('TC1.7 - Zero-Cost Client WASM and Worker Code Sandbox');
+  try {
+    const wasmRunnerPath = path.join(projectRoot, 'src', 'lib', 'execution', 'wasm-runner.ts');
+    harness.assert(fs.existsSync(wasmRunnerPath), 'src/lib/execution/wasm-runner.ts must exist');
+
+    const content = fs.readFileSync(wasmRunnerPath, 'utf8');
+    harness.assertIncludes(content, 'export async function executeJavaScriptInWorker', 'Must export executeJavaScriptInWorker');
+    harness.assertIncludes(content, 'export async function executePythonInPyodide', 'Must export executePythonInPyodide');
+    harness.assertIncludes(content, 'client-wasm', 'Must declare client-wasm engine');
+    harness.assertIncludes(content, 'client-worker', 'Must declare client-worker engine');
+
+    // Worker sandbox implementation contract
+    harness.assertMatch(content, /new\s+Function\s*\(\s*['"]stdin['"]\s*,\s*userCode\s*\)/, 'Worker sandbox must isolate code execution');
+    harness.assertMatch(content, /console\.log\s*=/, 'Worker sandbox must intercept stdout via console.log');
+    harness.assertMatch(content, /console\.error\s*=/, 'Worker sandbox must intercept stderr via console.error');
+    harness.assertMatch(content, /timeoutMs.*worker\.terminate\(\)/s, 'Worker sandbox must enforce timeout boundary');
+
+    // Pyodide WebAssembly runtime contract
+    harness.assertMatch(content, /cdn\.jsdelivr\.net\/pyodide\/v[\d.]+\/full\/pyodide\.js/, 'Must reference Pyodide WebAssembly runtime');
+    harness.assertIncludes(content, 'pyodideInstancePromise', 'Must implement singleton promise pattern to prevent redundant runtime downloads');
+
+    // Direct invocation in Node environment (must safely return client-worker error contract)
+    const { executeJavaScriptInWorker } = await import('../src/lib/execution/wasm-runner');
+    const res = await executeJavaScriptInWorker('console.log(42)');
+    harness.assertEquals(res.status, 'error', 'Node execution must return status error');
+    harness.assertEquals(res.exitCode, 1, 'Node execution must return exitCode 1');
+    harness.assertEquals(res.engine, 'client-worker', 'Engine tag must be client-worker');
+    harness.assertIncludes(res.stderr, 'browser environment', 'Node stderr must report browser environment requirement');
+
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
+  // Test 8: Lecture Recording and ZIP Bundle Packaging
+  harness.startTest('TC1.8 - Lecture Recording and ZIP Bundle Packaging');
+  try {
+    const recorderPath = path.join(projectRoot, 'src', 'lib', 'classroom', 'useLectureRecorder.ts');
+    harness.assert(fs.existsSync(recorderPath), 'src/lib/classroom/useLectureRecorder.ts must exist');
+
+    const recorderContent = fs.readFileSync(recorderPath, 'utf8');
+    harness.assertIncludes(recorderContent, 'video/mp4;codecs=avc1,mp4a.40.2', 'Must support Safari AVC1/AAC MP4 container');
+    harness.assertIncludes(recorderContent, 'video/webm;codecs=vp9,opus', 'Must support WebM VP9/Opus container');
+    harness.assertMatch(recorderContent, /new\s+MediaRecorder\s*\(\s*captureStream\s*\)/, 'Must provide graceful native fallback when no type specified');
+
+    const exporterPath = path.join(projectRoot, 'src', 'lib', 'classroom', 'lectureExport.ts');
+    harness.assert(fs.existsSync(exporterPath), 'src/lib/classroom/lectureExport.ts must exist');
+
+    const exporterContent = fs.readFileSync(exporterPath, 'utf8');
+    harness.assertIncludes(exporterContent, 'export async function exportLectureBundle', 'Must export exportLectureBundle function');
+    harness.assertIncludes(exporterContent, 'LECTURE_NOTES.md', 'Export bundle must contain LECTURE_NOTES.md');
+
+    // Direct in-memory JSZip packaging verification
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    zip.file('LECTURE_NOTES.md', '# CS-201: Live Lecture Summary\nInstructor: Professor Shivam\nAttendees: 4');
+    const codeFolder = zip.folder('code');
+    codeFolder?.file('main.py', 'print("Hello from lecture")');
+    const wbFolder = zip.folder('whiteboard');
+    wbFolder?.file('whiteboard_data.json', JSON.stringify({ pages: 1, elements: [] }));
+
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+    harness.assertGreaterThanOrEqual(zipBuffer.length, 100, 'Generated ZIP archive must be a valid non-empty buffer');
+
+    const loadedZip = await JSZip.loadAsync(zipBuffer);
+    harness.assert(Boolean(loadedZip.file('LECTURE_NOTES.md')), 'Archive must contain LECTURE_NOTES.md');
+    harness.assert(Boolean(loadedZip.file('code/main.py')), 'Archive must contain code/main.py');
+    harness.assert(Boolean(loadedZip.file('whiteboard/whiteboard_data.json')), 'Archive must contain whiteboard/whiteboard_data.json');
+
+    const notesContent = await loadedZip.file('LECTURE_NOTES.md')?.async('string');
+    harness.assertIncludes(notesContent || '', 'CS-201', 'Uncompressed archive content must preserve lecture notes');
+
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
   return harness.getSummary();
 }
 

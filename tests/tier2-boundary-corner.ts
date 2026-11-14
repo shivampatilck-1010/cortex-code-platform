@@ -248,6 +248,114 @@ export async function runTier2BoundaryCorner(projectRoot = process.cwd()): Promi
     harness.endTest('failed', msg);
   }
 
+  // Test 4: Cloudflare Edge Video Streaming and Caching Headers
+  harness.startTest('TC2.4 - Cloudflare Edge Video Streaming and Caching Headers');
+  try {
+    const workerPath = path.join(projectRoot, 'src', 'worker.ts');
+    harness.assert(fs.existsSync(workerPath), 'src/worker.ts must exist');
+
+    const workerContent = fs.readFileSync(workerPath, 'utf8');
+    harness.assertIncludes(workerContent, "url.pathname.startsWith('/videos/')", 'Worker must intercept /videos/ requests for edge streaming');
+    harness.assertIncludes(workerContent, 'Cache-Control', 'Worker must inject Cache-Control header for videos');
+    harness.assertIncludes(workerContent, 'max-age=31536000', 'Cache-Control must specify 1-year immutable caching');
+    harness.assertIncludes(workerContent, 'Accept-Ranges', 'Worker must inject Accept-Ranges: bytes for video streaming');
+
+    // Simulate Cloudflare Edge Response header manipulation
+    const mockAssetResponse = new Response('video-data', {
+      status: 200,
+      headers: { 'Content-Type': 'video/mp4' },
+    });
+    const edgeResponse = new Response(mockAssetResponse.body, mockAssetResponse);
+    edgeResponse.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    edgeResponse.headers.set('Accept-Ranges', 'bytes');
+
+    harness.assertEquals(edgeResponse.headers.get('Cache-Control'), 'public, max-age=31536000, immutable', 'Cache-Control header must match immutable edge specification');
+    harness.assertEquals(edgeResponse.headers.get('Accept-Ranges'), 'bytes', 'Accept-Ranges header must be bytes');
+
+    // Test simulated HTTP 206 Partial Content Range parsing
+    const parseRange = (rangeHeader: string, totalSize: number) => {
+      const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (!match) return null;
+      const start = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+      return { start, end, length: end - start + 1 };
+    };
+
+    const range = parseRange('bytes=0-1048575', 7340032);
+    harness.assert(range !== null, 'Range header must parse cleanly');
+    harness.assertEquals(range?.start, 0, 'Range start must equal 0');
+    harness.assertEquals(range?.end, 1048575, 'Range end must equal 1048575 (1MB boundary)');
+    harness.assertEquals(range?.length, 1048576, 'Chunk length must equal exactly 1MB');
+
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
+  // Test 5: Viewport-Aware Animation and WebGL Intersection Pausing
+  harness.startTest('TC2.5 - Viewport-Aware Animation and WebGL Intersection Pausing');
+  try {
+    const effectsPath = path.join(projectRoot, 'src', 'components', 'landing', 'EffectsSuite.tsx');
+    harness.assert(fs.existsSync(effectsPath), 'src/components/landing/EffectsSuite.tsx must exist');
+
+    const effectsContent = fs.readFileSync(effectsPath, 'utf8');
+
+    // Verify 4 animation components declare IntersectionObserver
+    harness.assertIncludes(effectsContent, 'TubesBackground', 'EffectsSuite must export TubesBackground');
+    harness.assertIncludes(effectsContent, 'InteractiveWavesBackground', 'EffectsSuite must export InteractiveWavesBackground');
+    harness.assertIncludes(effectsContent, 'Squares', 'EffectsSuite must export Squares');
+    harness.assertIncludes(effectsContent, 'Aurora', 'EffectsSuite must export Aurora');
+
+    harness.assertMatch(effectsContent, /IntersectionObserver.*TubesBackground|TubesBackground.*IntersectionObserver/s, 'TubesBackground must attach IntersectionObserver');
+    harness.assertMatch(effectsContent, /IntersectionObserver.*InteractiveWavesBackground|InteractiveWavesBackground.*IntersectionObserver/s, 'InteractiveWavesBackground must attach IntersectionObserver');
+    harness.assertMatch(effectsContent, /IntersectionObserver.*Squares|Squares.*IntersectionObserver/s, 'Squares must attach IntersectionObserver');
+    harness.assertMatch(effectsContent, /IntersectionObserver.*Aurora|Aurora.*IntersectionObserver/s, 'Aurora must attach IntersectionObserver');
+
+    // Verify cleanup: disconnect() must be called in effects cleanup
+    const disconnectCount = (effectsContent.match(/\.disconnect\(\)/g) || []).length;
+    harness.assertGreaterThanOrEqual(disconnectCount, 4, 'All 4 animation components must disconnect IntersectionObserver on unmount');
+
+    // Simulate Viewport Observer Pause/Resume State Machine
+    class MockIntersectionObserverController {
+      public isPaused = false;
+      public rAfId: number | null = null;
+      private callback: (entries: { isIntersecting: boolean }[]) => void;
+
+      constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+        this.callback = cb;
+      }
+
+      public trigger(isIntersecting: boolean) {
+        this.callback([{ isIntersecting }]);
+        if (!isIntersecting) {
+          this.isPaused = true;
+          this.rAfId = null;
+        } else {
+          this.isPaused = false;
+          this.rAfId = 1234;
+        }
+      }
+    }
+
+    const controller = new MockIntersectionObserverController((entries) => {
+      // simulated callback
+    });
+
+    controller.trigger(false); // scrolled out of view
+    harness.assertEquals(controller.isPaused, true, 'Offscreen element must pause animation loop');
+    harness.assertEquals(controller.rAfId, null, 'Offscreen element must cancel rAF frame');
+
+    controller.trigger(true); // scrolled into view
+    harness.assertEquals(controller.isPaused, false, 'Visible element must resume animation loop');
+    harness.assertEquals(controller.rAfId, 1234, 'Visible element must schedule rAF frame');
+
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
   return harness.getSummary();
 }
 

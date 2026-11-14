@@ -30,7 +30,7 @@ interface ParticipantVideoTileProps {
   className?: string;
 }
 
-export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
+const ParticipantVideoTileComponent: React.FC<ParticipantVideoTileProps> = ({
   participant,
   stream,
   isLocal,
@@ -219,3 +219,5 @@ export const ParticipantVideoTile: React.FC<ParticipantVideoTileProps> = ({
     </div>
   );
 };
+
+export const ParticipantVideoTile = React.memo(ParticipantVideoTileComponent);

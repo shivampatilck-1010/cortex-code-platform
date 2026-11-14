@@ -736,11 +736,33 @@ export function TubesBackground({
   className,
   enableClickInteraction = true,
 }: TubesBackgroundProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tubesRef = useRef<any>(null);
 
   useEffect(() => {
     let mounted = true;
+    let io: IntersectionObserver | null = null;
+
+    if (typeof IntersectionObserver !== 'undefined') {
+      const target = containerRef.current || canvasRef.current;
+      if (target) {
+        io = new IntersectionObserver(
+          ([entry]) => {
+            const isVisible = entry.isIntersecting;
+            if (tubesRef.current) {
+              if (!isVisible && typeof tubesRef.current.pause === 'function') {
+                tubesRef.current.pause();
+              } else if (isVisible && typeof tubesRef.current.play === 'function') {
+                tubesRef.current.play();
+              }
+            }
+          },
+          { threshold: 0.05 }
+        );
+        io.observe(target);
+      }
+    }
 
     const initTubes = async () => {
       if (!canvasRef.current) return;
@@ -768,6 +790,7 @@ export function TubesBackground({
     initTubes();
     return () => {
       mounted = false;
+      if (io) io.disconnect();
     };
   }, []);
 
@@ -779,6 +802,7 @@ export function TubesBackground({
 
   return (
     <div
+      ref={containerRef}
       onClick={handleClick}
       className={cn('relative h-full w-full overflow-hidden', className)}
     >
@@ -919,7 +943,12 @@ export const InteractiveWavesBackground: React.FC<WavesProps> = ({
       }
     };
 
+    let isVisible = true;
     const tick = (t: number) => {
+      if (!isVisible) {
+        frameIdRef.current = null;
+        return;
+      }
       mouse.sx += (mouse.x - mouse.sx) * 0.1;
       mouse.sy += (mouse.y - mouse.sy) * 0.1;
       const dx = mouse.x - mouse.lx, dy = mouse.y - mouse.ly;
@@ -984,11 +1013,25 @@ export const InteractiveWavesBackground: React.FC<WavesProps> = ({
     const onResize = () => { setSize(); setLines(); };
     setSize();
     setLines();
-    frameIdRef.current = requestAnimationFrame(tick);
+
+    let io: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== 'undefined' && container) {
+      io = new IntersectionObserver(([entry]) => {
+        isVisible = entry.isIntersecting;
+        if (isVisible && !frameIdRef.current) {
+          frameIdRef.current = requestAnimationFrame(tick);
+        }
+      }, { threshold: 0.05 });
+      io.observe(container);
+    } else {
+      frameIdRef.current = requestAnimationFrame(tick);
+    }
+
     window.addEventListener('resize', onResize);
     window.addEventListener('mousemove', onMouseMove);
 
     return () => {
+      if (io) io.disconnect();
       window.removeEventListener('resize', onResize);
       window.removeEventListener('mousemove', onMouseMove);
       if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
@@ -1228,7 +1271,8 @@ export const Squares: React.FC<SquaresProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animId: number;
+    let animId: number | null = null;
+    let isVisible = true;
     let offset = { x: 0, y: 0 };
 
     const handleResize = () => {
@@ -1259,6 +1303,10 @@ export const Squares: React.FC<SquaresProps> = ({
     container.addEventListener('mouseleave', handleMouseLeave);
 
     const render = () => {
+      if (!isVisible) {
+        animId = null;
+        return;
+      }
       const rect = container.getBoundingClientRect();
       ctx.clearRect(0, 0, rect.width, rect.height);
 
@@ -1318,10 +1366,22 @@ export const Squares: React.FC<SquaresProps> = ({
       animId = requestAnimationFrame(render);
     };
 
-    animId = requestAnimationFrame(render);
+    let io: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== 'undefined') {
+      io = new IntersectionObserver(([entry]) => {
+        isVisible = entry.isIntersecting;
+        if (isVisible && !animId) {
+          animId = requestAnimationFrame(render);
+        }
+      }, { threshold: 0.05 });
+      io.observe(container);
+    } else {
+      animId = requestAnimationFrame(render);
+    }
 
     return () => {
-      cancelAnimationFrame(animId);
+      if (animId) cancelAnimationFrame(animId);
+      if (io) io.disconnect();
       ro.disconnect();
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseleave', handleMouseLeave);
@@ -1488,16 +1548,34 @@ export const Aurora: React.FC<AuroraProps> = ({
       window.addEventListener('resize', handleResize);
 
       let startTime = performance.now();
+      let isVisible = true;
       const loop = (now: number) => {
+        if (!isVisible) {
+          animId = null;
+          return;
+        }
         animId = requestAnimationFrame(loop);
         const elapsed = (now - startTime) / 1000;
         program.uniforms.uTime.value = elapsed * speed;
         renderer?.render({ scene: mesh });
       };
-      animId = requestAnimationFrame(loop);
+
+      let io: IntersectionObserver | null = null;
+      if (typeof IntersectionObserver !== 'undefined' && container) {
+        io = new IntersectionObserver(([entry]) => {
+          isVisible = entry.isIntersecting;
+          if (isVisible && !animId) {
+            animId = requestAnimationFrame(loop);
+          }
+        }, { threshold: 0.05 });
+        io.observe(container);
+      } else {
+        animId = requestAnimationFrame(loop);
+      }
 
       return () => {
         if (animId) cancelAnimationFrame(animId);
+        if (io) io.disconnect();
         window.removeEventListener('resize', handleResize);
         if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
         gl.getExtension('WEBGL_lose_context')?.loseContext();

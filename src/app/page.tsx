@@ -393,6 +393,8 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
 
   useEffect(() => {
     let ticking = false;
+    let isListening = false;
+
     const updateTransforms = () => {
       if (footerRef.current) {
         const rect = footerRef.current.getBoundingClientRect();
@@ -420,9 +422,38 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
       }
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    updateTransforms();
-    return () => window.removeEventListener('scroll', handleScroll);
+    let io: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== 'undefined' && footerRef.current) {
+      io = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            if (!isListening) {
+              window.addEventListener('scroll', handleScroll, { passive: true });
+              isListening = true;
+            }
+            updateTransforms();
+          } else {
+            if (isListening) {
+              window.removeEventListener('scroll', handleScroll);
+              isListening = false;
+            }
+          }
+        },
+        { rootMargin: '400px 0px 400px 0px', threshold: 0 }
+      );
+      io.observe(footerRef.current);
+    } else {
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      isListening = true;
+      updateTransforms();
+    }
+
+    return () => {
+      if (io) io.disconnect();
+      if (isListening) {
+        window.removeEventListener('scroll', handleScroll);
+      }
+    };
   }, []);
 
   return (

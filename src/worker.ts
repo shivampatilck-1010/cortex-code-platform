@@ -80,7 +80,19 @@ export default {
 
     // Direct high-performance Cloudflare Edge streaming for video assets with native HTTP 206 Range support
     if (url.pathname.startsWith('/videos/') && env.ASSETS) {
-      return env.ASSETS.fetch(request);
+      const assetRes = await env.ASSETS.fetch(request);
+      const res = new Response(assetRes.body, assetRes);
+      res.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+      res.headers.set('Accept-Ranges', 'bytes');
+      return res;
+    }
+
+    // Static asset caching for brand imagery and typography
+    if ((url.pathname.startsWith('/brand/') || url.pathname.startsWith('/fonts/')) && env.ASSETS) {
+      const assetRes = await env.ASSETS.fetch(request);
+      const res = new Response(assetRes.body, assetRes);
+      res.headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      return res;
     }
 
     // Production Cloudflare WebSocket Path:
