@@ -683,6 +683,16 @@ export default function CortexLandingPage() {
   const currentRt = RUNTIMES[selectedRuntime];
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const projId = params.get('projectId');
+      if (projId) {
+        window.location.replace(`/ide?projectId=${encodeURIComponent(projId)}`);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (typeof document !== 'undefined') {
       if (theme === 'dark') {
         document.documentElement.classList.add('dark');
