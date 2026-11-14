@@ -36,8 +36,13 @@ async function deployProduction() {
     process.exit(1);
   }
 
-  // Step 1: Preflight verification for production
-  console.log('[Step 1] Executing production preflight safety checks...');
+  // Step 1: Prepare production configuration in dist/server/wrangler.json
+  console.log('[Step 1] Preparing production configuration artifact...');
+  const prepareScript = path.resolve('scripts', 'prepare-production-wrangler.mjs');
+  execSync(`node "${prepareScript}"`, { stdio: 'inherit' });
+
+  // Step 2: Preflight verification for production
+  console.log('\n[Step 2] Executing production preflight safety checks...');
   const preflightResult = await runPreflight({ targetEnv: 'production', allowProduction: true });
 
   if (!preflightResult.allPassed) {
