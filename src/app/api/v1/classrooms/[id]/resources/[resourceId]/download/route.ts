@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomAuth } from '@/lib/classroom/auth';
+import { getAssetsBucket } from '@/lib/classroom/storage';
 
 export async function GET(
   req: NextRequest,
@@ -25,12 +26,7 @@ export async function GET(
        return NextResponse.json({ error: 'Access denied to this resource key' }, { status: 403 });
     }
 
-    const bucket = (typeof process !== 'undefined' && process.env && process.env.ASSETS_BUCKET) || 
-                   (typeof globalThis !== 'undefined' && (globalThis as any).env && (globalThis as any).env.ASSETS_BUCKET);
-    
-    if (!bucket) {
-      return NextResponse.json({ error: 'R2 Bucket is not bound' }, { status: 500 });
-    }
+    const bucket = getAssetsBucket();
 
     const object = await bucket.get(key);
     if (!object) {

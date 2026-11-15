@@ -986,7 +986,7 @@ export default function ClassroomHubPage() {
   };
 
 
-  const handleSuspendMember = async (member: any, action: 'suspend' | 'unsuspend') => {
+  const handleSuspendMember = async (member: any, action: 'suspend' | 'restore') => {
     if (!selectedClassroom) return;
     try {
       const res = await fetch(`/api/v1/classrooms/${selectedClassroom.id}/members/${member.userId}`, {
@@ -997,15 +997,35 @@ export default function ClassroomHubPage() {
       const data = await res.json();
       if (data.success) {
         setMembers((prev) =>
-          prev.map((m) => (m.userId === member.userId ? { ...m, status: data.status } : m))
+          prev.map((m) => (m.userId === member.userId ? { ...m, status: data.member?.status || (action === 'suspend' ? 'suspended' : 'active') } : m))
         );
-        showToast(`${member.userName} has been ${action === 'suspend' ? 'suspended' : 'unsuspended'}`);
+        showToast(`${member.userName} has been ${action === 'suspend' ? 'suspended' : 'restored'}`);
       } else {
         showToast(data.error || 'Failed to update student');
       }
     } catch (err) {
       showToast('Error communicating with server');
     }
+  };
+
+  // Handler: Export Analytics CSV
+  const handleExportAnalyticsCSV = () => {
+    if (!selectedClassroom) return;
+    const headers = ['Student Name', 'Accuracy Percent', 'Total Points', 'Rank'];
+    const rows = leaderboard.map((l) => [
+      '"' + (l.studentName || 'Student').replace(/"/g, '""') + '"',
+      l.accuracy ?? 0,
+      l.points ?? 0,
+      l.rank ?? 0,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `analytics_${selectedClassroom.id}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Handler: Remove Member
@@ -2272,7 +2292,7 @@ export default function ClassroomHubPage() {
                               COURSE INSTRUCTOR
                             </span>
                           </div>
-                          <div className="text-xs text-[#E5E5E5]">elena.rostova@cortex.edu</div>
+                          <div className="text-xs text-[#E5E5E5]">{selectedClassroom.teacherEmail || (currentUserRole === 'teacher' ? currentUserEmail : 'instructor@cortex.edu')}</div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -2334,6 +2354,8 @@ export default function ClassroomHubPage() {
                                     onClick={() => {
                                       setActiveChatUserId(member.userId);
                                       setActiveTab('stream');
+                                      setIsChatExpanded(true);
+                                      setIsChatPinned(true);
                                     }}
                                     className="px-2 py-1 rounded-lg text-xs font-medium bg-[#212121] text-[#E5E5E5] hover:text-[#FFFFFF] transition"
                                     title="Direct Message"
@@ -2341,11 +2363,11 @@ export default function ClassroomHubPage() {
                                     Message
                                   </button>
                                   <button
-                                    onClick={() => handleSuspendMember(member, member.status === 'suspended' ? 'unsuspend' : 'suspend')}
+                                    onClick={() => handleSuspendMember(member, member.status === 'suspended' ? 'restore' : 'suspend')}
                                     className={`px-2 py-1 rounded-lg text-xs font-medium transition ${member.status === 'suspended' ? 'bg-amber-500/10 text-[#FFFFFF] hover:bg-amber-500/20' : 'bg-gray-800 text-[#E5E5E5] hover:text-[#FFFFFF]'}`}
                                     title={member.status === 'suspended' ? "Restore Access" : "Suspend student (Block for some days)"}
                                   >
-                                    {member.status === 'suspended' ? 'Unsuspended' : 'Suspend'}
+                                    {member.status === 'suspended' ? 'Restore' : 'Suspend'}
                                   </button>
                                   <button
                                     onClick={() => setMemberToRemove(member)}
@@ -2810,7 +2832,10 @@ export default function ClassroomHubPage() {
                     <h3 className="text-lg font-bold text-white tracking-tight">Classroom Analytics Overview</h3>
                     <p className="text-xs text-[#E5E5E5] mt-1">High-level view of student engagement and performance</p>
                   </div>
-                  <button className="px-3 py-1.5 bg-[#0A0A0A] hover:bg-[#212121] text-[#E5E5E5] text-xs font-medium rounded-md border border-[#525252] transition shadow-sm">
+                  <button 
+                    onClick={handleExportAnalyticsCSV}
+                    className="px-3 py-1.5 bg-[#0A0A0A] hover:bg-[#212121] text-[#E5E5E5] text-xs font-medium rounded-md border border-[#525252] transition shadow-sm"
+                  >
                     Export CSV Report
                   </button>
                 </div>

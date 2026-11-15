@@ -73,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="h-12 border-b bg-[#0b0c0e] border-[#1f2024] text-[#e6edf3] flex items-center justify-between px-3 text-xs z-30 select-none relative">
       {/* GROUP 1: Primary Navigation (Left) */}
       <div className="flex items-center space-x-2.5 flex-shrink-0">
-        <Link href="/" className="flex items-center group transition" title="Cortex — Code Beyond Limits">
+        <Link href="/" className="flex items-center group transition" title="Cortex - Code Beyond Limits">
           <CortexLogo variant="header" size="sm" />
         </Link>
 

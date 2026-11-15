@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email configuration is missing on the server.' }, { status: 500 });
     }
 
-    const resetUrl = new URL(req.url).origin + '/auth/reset-password?token=' + resetToken;
+    const resetUrl = new URL(req.url).origin + '/reset-password?token=' + resetToken;
     const emailReq = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {

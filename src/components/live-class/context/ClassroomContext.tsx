@@ -43,6 +43,7 @@ export interface ClassroomProviderProps {
 }
 
 interface ClassroomContextValue {
+  classroomId?: string;
   session: ClassroomSession;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
@@ -2178,6 +2179,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   return (
     <ClassroomContext.Provider
       value={{
+        classroomId,
         session,
         userRole,
         setUserRole,

@@ -12,7 +12,7 @@ import { CortexLogo } from '@/components/brand/CortexLogo';
 const DSA_TEMPLATES = [
   {
     name: 'Two Sum (Python)',
-    badge: 'Array • Hash Table',
+    badge: 'Array | Hash Table',
     difficulty: 'Beginner',
     language: 'python',
     title: 'Two Sum: Hash Map Optimization',
@@ -66,7 +66,7 @@ if __name__ == '__main__':
   },
   {
     name: 'Reverse Linked List (C++)',
-    badge: 'Linked List • Pointers',
+    badge: 'Linked List | Pointers',
     difficulty: 'Beginner',
     language: 'cpp',
     title: 'Reverse Singly Linked List',
@@ -153,7 +153,7 @@ int main() {
   },
   {
     name: 'Valid Parentheses (C++)',
-    badge: 'Stack • Strings',
+    badge: 'Stack | Strings',
     difficulty: 'Beginner',
     language: 'cpp',
     title: 'Valid Parentheses: Stack Verification',
@@ -732,7 +732,7 @@ export default function AssignmentBuilderPage({
                     Grading & Test Cases Suite ({testCases.length})
                   </h2>
                   <p className="text-[11px] text-zinc-500 font-mono">
-                    {testCases.filter(t => t.visibility === 'public').length} Visible • {testCases.filter(t => t.visibility === 'hidden').length} Hidden (Anti-Cheat)
+                    {testCases.filter(t => t.visibility === 'public').length} Visible | {testCases.filter(t => t.visibility === 'hidden').length} Hidden (Anti-Cheat)
                   </p>
                 </div>
               </div>

@@ -44,7 +44,7 @@ export default function ChallengesPage() {
       {/* Header */}
       <header className="h-14 bg-[#18191c] border-b border-[#2a2c33] px-6 flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link href="/" className="flex items-center group transition" title="Cortex — Code Beyond Limits">
+          <Link href="/" className="flex items-center group transition" title="Cortex - Code Beyond Limits">
             <CortexLogo variant="header" size="sm" />
           </Link>
           <nav className="hidden sm:flex items-center space-x-1 pl-3 border-l border-[#2a2c33]">

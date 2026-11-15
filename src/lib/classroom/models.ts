@@ -46,6 +46,7 @@ export interface Classroom {
   section: string;
   teacherId: string;
   teacherName: string;
+  teacherEmail?: string;
   image?: string;
   joincode?: string; // Legacy fallback
   joinEnabled: boolean;

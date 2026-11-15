@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { ClassroomResource } from '@/lib/classroom/models';
+import { getAssetsBucket } from '@/lib/classroom/storage';
 
 export async function POST(
   req: NextRequest,
@@ -17,12 +18,7 @@ export async function POST(
       return NextResponse.json({ error: auth.error || 'Teacher privileges required to upload resources.' }, { status });
     }
 
-    const bucket = (typeof process !== 'undefined' && process.env && process.env.ASSETS_BUCKET) || 
-                   (typeof globalThis !== 'undefined' && (globalThis as any).env && (globalThis as any).env.ASSETS_BUCKET);
-    
-    if (!bucket) {
-      return NextResponse.json({ error: 'R2 Bucket is not bound to the Worker environment' }, { status: 500 });
-    }
+    const bucket = getAssetsBucket();
 
     const formData = await req.formData();
     const file = formData.get('file') as File | null;

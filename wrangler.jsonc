@@ -37,6 +37,12 @@
             "database_id": "f756374b-0e9b-4112-b502-b703788dd86f"
         }
     ],
+    "r2_buckets": [
+        {
+            "binding": "ASSETS_BUCKET",
+            "bucket_name": "cortex-assets"
+        }
+    ],
     "version_metadata": {
         "binding": "CF_VERSION_METADATA"
     },
@@ -54,6 +60,12 @@
                     "binding": "DB",
                     "database_name": "cortex-staging-db",
                     "database_id": "e6375738-d9b2-4c5a-a3e5-3a34e892f49d"
+                }
+            ],
+            "r2_buckets": [
+                {
+                    "binding": "ASSETS_BUCKET",
+                    "bucket_name": "cortex-staging-assets"
                 }
             ],
             "durable_objects": {

@@ -6,7 +6,7 @@ import { getAuthoritativeIceServers } from '@/lib/classroom/ice-servers';
 import { ClassroomIdentity } from '@/lib/classroom/identity';
 
 /**
- * Cortex Live Class — Stage 2: Authentication and Session Context Bridge
+ * Cortex Live Class - Stage 2: Authentication and Session Context Bridge
  *
  * GET /api/v1/classrooms/[id]/live/session
  *

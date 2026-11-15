@@ -33,7 +33,7 @@ export default function AdminPage() {
       {/* Header */}
       <header className="h-14 bg-[#141518] border-b border-[#252830] px-6 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <Link href="/" className="flex items-center group transition" title="Cortex — Code Beyond Limits">
+          <Link href="/" className="flex items-center group transition" title="Cortex - Code Beyond Limits">
             <CortexLogo variant="header" size="sm" />
           </Link>
           <div className="h-4 w-[1px] bg-[#32353e]" />

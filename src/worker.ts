@@ -12,6 +12,7 @@ export { ClassroomRoomDO };
 export interface Env {
   CLASSROOM_ROOM_DO: DurableObjectNamespace;
   ASSETS?: Fetcher;
+  ASSETS_BUCKET?: any;
   CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
   APP_ENV?: string;
   CORTEX_SESSION_SECRET?: string;

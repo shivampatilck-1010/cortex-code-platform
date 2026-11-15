@@ -1,4 +1,4 @@
-﻿const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
 export function checkRateLimit(ip: string, limit: number, windowMs: number): boolean {
   const now = Date.now();

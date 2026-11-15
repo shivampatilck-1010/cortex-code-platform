@@ -59,7 +59,7 @@ export const CompilerClientView: React.FC<CompilerClientViewProps> = ({
       {/* Top Navigation */}
       <header className="h-14 bg-[#101114] border-b border-[#1f2024] px-6 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <Link href="/" className="flex items-center group transition" title="Cortex — Code Beyond Limits">
+          <Link href="/" className="flex items-center group transition" title="Cortex - Code Beyond Limits">
             <CortexLogo variant="header" size="sm" />
           </Link>
           <div className="h-4 w-[1px] bg-[#2d303b]" />

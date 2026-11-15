@@ -50,7 +50,7 @@ export default function DashboardPage() {
       {/* Dashboard Header */}
       <header className="h-14 bg-[#141518] border-b border-[#252830] px-6 flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link href="/" className="flex items-center group transition" title="Cortex — Code Beyond Limits">
+          <Link href="/" className="flex items-center group transition" title="Cortex - Code Beyond Limits">
             <CortexLogo variant="header" size="sm" />
           </Link>
           <nav className="hidden sm:flex items-center space-x-1 pl-3 border-l border-[#252830]">
@@ -103,7 +103,7 @@ export default function DashboardPage() {
               <span className="text-gray-600">|</span>
               <span>DEPLOY</span>
             </div>
-            <h1 className="text-xl font-black text-white mb-1">Cortex — Code Beyond Limits</h1>
+            <h1 className="text-xl font-black text-white mb-1">Cortex - Code Beyond Limits</h1>
             <p className="text-gray-400 text-xs">
               Universal cloud execution sandbox active across 16 runtimes. All workers healthy.
             </p>
@@ -150,7 +150,7 @@ export default function DashboardPage() {
                 <div key={p.id} className="py-3 flex items-center justify-between">
                   <div>
                     <span className="font-semibold text-xs text-white block">{p.name}</span>
-                    <span className="text-[11px] text-gray-400 font-mono">{p.lang} • Updated {p.updated}</span>
+                    <span className="text-[11px] text-gray-400 font-mono">{p.lang} | Updated {p.updated}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 text-[10px]">

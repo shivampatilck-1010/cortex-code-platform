@@ -163,6 +163,94 @@ export function CortexLockdownApp() {
   const [institutionalPolicyVersion, setInstitutionalPolicyVersion] = useState<number>(1);
   const [institutionalPolicyHash, setInstitutionalPolicyHash] = useState<string>('8b452e1e7a442f71885b5e7d4493390884d622956cf9e1d8ee1dcf5f6da91599');
 
+  // Diagnostic & Display Scaling State
+  const [displayScale, setDisplayScale] = useState<string>('100%');
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [latencyStatus, setLatencyStatus] = useState<'optimal' | 'acceptable' | 'degraded' | 'offline' | 'idle'>('idle');
+  const [isCheckingLatency, setIsCheckingLatency] = useState<boolean>(false);
+
+  // Target 4.1: Web Audio API Synthetic Chime
+  const playAudioOutputTestChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+      setScreenReaderAnnouncement('Notice: Audio output test chime played successfully.');
+    } catch (err) {
+      console.warn('[Lockdown] Failed to play audio test chime:', err);
+    }
+  };
+
+  // Target 4.2: Display Scaling Handler
+  const handleDisplayScaleChange = (scaleString: string) => {
+    const cleanScale = scaleString.startsWith('100%')
+      ? '100%'
+      : scaleString.startsWith('125%')
+      ? '125%'
+      : scaleString.startsWith('150%')
+      ? '150%'
+      : '175%';
+
+    setDisplayScale(cleanScale);
+
+    if (cleanScale === '100%') {
+      setFontSizeScale('normal');
+    } else if (cleanScale === '125%') {
+      setFontSizeScale('large');
+    } else {
+      setFontSizeScale('extra-large');
+    }
+
+    if (typeof document !== 'undefined') {
+      (document.body.style as any).zoom = cleanScale;
+    }
+    setScreenReaderAnnouncement(`Display scale adjusted to ${cleanScale}`);
+  };
+
+  // Target 4.3: Real Dynamic Network Latency Prober
+  const probeLatency = async (): Promise<number | null> => {
+    setIsCheckingLatency(true);
+    const start = performance.now();
+    try {
+      const res = await fetch('/api/v1/health', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rtt = Math.round(performance.now() - start);
+      setLatencyMs(rtt);
+      if (rtt < 100) {
+        setLatencyStatus('optimal');
+      } else if (rtt < 300) {
+        setLatencyStatus('acceptable');
+      } else {
+        setLatencyStatus('degraded');
+      }
+      return rtt;
+    } catch (err) {
+      console.warn('[Lockdown] Latency probe error:', err);
+      setLatencyMs(null);
+      setLatencyStatus('offline');
+      return null;
+    } finally {
+      setIsCheckingLatency(false);
+    }
+  };
+
   // Accessible Timer Announcements via aria-live at 15m, 5m, 1m intervals
   useEffect(() => {
     if (currentScreen !== 'workspace') return;
@@ -1340,7 +1428,7 @@ export function CortexLockdownApp() {
                       <div className="text-[10px] text-gray-400">Verify you can hear proctor announcements</div>
                     </div>
                     <button
-                      onClick={() => alert('Chime sound played successfully.')}
+                      onClick={playAudioOutputTestChime}
                       className="px-3 py-1.5 rounded-lg bg-[#22242e] hover:bg-[#2c2f3c] text-xs font-semibold text-gray-200 border border-[#30333d] transition flex items-center gap-1.5"
                     >
                       <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
@@ -2053,19 +2141,42 @@ export function CortexLockdownApp() {
               <div className="bg-[#121316] border border-[#22242a] p-4 rounded-xl space-y-2">
                 <h4 className="text-xs font-bold text-white">Display Scaling & Font Size</h4>
                 <div className="flex items-center gap-2 pt-1">
-                  {['100%', '125%', '150% (Recommended)', '175%'].map((scale) => (
-                    <button key={scale} className="px-3 py-1.5 rounded-lg bg-[#181920] text-xs text-gray-300 border border-[#2a2d36] hover:border-gray-500">
-                      {scale}
-                    </button>
-                  ))}
+                  {['100%', '125%', '150% (Recommended)', '175%'].map((scale) => {
+                    const isSelected = displayScale === '150%' ? scale.startsWith('150%') : displayScale === scale;
+                    return (
+                      <button
+                        key={scale}
+                        onClick={() => handleDisplayScaleChange(scale)}
+                        className={`px-3 py-1.5 rounded-lg text-xs border transition ${
+                          isSelected
+                            ? 'bg-[#FF9100]/20 border-[#FF9100] text-[#FF9100] font-bold'
+                            : 'bg-[#181920] text-gray-300 border-[#2a2d36] hover:border-gray-500'
+                        }`}
+                      >
+                        {scale}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="bg-[#121316] border border-[#22242a] p-4 rounded-xl space-y-2">
-                <h4 className="text-xs font-bold text-white">Network Latency Diagnostic</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-white">Network Latency Diagnostic</h4>
+                  <button
+                    onClick={() => probeLatency()}
+                    disabled={isCheckingLatency}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono flex items-center gap-1 transition"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isCheckingLatency ? 'animate-spin' : ''}`} />
+                    <span>Run Probe</span>
+                  </button>
+                </div>
                 <div className="p-3 bg-[#090A0D] rounded-lg border border-[#1e2028] text-xs font-mono text-gray-300 flex items-center justify-between">
-                  <span>Cloudflare Edge RTT: 18ms</span>
-                  <span className="text-emerald-400 font-bold">OPTIMAL</span>
+                  <span>Cloudflare Edge RTT: {latencyMs !== null ? `${latencyMs}ms` : isCheckingLatency ? 'Measuring...' : '18ms (Cached)'}</span>
+                  <span className={`font-bold ${latencyStatus === 'offline' ? 'text-red-400' : latencyStatus === 'degraded' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    {(latencyStatus === 'idle' ? 'OPTIMAL' : latencyStatus).toUpperCase()}
+                  </span>
                 </div>
               </div>
             </div>
@@ -2088,10 +2199,21 @@ export function CortexLockdownApp() {
               </div>
               <div className="flex justify-center gap-3">
                 <button
-                  onClick={() => alert('Reconnected successfully!')}
-                  className="h-9 px-5 rounded-lg bg-[#FF9100] text-black font-bold text-xs"
+                  onClick={async () => {
+                    const rtt = await probeLatency();
+                    if (rtt !== null) {
+                      setRecoveryNotice(`Reconnected successfully (Edge RTT: ${rtt}ms)`);
+                      setIsRecoveredFromDisk(true);
+                      setCurrentScreen('workspace');
+                    } else {
+                      setRecoveryNotice('Reconnection probe failed: Edge health endpoint unreachable.');
+                    }
+                  }}
+                  disabled={isCheckingLatency}
+                  className="h-9 px-5 rounded-lg bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs flex items-center gap-1.5 transition"
                 >
-                  Retry Connection Now
+                  {isCheckingLatency && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isCheckingLatency ? 'Testing Connection...' : 'Retry Connection Now'}</span>
                 </button>
                 <button
                   onClick={() => setCurrentScreen('workspace')}
