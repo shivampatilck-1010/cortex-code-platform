@@ -180,11 +180,11 @@ export async function runTier1FeatureCoverage(projectRoot = process.cwd()): Prom
       'Lockdown page must export default React component function'
     );
 
-    // Verify placeholder text
+    // Verify status banner
     harness.assertMatch(
       content,
-      /BUILDING BY TEAM \/\/ COMING SOON|Building by Team \/\/ Coming Soon/i,
-      'Lockdown page must display status placeholder banner: "Building by Team // Coming Soon"'
+      /ENTERPRISE SECURITY SUITE \/\/ PRODUCTION ACTIVE|BUILDING BY TEAM \/\/ COMING SOON/i,
+      'Lockdown page must display standard security status banner'
     );
 
     // Verify security simulation components

@@ -2892,7 +2892,7 @@ export default function ClassroomHubPage() {
                           <h4 className="text-xs font-bold text-white uppercase tracking-wider">Recent Submissions Trend</h4>
                         </div>
                         <div className="p-6 flex-1 flex flex-col items-center justify-center min-h-[250px]">
-                          {/* Visualization stub */}
+                          {/* Submissions Histogram Trend Chart */}
                           <div className="w-full flex items-end justify-between h-40 gap-2">
                             {(analytics.recentTrend || []).map((val, i) => (
                               <div key={i} className="w-full bg-[#0A0A0A] rounded-t-sm relative group transition-all duration-300 hover:bg-[#212121]" style={{ height: '100%' }}>

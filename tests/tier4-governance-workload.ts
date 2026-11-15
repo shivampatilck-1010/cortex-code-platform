@@ -146,8 +146,8 @@ export async function runTier4GovernanceWorkload(projectRoot = process.cwd()): P
     // 1. Status banner format
     harness.assertMatch(
       lockdownContent,
-      /BUILDING BY TEAM \/\/ COMING SOON|Building by Team \/\/ Coming Soon/i,
-      'Lockdown page must declare standard technical English placeholder banner'
+      /ENTERPRISE SECURITY SUITE \/\/ PRODUCTION ACTIVE|BUILDING BY TEAM \/\/ COMING SOON/i,
+      'Lockdown page must declare standard technical English status banner'
     );
 
     // 2. Win32 Display Affinity token

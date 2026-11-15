@@ -1087,7 +1087,8 @@ class ClassroomDatabase {
       updatedAt: row.updated_at,
       cortex_id: row.cortex_id,
       cortexId: row.cortex_id,
-      password_hash: row.password_hash
+      password_hash: row.password_hash,
+      passwordHash: row.password_hash
     };
   }
 
@@ -1631,6 +1632,10 @@ class ClassroomDatabase {
   }
 
   // --- SUBMISSIONS & GRADING ---
+  async createSubmission(sub: Submission): Promise<Submission> {
+    return this.saveSubmission(sub);
+  }
+
   async saveSubmission(sub: Submission): Promise<Submission> {
     if (!(await this.getDb())) throw new Error('Database unavailable');
     const stmt = (await this.getDb()).prepare(`

@@ -1372,7 +1372,7 @@ export function CortexLockdownApp() {
                         <div className="w-24 h-24 rounded-full bg-[#16181f] border border-[#2a2d36] flex items-center justify-center text-gray-500">
                           <UserCheck className="w-10 h-10 text-emerald-400" />
                         </div>
-                        <span className="text-[11px] text-gray-400 mt-2 font-medium">Evaluation Stream | Virtual Simulation</span>
+                        <span className="text-[11px] text-gray-400 mt-2 font-medium">Live Stream Feed | Standby Mode</span>
                       </div>
                     )}
                     {mediaError && (

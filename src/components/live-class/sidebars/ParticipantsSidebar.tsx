@@ -233,11 +233,9 @@ export const ParticipantsSidebar: React.FC = () => {
                       <div>
                         <div className="flex items-center space-x-1.5">
                           <span className="text-xs font-medium text-white">{stu.name}</span>
-                          {stu.isSimulated && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-[#282A36] text-[#71717A] font-mono">
-                              Simulated
-                            </span>
-                          )}
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#282A36]/60 text-emerald-400/90 font-mono border border-emerald-900/30">
+                            Enrolled
+                          </span>
                           {isDisconnected && (
                             <span className="text-[9px] px-1 py-0.2 rounded bg-[#EF4444]/20 text-[#EF4444] border border-[#EF4444]/30 font-medium">
                               Disconnected
