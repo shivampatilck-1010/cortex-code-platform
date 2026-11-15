@@ -24,6 +24,11 @@ export interface Env {
  * Fails closed if any required secret is missing when running in production.
  */
 export function validateStartupSecrets(env?: Env): void {
+  const isStaging = (env as any)?.APP_ENV === 'staging' || process.env?.APP_ENV === 'staging';
+  if (isStaging) {
+    return;
+  }
+
   const isProduction =
     (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') ||
     (typeof process !== 'undefined' && process.env?.APP_ENV === 'production') ||

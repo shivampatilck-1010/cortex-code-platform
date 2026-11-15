@@ -16,15 +16,23 @@ config.topLevelName = 'cortex-code-platform-staging';
 config.vars = {
   ...(config.vars || {}),
   APP_ENV: 'staging',
-  // Staging secret is intentionally a non-secret test fixture for non-production environments.
-  // Production strictly enforces runtime secret keys via Cloudflare Workers Secrets.
+  // Staging secrets are non-secret fixtures for non-production environments.
   CORTEX_SESSION_SECRET: 'cortex-staging-live-session-cryptographic-secret-2026-secure',
+  LOCKDOWN_POLICY_SECRET: 'cortex-staging-lockdown-policy-secret-2026',
+  LTI_HMAC_SECRET: 'cortex-staging-lti-hmac-secret-2026',
+  GITHUB_CLIENT_ID: 'cortex-staging-github-id',
+  GITHUB_CLIENT_SECRET: 'cortex-staging-github-secret',
+  LOCKDOWN_SERVER_PEPPER: 'cortex-staging-pepper-2026',
+  JWT_SECRET: 'cortex-staging-jwt-secret-2026',
 };
 
 if (config.d1_databases && config.d1_databases.length > 0) {
   config.d1_databases[0].database_name = 'cortex-staging-db';
   config.d1_databases[0].database_id = 'e6375738-d9b2-4c5a-a3e5-3a34e892f49d';
 }
+
+// Staging operates with in-memory asset fallback store unless R2 is explicitly provisioned in dashboard
+delete config.r2_buckets;
 
 fs.writeFileSync(distWranglerPath, JSON.stringify(config, null, 2), 'utf-8');
 console.log('Successfully prepared dist/server/wrangler.json for staging:');

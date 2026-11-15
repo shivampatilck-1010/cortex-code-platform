@@ -1,5 +1,5 @@
 /**
- * Cortex Online Examination System — Staging Deployment Wrapper
+ * Cortex Online Examination System - Staging Deployment Wrapper
  *
  * Guarantees that staging deployment is fail-closed, executes preflight verification,
  * validates generated configuration in dist/server/wrangler.json, and strictly disallows
@@ -69,8 +69,8 @@ async function deployStaging() {
     return;
   }
 
-  console.log('\n[Step 4] Executing deployment: npx wrangler deploy --config dist/server/wrangler.json...');
-  execSync('npx wrangler deploy --config dist/server/wrangler.json', { stdio: 'inherit' });
+  console.log('\n[Step 4] Executing deployment: node ./node_modules/wrangler/bin/wrangler.js deploy --config dist/server/wrangler.json...');
+  execSync('node ./node_modules/wrangler/bin/wrangler.js deploy --config dist/server/wrangler.json', { stdio: 'inherit' });
   console.log('\n[DEPLOYMENT SUCCESSFUL] Cortex staging deployment complete.');
 }
 
