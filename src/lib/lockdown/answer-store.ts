@@ -22,9 +22,24 @@
  * Strictly zero emojis.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+function isNodeRuntime(): boolean {
+  return typeof window === 'undefined' && typeof process !== 'undefined' && Boolean(process.versions?.node);
+}
+
+function getNodeFs(): any {
+  if (!isNodeRuntime()) return null;
+  return (process as any).getBuiltinModule?.('fs') || null;
+}
+
+function getNodePath(): any {
+  if (!isNodeRuntime()) return null;
+  return (process as any).getBuiltinModule?.('path') || null;
+}
+
+function getNodeOs(): any {
+  if (!isNodeRuntime()) return null;
+  return (process as any).getBuiltinModule?.('os') || null;
+}
 
 export const CORTEX_LOCKDOWN_DB_NAME = 'CortexLockdownDB';
 export const ENCRYPTED_ANSWERS_STORE_NAME = 'encrypted_answers';
@@ -93,6 +108,15 @@ function getSessionKey(studentId: string, examId: string, sessionId: string): st
 }
 
 export function getStorageDiskPath(studentId: string, examId: string, customDir?: string): string {
+  if (!isNodeRuntime()) {
+    return '';
+  }
+  const fs = getNodeFs();
+  const path = getNodePath();
+  const os = getNodeOs();
+  if (!fs || !path || !os) {
+    return '';
+  }
   const baseDir = customDir ||
     process.env.LOCALAPPDATA ||
     process.env.APPDATA ||
@@ -377,14 +401,17 @@ function readExistingEnvelopeMetadata(studentId: string, examId: string, customD
       } catch (_) {}
     }
   }
-  if (typeof process !== 'undefined' && process.versions?.node) {
-    const diskPath = getStorageDiskPath(studentId, examId, customDir);
-    if (fs.existsSync(diskPath)) {
-      try {
-        const raw = fs.readFileSync(diskPath, 'utf8');
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.sequenceNumber === 'number') return { sequenceNumber: parsed.sequenceNumber };
-      } catch (_) {}
+  if (isNodeRuntime()) {
+    const fs = getNodeFs();
+    if (fs) {
+      const diskPath = getStorageDiskPath(studentId, examId, customDir);
+      if (diskPath && fs.existsSync(diskPath)) {
+        try {
+          const raw = fs.readFileSync(diskPath, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.sequenceNumber === 'number') return { sequenceNumber: parsed.sequenceNumber };
+        } catch (_) {}
+      }
     }
   }
   return null;
@@ -571,39 +598,48 @@ export async function saveEncryptedAnswers(options: SaveAnswerOptions): Promise<
   }
 
   // 3. Physical Disk Write (Node.js / desktop / test environment)
-  if (typeof process !== 'undefined' && process.versions?.node) {
-    const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
-    const nonce = Math.random().toString(36).substring(2, 8);
-    const tmpPath = `${diskPath}.${Date.now()}_${nonce}.tmp`;
-    try {
-      const fd = fs.openSync(tmpPath, 'w', 0o600);
-      fs.writeSync(fd, envelopeJson, undefined, 'utf8');
-      fs.fsyncSync(fd);
-      fs.closeSync(fd);
-
-      // Windows-resilient atomic rename with brief backoff retries for file indexing / anti-malware locks
-      let renamed = false;
-      for (let attempt = 0; attempt < 5; attempt++) {
+  if (isNodeRuntime()) {
+    const fs = getNodeFs();
+    if (fs) {
+      const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
+      if (diskPath) {
+        const nonce = Math.random().toString(36).substring(2, 8);
+        const tmpPath = `${diskPath}.${Date.now()}_${nonce}.tmp`;
         try {
-          fs.renameSync(tmpPath, diskPath);
-          renamed = true;
-          break;
-        } catch (renameErr: any) {
-          if (attempt === 4 || (renameErr.code !== 'EPERM' && renameErr.code !== 'EBUSY')) {
-            throw renameErr;
+          const fd = fs.openSync(tmpPath, 'w', 0o600);
+          fs.writeSync(fd, envelopeJson, undefined, 'utf8');
+          fs.fsyncSync(fd);
+          fs.closeSync(fd);
+
+          // Windows-resilient atomic rename with brief backoff retries for file indexing / anti-malware locks
+          let renamed = false;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+              fs.renameSync(tmpPath, diskPath);
+              renamed = true;
+              break;
+            } catch (renameErr: any) {
+              if (attempt === 4 || (renameErr.code !== 'EPERM' && renameErr.code !== 'EBUSY')) {
+                throw renameErr;
+              }
+              try {
+                if (typeof Atomics !== 'undefined' && typeof SharedArrayBuffer !== 'undefined') {
+                  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, (attempt + 1) * 8);
+                }
+              } catch (_) {}
+            }
           }
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, (attempt + 1) * 8);
+          if (!renamed) {
+            fs.renameSync(tmpPath, diskPath);
+          }
+        } catch (err: any) {
+          if (fs.existsSync(tmpPath)) {
+            try { fs.unlinkSync(tmpPath); } catch (_) {}
+          }
+          console.error('[AnswerStore] Physical disk persistence error:', err);
+          throw new Error(`Physical disk persistence failed: ${err.message}`);
         }
       }
-      if (!renamed) {
-        fs.renameSync(tmpPath, diskPath);
-      }
-    } catch (err: any) {
-      if (fs.existsSync(tmpPath)) {
-        try { fs.unlinkSync(tmpPath); } catch (_) {}
-      }
-      console.error('[AnswerStore] Physical disk persistence error:', err);
-      throw new Error(`Physical disk persistence failed: ${err.message}`);
     }
   }
 
@@ -661,25 +697,24 @@ export async function loadEncryptedAnswers(options: LoadAnswerOptions): Promise<
       const stagingKey = `${primaryKey}_staging`;
       envelopeJson = window.localStorage.getItem(stagingKey);
     }
-    if (envelopeJson) {
-      try {
-        envelope = JSON.parse(envelopeJson);
-      } catch (err) {
-        throw new Error('Corrupted storage envelope: Invalid JSON');
+  }
+
+  // 3. Fall back to Physical Disk File (Node.js / desktop / test environment)
+  if (!envelopeJson && !envelope && isNodeRuntime()) {
+    const fs = getNodeFs();
+    if (fs) {
+      const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
+      if (diskPath && fs.existsSync(diskPath)) {
+        envelopeJson = fs.readFileSync(diskPath, 'utf8');
       }
     }
   }
 
-  // 3. Fall back to Physical Disk File (Node.js / desktop / test environment without customDir)
-  if (!envelope && typeof process !== 'undefined' && process.versions?.node) {
-    const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
-    if (fs.existsSync(diskPath)) {
-      envelopeJson = fs.readFileSync(diskPath, 'utf8');
-      try {
-        envelope = JSON.parse(envelopeJson);
-      } catch (err) {
-        throw new Error('Corrupted storage envelope: Invalid JSON');
-      }
+  if (envelopeJson && !envelope) {
+    try {
+      envelope = JSON.parse(envelopeJson);
+    } catch (err) {
+      throw new Error('Corrupted storage envelope: Invalid JSON');
     }
   }
 
@@ -880,18 +915,21 @@ export async function clearEncryptedAnswers(options: ClearAnswerOptions): Promis
     cleared = true;
   }
 
-  // 3. Clear physical disk file with cryptographic overwrite (secure shredding)
-  if (typeof process !== 'undefined' && process.versions?.node) {
-    const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
-    if (fs.existsSync(diskPath)) {
-      try {
-        const fileLen = fs.statSync(diskPath).size;
-        if (fileLen > 0) {
-          fs.writeFileSync(diskPath, Buffer.alloc(fileLen, 0));
-        }
-        fs.unlinkSync(diskPath);
-        cleared = true;
-      } catch (_) {}
+  // Clear physical disk file with cryptographic overwrite (secure shredding)
+  if (isNodeRuntime()) {
+    const fs = getNodeFs();
+    if (fs) {
+      const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
+      if (diskPath && fs.existsSync(diskPath)) {
+        try {
+          const fileLen = fs.statSync(diskPath).size;
+          if (fileLen > 0) {
+            fs.writeFileSync(diskPath, Buffer.alloc(fileLen, 0));
+          }
+          fs.unlinkSync(diskPath);
+          cleared = true;
+        } catch (_) {}
+      }
     }
   }
 

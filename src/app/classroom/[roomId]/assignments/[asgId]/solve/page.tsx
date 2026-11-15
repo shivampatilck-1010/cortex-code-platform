@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { 
   Play, Send, CheckCircle, AlertTriangle, RefreshCw, ArrowLeft, 
   Terminal, Lock, Shield, ChevronUp, ChevronDown, Copy, Check, FileCode, Award
@@ -15,11 +15,12 @@ import { CortexLogo } from '@/components/brand/CortexLogo';
 export default function SolveAssignmentPage({
   params
 }: {
-  params: Promise<{ roomId: string; asgId: string }>;
+  params?: Promise<{ roomId: string; asgId: string }>;
 }) {
   const router = useRouter();
-  const [roomId, setRoomId] = useState('');
-  const [asgId, setAsgId] = useState('');
+  const routeParams = useParams();
+  const [roomId, setRoomId] = useState<string>((routeParams?.roomId as string) || '');
+  const [asgId, setAsgId] = useState<string>((routeParams?.asgId as string) || '');
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   
   const [files, setFiles] = useState<ProjectFile[]>([]);
@@ -39,11 +40,22 @@ export default function SolveAssignmentPage({
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    params.then(p => {
-      setRoomId(p.roomId);
-      setAsgId(p.asgId);
-    });
-  }, [params]);
+    if (routeParams?.roomId) setRoomId(routeParams.roomId as string);
+    if (routeParams?.asgId) setAsgId(routeParams.asgId as string);
+
+    if (params) {
+      if (typeof (params as any)?.then === 'function') {
+        (params as Promise<{ roomId: string; asgId: string }>).then(p => {
+          if (p?.roomId) setRoomId(p.roomId);
+          if (p?.asgId) setAsgId(p.asgId);
+        }).catch(() => {});
+      } else {
+        const p = params as any;
+        if (p?.roomId) setRoomId(p.roomId);
+        if (p?.asgId) setAsgId(p.asgId);
+      }
+    }
+  }, [params, routeParams]);
 
   useEffect(() => {
     if (!roomId || !asgId) return;
@@ -269,7 +281,7 @@ export default function SolveAssignmentPage({
             </span>
 
             <span className="hidden md:inline-flex items-center text-[10px] font-mono text-zinc-500 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800/60">
-              {allTestCases.length} Tests ({publicTestCases.length} Public • {hiddenTestCases.length} Hidden)
+              {allTestCases.length} Tests ({publicTestCases.length} Public â€¢ {hiddenTestCases.length} Hidden)
             </span>
           </div>
         </div>
@@ -391,7 +403,7 @@ export default function SolveAssignmentPage({
                       ul: ({ children }) => <ul className="space-y-2 mb-4 font-mono text-xs text-zinc-300 pl-1">{children}</ul>,
                       li: ({ children }) => (
                         <li className="flex items-start space-x-2">
-                          <span className="text-emerald-400 mt-0.5">•</span>
+                          <span className="text-emerald-400 mt-0.5">â€¢</span>
                           <span className="flex-1 text-zinc-300">{children}</span>
                         </li>
                       ),
@@ -433,7 +445,7 @@ export default function SolveAssignmentPage({
                         {allTestCases.length} Test Cases Total
                       </div>
                       <div className="text-[11px] text-zinc-400 font-mono">
-                        {publicTestCases.length} Visible for Testing • {hiddenTestCases.length} Hidden for Grading
+                        {publicTestCases.length} Visible for Testing â€¢ {hiddenTestCases.length} Hidden for Grading
                       </div>
                     </div>
                   </div>
@@ -441,7 +453,7 @@ export default function SolveAssignmentPage({
                     onClick={() => setActiveTab('testcases')}
                     className="text-xs font-mono text-cyan-400 hover:underline px-2.5 py-1 rounded bg-cyan-950/30 border border-cyan-900/60"
                   >
-                    Inspect Tests →
+                    Inspect Tests â†’
                   </button>
                 </div>
               </div>
@@ -545,7 +557,7 @@ export default function SolveAssignmentPage({
 
                       <div className="flex items-center space-x-3 text-[11px] font-mono text-zinc-500 pt-1 border-t border-amber-900/20">
                         <span>Status: <span className="text-amber-400 inline-flex items-center gap-1"><Lock className="w-3 h-3 inline" /> Locked (Evaluated at Submission)</span></span>
-                        <span>•</span>
+                        <span>â€¢</span>
                         <span>Timeout: {tc.timeoutMs || 2000}ms</span>
                       </div>
                     </div>
@@ -609,7 +621,7 @@ export default function SolveAssignmentPage({
                             </span>
                           </span>
                           <span className="text-[11px] font-mono text-zinc-400">
-                            {tr.executionTimeMs}ms • {tr.memoryUsageMb}MB
+                            {tr.executionTimeMs}ms â€¢ {tr.memoryUsageMb}MB
                           </span>
                         </div>
                         
@@ -870,7 +882,7 @@ export default function SolveAssignmentPage({
                             >
                               <div className="flex items-center justify-between mb-1.5 font-bold">
                                 <span>Case {idx + 1}: {tr.status.toUpperCase()}</span>
-                                <span className="text-zinc-500 text-[10px]">{tr.executionTimeMs}ms • {tr.memoryUsageMb}MB</span>
+                                <span className="text-zinc-500 text-[10px]">{tr.executionTimeMs}ms â€¢ {tr.memoryUsageMb}MB</span>
                               </div>
                               <div className="grid grid-cols-3 gap-2 text-[11px] text-zinc-300">
                                 <div><span className="text-zinc-500">In:</span> {tr.input}</div>
@@ -896,7 +908,7 @@ export default function SolveAssignmentPage({
                             </span>
                           </span>
                           <span>
-                            {(execResult as any).execution_time || (execResult as any).executionTimeMs || 10}ms • {(execResult as any).memory || 12}MB
+                            {(execResult as any).execution_time || (execResult as any).executionTimeMs || 10}ms â€¢ {(execResult as any).memory || 12}MB
                           </span>
                         </div>
                         {execResult.stdout && (

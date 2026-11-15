@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { 
   Save, ArrowLeft, Plus, Trash2, Settings, Terminal, Shield, Clock,
   Upload, Download, Sparkles, BookOpen, FileText, CheckCircle2, Copy, AlertCircle, Eye, EyeOff, X
@@ -271,11 +271,12 @@ int main() {
 export default function AssignmentBuilderPage({
   params
 }: {
-  params: Promise<{ roomId: string; asgId: string }>;
+  params?: Promise<{ roomId: string; asgId: string }>;
 }) {
   const router = useRouter();
-  const [roomId, setRoomId] = useState('');
-  const [asgId, setAsgId] = useState('');
+  const routeParams = useParams();
+  const [roomId, setRoomId] = useState<string>((routeParams?.roomId as string) || '');
+  const [asgId, setAsgId] = useState<string>((routeParams?.asgId as string) || '');
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -300,34 +301,54 @@ export default function AssignmentBuilderPage({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    params.then(p => {
-      setRoomId(p.roomId);
-      setAsgId(p.asgId);
-      
-      if (p.asgId !== 'new') {
-        fetch(`/api/v1/classrooms/${p.roomId}/assignments/${p.asgId}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.assignment) {
-              const a = data.assignment;
-              setTitle(a.title || '');
-              setDescription(a.description || '');
-              setInstructions(a.instructions || '');
-              setLanguage(a.language || 'cpp');
-              setDifficulty(a.difficulty || 'Beginner');
-              setStarterCode(a.starterCode || '');
-              setMaxMarks(a.maxMarks || 100);
-              setAttemptsAllowed(a.attemptsAllowed || 5);
-              setAiPolicy(a.aiPolicy || 'hints_only');
-              setPlagiarismPolicy(a.plagiarismPolicy || 'review_only');
-              if (a.testCases && a.testCases.length > 0) {
-                setTestCases(a.testCases);
+    const handleParams = (p: { roomId?: string; asgId?: string }) => {
+      const activeRoomId = p?.roomId || (routeParams?.roomId as string) || '';
+      const activeAsgId = p?.asgId || (routeParams?.asgId as string) || '';
+
+      if (activeRoomId) setRoomId(activeRoomId);
+      if (activeAsgId) {
+        setAsgId(activeAsgId);
+        
+        if (activeAsgId !== 'new' && activeRoomId) {
+          fetch(`/api/v1/classrooms/${activeRoomId}/assignments/${activeAsgId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.assignment) {
+                const a = data.assignment;
+                setTitle(a.title || '');
+                setDescription(a.description || '');
+                setInstructions(a.instructions || '');
+                setLanguage(a.language || 'cpp');
+                setDifficulty(a.difficulty || 'Beginner');
+                setStarterCode(a.starterCode || '');
+                setMaxMarks(a.maxMarks || 100);
+                setAttemptsAllowed(a.attemptsAllowed || 5);
+                setAiPolicy(a.aiPolicy || 'hints_only');
+                setPlagiarismPolicy(a.plagiarismPolicy || 'review_only');
+                if (a.testCases && a.testCases.length > 0) {
+                  setTestCases(a.testCases);
+                }
               }
-            }
-          });
+            })
+            .catch(() => {});
+        }
       }
-    });
-  }, [params]);
+    };
+
+    if (params) {
+      if (typeof (params as any)?.then === 'function') {
+        (params as Promise<{ roomId: string; asgId: string }>).then(p => {
+          handleParams(p);
+        }).catch(() => {
+          handleParams({});
+        });
+      } else {
+        handleParams(params as any);
+      }
+    } else {
+      handleParams({});
+    }
+  }, [params, routeParams]);
 
   const applyTemplate = (tpl: typeof DSA_TEMPLATES[0]) => {
     setTitle(tpl.title);

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { realtimeCoordinator } from '@/lib/classroom/realtime';
@@ -11,16 +11,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid Content-Type. Expected application/json.' }, { status: 415 });
     }
 
-    const user = await ClassroomAuth.getCurrentUser(req);
-    const body = await req.json().catch(() => ({}));
-    const { joinCode } = body;
+    const user = await ClassroomAuth.authenticateRequest(req);
+    if (!user) {
+      return NextResponse.json({ error: 'Authentication required. Please log in to join a classroom.' }, { status: 401 });
+    }
 
-    if (!joinCode || !joinCode.trim()) {
+    const body = await req.json().catch(() => ({}));
+    const rawCode = body.joinCode || body.code || body.classroomId || body.roomId || body.courseCode;
+
+    if (!rawCode || typeof rawCode !== 'string' || !rawCode.trim()) {
       return NextResponse.json({ error: 'Please enter a valid class code.' }, { status: 400 });
     }
 
-    const cleanCode = joinCode.toUpperCase().trim();
-    const classroom = await classroomDb.getClassroomByJoinCode(cleanCode);
+    const classroom = await classroomDb.getClassroomByIdentifier(rawCode);
 
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found. Please verify the code.' }, { status: 404 });
@@ -38,11 +41,12 @@ export async function POST(req: NextRequest) {
     const existing = await classroomDb.getMember(classroom.id, user.id);
     if (existing && existing.status === 'active') {
       return NextResponse.json({
-        error: 'You are already an active member of this classroom.',
+        success: true,
+        message: 'You are already an active member of this classroom.',
         alreadyMember: true,
         classroomId: classroom.id,
         classroom,
-      }, { status: 400 });
+      }, { status: 200 });
     }
 
     // Add or reactivate member

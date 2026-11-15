@@ -44,17 +44,26 @@ export const DEFAULT_LOCKDOWN_POLICY: LockdownSecurityPolicy = {
 
 // LOCKDOWN_SECRET must be provisioned via environment variable; there is no plaintext fallback.
 // If LOCKDOWN_POLICY_SECRET is absent in production, the module fails closed.
-const LOCKDOWN_SECRET: string = (() => {
+export function getLockdownSecret(): string {
   const secret = process.env.LOCKDOWN_POLICY_SECRET;
   if (!secret || secret.trim().length === 0) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('[security-policy] LOCKDOWN_POLICY_SECRET is not set. Refusing to start in production without a configured secret.');
+    const isBuildPhase =
+      process.env.NEXT_PHASE === 'phase-production-build' ||
+      Boolean(process.env.NEXT_PHASE?.includes('build')) ||
+      process.env.npm_lifecycle_event === 'build';
+
+    if (
+      (process.env.NODE_ENV === 'production' && !isBuildPhase) ||
+      process.env.LOCKDOWN_FAIL_CLOSED_TEST === 'true'
+    ) {
+      throw new Error(
+        '[security-policy] LOCKDOWN_POLICY_SECRET is not set. Refusing to operate in production without a configured secret.'
+      );
     }
-    // Dev/test environments get a clearly synthetic placeholder that cannot be confused for a real secret.
     return '__dev_lockdown_secret_not_for_production__';
   }
   return secret.trim();
-})();
+}
 
 /**
  * Computes a SHA-256 hash of a security policy to detect any tampering.
@@ -193,7 +202,7 @@ export function signLaunchGrant(payload: {
   };
   const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
   const signature = crypto
-    .createHmac('sha256', LOCKDOWN_SECRET)
+    .createHmac('sha256', getLockdownSecret())
     .update(`${header}.${body}`)
     .digest('base64url');
 
@@ -278,7 +287,7 @@ export function verifyLaunchGrant(
 
     const [header, body, signature] = parts;
     const expectedSignature = crypto
-      .createHmac('sha256', LOCKDOWN_SECRET)
+      .createHmac('sha256', getLockdownSecret())
       .update(`${header}.${body}`)
       .digest('base64url');
 
@@ -328,7 +337,7 @@ export function signDeviceTrustToken(deviceId: string, userId: string, fingerpri
     iss: 'cortex-lockdown-attestation'
   };
   const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', LOCKDOWN_SECRET).update(data).digest('base64url');
+  const sig = crypto.createHmac('sha256', getLockdownSecret()).update(data).digest('base64url');
   return `${data}.${sig}`;
 }
 
@@ -340,7 +349,7 @@ export function generateEmergencyExitCode(examId: string, challenge: string): st
   const normExam = (examId || 'general').trim().toLowerCase();
   const normChal = (challenge || '0000').trim().toUpperCase();
   const hmac = crypto
-    .createHmac('sha256', LOCKDOWN_SECRET)
+    .createHmac('sha256', getLockdownSecret())
     .update(`EMERGENCY_EXIT:${normExam}:${normChal}`)
     .digest('hex');
   const codeNum = (parseInt(hmac.substring(0, 8), 16) % 900000) + 100000;

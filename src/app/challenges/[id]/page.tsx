@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -17,7 +17,7 @@ import {
 import confetti from 'canvas-confetti';
 import Editor from '@monaco-editor/react';
 import { TestCase } from '@/lib/execution/types';
-import { Challenge } from '@/lib/challenges/challenges-data'; // just for type
+import { Challenge, CHALLENGES } from '@/lib/challenges/challenges-data';
 
 export default function ChallengeSolverPage() {
   const params = useParams();
@@ -32,6 +32,7 @@ export default function ChallengeSolverPage() {
   const [submissionVerdict, setSubmissionVerdict] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
     async function loadWorkspace() {
@@ -41,27 +42,46 @@ export default function ChallengeSolverPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ challengeId, language })
         });
-        if (!res.ok) throw new Error('Failed to load workspace');
-        const data = await res.json();
-        
-        setChallenge(data.challenge);
-        
-        // Find the main file
-        const mainFile = data.files.find((f: any) => f.name.startsWith('solution.'));
-        if (mainFile) {
+        if (res.ok) {
+          const data = await res.json();
+          setChallenge(data.challenge);
+          setIsGuest(Boolean(data.isGuest));
+          
+          // Find the main file
+          const mainFile = data.files?.find((f: any) => f.name.startsWith('solution.'));
+          if (mainFile) {
             setCode(mainFile.content);
             const ext = mainFile.name.split('.').pop();
             if (ext === 'py') setLanguage('python');
             else if (ext === 'cpp' || ext === 'c') setLanguage('cpp');
             else if (ext === 'js' || ext === 'ts') setLanguage('javascript');
-        } else if (data.challenge) {
+          } else if (data.challenge) {
             setCode(data.challenge.starterTemplates[language] || '');
-        }
+          }
 
-        setTestResults(data.challenge?.testCases || []);
+          setTestResults(data.challenge?.testCases || []);
+        } else {
+          const clientChallenge = CHALLENGES.find(c => c.id === challengeId || c.slug === challengeId);
+          if (clientChallenge) {
+            setChallenge(clientChallenge);
+            setIsGuest(true);
+            setCode(clientChallenge.starterTemplates[language] || clientChallenge.starterTemplates['python'] || '# Write your solution here\n');
+            setTestResults(clientChallenge.testCases.filter(tc => !tc.isHidden).map(tc => ({ ...tc, isHidden: false })));
+          } else {
+            setError('Challenge Not Found');
+          }
+        }
         setLoading(false);
       } catch (e: any) {
-        setError(e.message);
+        const clientChallenge = CHALLENGES.find(c => c.id === challengeId || c.slug === challengeId);
+        if (clientChallenge) {
+          setChallenge(clientChallenge);
+          setIsGuest(true);
+          setCode(clientChallenge.starterTemplates[language] || clientChallenge.starterTemplates['python'] || '# Write your solution here\n');
+          setTestResults(clientChallenge.testCases.filter(tc => !tc.isHidden).map(tc => ({ ...tc, isHidden: false })));
+        } else {
+          setError(e.message || 'Challenge Not Found');
+        }
         setLoading(false);
       }
     }
@@ -102,6 +122,11 @@ export default function ChallengeSolverPage() {
   };
 
   const handleSubmit = async () => {
+    if (isGuest) {
+      setSubmissionVerdict('Sign in required to submit solutions to the official leaderboard.');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmissionVerdict(null);
 
@@ -143,6 +168,15 @@ export default function ChallengeSolverPage() {
 
   return (
     <div className="min-h-screen bg-[#121316] text-gray-100 flex flex-col font-sans select-none">
+      {isGuest && (
+        <div className="bg-amber-950/40 border-b border-amber-800/50 px-6 py-2 flex items-center justify-between text-xs text-amber-200">
+          <span>Browsing as guest. Sign in to save progress and submit to leaderboard.</span>
+          <Link href={`/login?redirect=/challenges/${challengeId}`} className="font-semibold underline hover:text-white transition">
+            Sign In
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <header className="h-14 bg-[#18191c] border-b border-[#2a2c33] px-6 flex items-center justify-between">
         <div className="flex items-center space-x-4">

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { arenaDb } from '@/lib/arena/db';
 import { projectDb, Project, ProjectFile } from '@/lib/project/db';
@@ -9,10 +9,7 @@ import { ARENA_MAX_REQUEST_BYTES } from '@/lib/arena/request-validation';
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await ClassroomAuth.getCurrentUser(req);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = await ClassroomAuth.authenticateRequest(req);
 
     const { challengeId, language } = await readJsonBody<{ challengeId?: string; language?: string }>(req, ARENA_MAX_REQUEST_BYTES);
     if (!challengeId) {
@@ -22,6 +19,45 @@ export async function POST(req: NextRequest) {
     const challenge = CHALLENGES.find(c => c.id === challengeId || c.slug === challengeId);
     if (!challenge) {
       return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    }
+
+    if (!user) {
+      const targetLang = language || 'python';
+      const starterCode = challenge.starterTemplates[targetLang] || challenge.starterTemplates['python'] || '# Write your solution here\n';
+      const ext = targetLang === 'python' ? 'py' : targetLang === 'javascript' ? 'js' : targetLang === 'typescript' ? 'ts' : targetLang === 'cpp' ? 'cpp' : targetLang === 'c' ? 'c' : targetLang === 'java' ? 'java' : 'txt';
+
+      const guestWorkspace = {
+        id: `arena_ws_guest_${challenge.id}`,
+        userId: 'guest',
+        challengeId: challenge.id,
+        projectId: 'guest_project',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      const guestFile: ProjectFile = {
+        id: 'guest_sol',
+        projectId: 'guest_project',
+        name: `solution.${ext}`,
+        path: `/solution.${ext}`,
+        content: starterCode,
+        isFolder: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      const safeChallenge = {
+        ...challenge,
+        testCases: challenge.testCases.filter(tc => !tc.isHidden).map(tc => ({ ...tc, isHidden: false }))
+      };
+
+      return NextResponse.json({
+        workspace: guestWorkspace,
+        files: [guestFile],
+        created: false,
+        challenge: safeChallenge,
+        isGuest: true
+      });
     }
 
     let workspace = await arenaDb.getArenaWorkspace(user.id, challenge.id);
@@ -86,9 +122,6 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err instanceof RequestBodyError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
-    }
-    if (err?.message?.includes('Authentication required')) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
     return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 });
   }

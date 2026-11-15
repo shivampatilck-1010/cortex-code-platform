@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 
@@ -25,29 +25,56 @@ export async function POST(req: NextRequest) {
 
     await classroomDb.createResetToken(fastHash, user.id, expiresAt);
 
+    const resetUrl = new URL(req.url).origin + '/reset-password?token=' + resetToken;
+
     if (!process.env.RESEND_API_KEY) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[forgot-password] Development reset URL for', user.email, ':', resetUrl);
+        return NextResponse.json({
+          success: true,
+          message: 'If an account with that email exists, a password reset link has been sent.',
+          devResetUrl: resetUrl
+        });
+      }
       console.error('RESEND_API_KEY is missing');
       return NextResponse.json({ error: 'Email configuration is missing on the server.' }, { status: 500 });
     }
 
-    const resetUrl = new URL(req.url).origin + '/reset-password?token=' + resetToken;
-    const emailReq = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'support@cortexcode.io',
-        to: user.email,
-        subject: 'Cortex Code Platform - Password Reset',
-        html: `<p>Hello ${user.name},</p><p>You requested a password reset. Click the link below to reset your password:</p><p><a href="${resetUrl}">Reset Password</a></p><p>This link expires in 1 hour.</p>`
-      })
-    });
+    try {
+      const emailReq = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'support@cortexcode.io',
+          to: user.email,
+          subject: 'Cortex Code Platform - Password Reset',
+          html: `<p>Hello ${user.name},</p><p>You requested a password reset. Click the link below to reset your password:</p><p><a href="${resetUrl}">Reset Password</a></p><p>This link expires in 1 hour.</p>`
+        })
+      });
 
-    if (!emailReq.ok) {
-      console.error('Failed to dispatch email via provider:', await emailReq.text());
-      // Fail safely without claiming delivery
+      if (!emailReq.ok) {
+        console.error('Failed to dispatch email via provider:', await emailReq.text());
+        if (process.env.NODE_ENV !== 'production') {
+          return NextResponse.json({
+            success: true,
+            message: 'If an account with that email exists, a password reset link has been sent.',
+            devResetUrl: resetUrl
+          });
+        }
+        return NextResponse.json({ error: 'Email provider rejected the request. Please try again later.' }, { status: 500 });
+      }
+    } catch (dispatchErr: any) {
+      console.error('Email dispatch error:', dispatchErr?.message || dispatchErr);
+      if (process.env.NODE_ENV !== 'production') {
+        return NextResponse.json({
+          success: true,
+          message: 'If an account with that email exists, a password reset link has been sent.',
+          devResetUrl: resetUrl
+        });
+      }
       return NextResponse.json({ error: 'Email provider rejected the request. Please try again later.' }, { status: 500 });
     }
 

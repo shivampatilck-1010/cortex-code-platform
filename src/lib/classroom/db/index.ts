@@ -1,4 +1,4 @@
-import { DBInstance, getDbInstance, DatabaseProviderCapabilities } from '@/lib/db';
+﻿import { DBInstance, getDbInstance, DatabaseProviderCapabilities } from '@/lib/db';
 import crypto from 'crypto';
 // Cortex Classroom Database Layer
 // High-performance relational store using Node.js 22 native node:sqlite with ACID durability,
@@ -849,6 +849,60 @@ class ClassroomDatabase {
       throw new Error('[ClassroomDatabase] SEB password migration failure: ' + sanitizedMsg);
     }
 
+    // Backfill and seed pre-seeded demo accounts with authenticated PBKDF2 hash of 'Cortex2026!'
+    try {
+      const demoUsers = [
+        {
+          id: 'usr_teacher_stg2',
+          cortex_id: 'CTX-USR_TEACHER_STG2',
+          name: 'Professor Shivam',
+          email: 'shivam@cortex.edu',
+          role: 'teacher',
+          professional_email: 'ctx.usr.teacher.stg2@cortex.com',
+        },
+        {
+          id: 'usr_student_stg2',
+          cortex_id: 'CTX-USR_STUDENT_STG2',
+          name: 'Alex Chen',
+          email: 'alex@student.cortex.edu',
+          role: 'student',
+          professional_email: 'ctx.usr.student.stg2@cortex.com',
+        },
+      ];
+
+      for (const u of demoUsers) {
+        const existing = (await this.db!.prepare('SELECT id, password_hash FROM users WHERE id = ? OR email = ?').get(u.id, u.email)) as any;
+        if (!existing) {
+          const salt = crypto.randomBytes(16);
+          const saltHex = salt.toString('hex');
+          const derived = crypto.pbkdf2Sync('Cortex2026!', salt, 100000, 32, 'sha256');
+          const passwordHash = `${saltHex}:${derived.toString('hex')}`;
+          const now = Date.now();
+          await this.db!.prepare(`
+            INSERT INTO users (id, cortex_id, password_hash, name, email, role, avatar, status, created_at, updated_at, professional_email)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, 'active', ?, ?, ?)
+          `).run(u.id, u.cortex_id, passwordHash, u.name, u.email, u.role, now, now, u.professional_email);
+        } else if (!existing.password_hash) {
+          const salt = crypto.randomBytes(16);
+          const saltHex = salt.toString('hex');
+          const derived = crypto.pbkdf2Sync('Cortex2026!', salt, 100000, 32, 'sha256');
+          const passwordHash = `${saltHex}:${derived.toString('hex')}`;
+          await this.db!.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, existing.id);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[ClassroomDatabase] Warning during pre-seeded user initialization:', err?.message || err);
+    }
+
+    // Ensure demo classroom has course_code set for multi-identifier resolution
+    try {
+      await this.db!.prepare(`
+        UPDATE classrooms 
+        SET course_code = 'CSE276' 
+        WHERE id = 'ROOM_HARDENING_DEMO' AND (course_code IS NULL OR course_code = '')
+      `).run();
+    } catch (_) {}
+
     // Verify complete examination schema integrity before proceeding
     await this.verifyExaminationSchema();
   }
@@ -1085,6 +1139,34 @@ class ClassroomDatabase {
     const row = await (await this.getDb()).prepare('SELECT * FROM classrooms WHERE UPPER(join_code) = ?').get(norm) as any;
     if (!row) return null;
     return this.mapClassroom(row);
+  }
+
+  async getClassroomByIdentifier(identifier: string): Promise<Classroom | null> {
+    const db = await this.getDb();
+    if (!db || !identifier || typeof identifier !== 'string') return null;
+    const clean = identifier.toUpperCase().trim();
+    if (!clean) return null;
+    const alphanumeric = clean.replace(/[^A-Z0-9]/g, '');
+
+    // 1. Exact join_code
+    let row = await db.prepare('SELECT * FROM classrooms WHERE UPPER(join_code) = ?').get(clean) as any;
+    if (row) return this.mapClassroom(row);
+
+    // 2. Exact classroom ID
+    row = await db.prepare('SELECT * FROM classrooms WHERE UPPER(id) = ?').get(clean) as any;
+    if (row) return this.mapClassroom(row);
+
+    // 3. Exact or normalized course_code
+    row = await db.prepare("SELECT * FROM classrooms WHERE UPPER(course_code) = ? OR (course_code != '' AND UPPER(REPLACE(REPLACE(course_code, '-', ''), ' ', '')) = ?)").get(clean, alphanumeric) as any;
+    if (row) return this.mapClassroom(row);
+
+    // 4. Normalized match on classroom name or join_code
+    if (alphanumeric.length >= 3) {
+      row = await db.prepare("SELECT * FROM classrooms WHERE UPPER(REPLACE(REPLACE(name, '-', ''), ' ', '')) LIKE ? OR (join_code != '' AND UPPER(join_code) = ?)").get(`%${alphanumeric}%`, alphanumeric) as any;
+      if (row) return this.mapClassroom(row);
+    }
+
+    return null;
   }
 
   async listClassroomsForUser(userId: string): Promise<Classroom[]> {
