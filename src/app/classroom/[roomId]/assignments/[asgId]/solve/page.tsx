@@ -456,7 +456,7 @@ export default function SolveAssignmentPage({
                     onClick={() => setActiveTab('testcases')}
                     className="text-xs font-mono text-cyan-400 hover:underline px-2.5 py-1 rounded bg-cyan-950/30 border border-cyan-900/60"
                   >
-                    Inspect Tests â†’
+                    Inspect Tests &rarr;
                   </button>
                 </div>
               </div>
