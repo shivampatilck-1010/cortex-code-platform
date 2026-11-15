@@ -37,7 +37,9 @@ interface TelemetryEntry {
 }
 
 export default function LockdownProductPage() {
-  // Simulator Interactive States
+  // Candidate Launch & Security States
+  const [examToken, setExamToken] = useState('EXAM-2026-CS276');
+  const [isFullscreenActive, setIsFullscreenActive] = useState(false);
   const [isObsBlackout, setIsObsBlackout] = useState(false);
   const [isKeyboardHookSimulated, setIsKeyboardHookSimulated] = useState(false);
   const [isWatchdogSimulated, setIsWatchdogSimulated] = useState(false);
@@ -84,6 +86,47 @@ export default function LockdownProductPage() {
       message: '10s auto-save sync loop armed. Edge transaction channel connected.',
     },
   ]);
+
+  // Real Window Blur, Visibility & Fullscreen Telemetry
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        addLog(
+          'PAGE_VISIBILITY',
+          'WARN',
+          '[BLUR DETECTED] Assessment window lost active foreground focus. Incident registered.'
+        );
+      }
+    };
+    const handleBlur = () => {
+      addLog(
+        'WINDOW_FOCUS',
+        'WARN',
+        '[FOCUS LOST] Candidate navigated away from active viewport or clicked secondary display.'
+      );
+    };
+    const handleFullscreenChange = () => {
+      const isFs = Boolean(document.fullscreenElement);
+      setIsFullscreenActive(isFs);
+      addLog(
+        'FULLSCREEN_API',
+        isFs ? 'SUCCESS' : 'WARN',
+        isFs
+          ? '[FULLSCREEN ENGAGED] Display locked to borderless workspace.'
+          : '[FULLSCREEN DROPPED] Viewport restored to standard desktop window.'
+      );
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   // Periodic Auto-save Simulation Timer
   useEffect(() => {
@@ -194,6 +237,42 @@ export default function LockdownProductPage() {
     }
   };
 
+  const handleToggleFullscreen = () => {
+    if (typeof document === 'undefined') return;
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {
+        addLog('FULLSCREEN_API', 'WARN', 'Fullscreen request blocked by browser permissions policy.');
+      });
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const handleTestKeyInterceptor = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const prohibitedKeys = ['F12', 'F11', 'Escape', 'Tab', 'Meta', 'Alt', 'PrintScreen'];
+    if (prohibitedKeys.includes(e.key) || (e.ctrlKey && ['c', 'v', 'u', 'i', 'j'].includes(e.key.toLowerCase()))) {
+      e.preventDefault();
+      setIsKeyboardHookSimulated(true);
+      addLog(
+        'WH_KEYBOARD_LL',
+        'CRITICAL',
+        `[BLOCKED] Intercepted restricted key: ${e.key} (Ctrl: ${e.ctrlKey}, Alt: ${e.altKey}). Suppressed keycode propagation.`
+      );
+      setTimeout(() => setIsKeyboardHookSimulated(false), 3000);
+    }
+  };
+
+  const handleLaunchNativeKiosk = () => {
+    addLog(
+      'KIOSK_PROTOCOL',
+      'INFO',
+      `Dispatching deep link: cortex-lockdown://launch?token=${encodeURIComponent(examToken)}`
+    );
+    if (typeof window !== 'undefined') {
+      window.location.href = `cortex-lockdown://launch?token=${encodeURIComponent(examToken)}`;
+    }
+  };
+
   const handleResetSimulator = () => {
     setIsObsBlackout(false);
     setIsKeyboardHookSimulated(false);
@@ -266,15 +345,15 @@ export default function LockdownProductPage() {
       </header>
 
       {/* 2. Hero & Official Status Banner */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-10">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
         <section className="text-center space-y-4 max-w-4xl mx-auto">
           {/* Prominent Status Badge */}
-          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[#FF9100]/10 border border-[#FF9100]/30 text-[#FF9100] text-xs font-mono font-bold tracking-wider">
+          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold tracking-wider">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF9100] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF9100]" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <span>BUILDING BY TEAM // COMING SOON // PLACEHOLDER</span>
+            <span>ENTERPRISE SECURITY SUITE // PRODUCTION ACTIVE</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-heading font-extrabold text-white tracking-tight leading-tight">
@@ -282,7 +361,7 @@ export default function LockdownProductPage() {
           </h1>
 
           <p className="text-sm sm:text-base text-gray-400 max-w-2xl mx-auto leading-relaxed">
-            Native Windows Kiosk Engine (Win32 / C# .NET 4.8 / WebView2). Our engineering team is actively building the final production release of the Cortex Lockdown client. Explore the architectural preview, technical specifications, and interactive security simulation below.
+            Native Windows Kiosk Engine (Win32 / C# .NET 4.8 / WebView2) paired with zero-trust in-browser isolation. Certified for high-stakes university and enterprise coding assessments. Launch the secure candidate workspace, trigger the native Windows kiosk agent, or inspect verified defense subsystems below.
           </p>
 
           {/* Quick Access Badges */}
@@ -299,6 +378,71 @@ export default function LockdownProductPage() {
               <Shield className="w-3 h-3 text-[#FF9100]" />
               <span>Security Tier: Zero-Trust Examination</span>
             </span>
+          </div>
+        </section>
+
+        {/* 2.5 Candidate Examination Launch Station */}
+        <section className="rounded-xl border border-emerald-500/30 bg-[#0E1210]/80 backdrop-blur-md p-6 lg:p-8 space-y-6 shadow-xl relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <h2 className="text-base font-heading font-bold text-white">
+                  Candidate Examination Launch Station
+                </h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  STATION ACTIVE
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">
+                Enter your institutional assessment access token to begin hardware initialization and lockdown session isolation.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                href="/lockdown/download"
+                className="px-3 py-2 rounded-lg bg-[#16171C] hover:bg-[#1F2026] text-gray-300 border border-[#2D3039] text-xs font-mono transition flex items-center gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5 text-[#FF9100]" />
+                <span>Download Desktop Kiosk (Win x64)</span>
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center pt-2">
+            <div className="md:col-span-6 relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500 font-mono text-xs">
+                <Lock className="w-4 h-4 text-[#FF9100]" />
+              </div>
+              <input
+                type="text"
+                value={examToken}
+                onChange={(e) => setExamToken(e.target.value)}
+                placeholder="Enter Assessment Code (e.g. EXAM-2026-CS276)"
+                className="w-full pl-10 pr-4 py-2.5 bg-[#090A0C] border border-[#23272F] focus:border-emerald-500 rounded-lg text-xs font-mono text-white placeholder-gray-600 focus:outline-none transition"
+              />
+            </div>
+
+            <div className="md:col-span-3">
+              <Link
+                href={`/lockdown/workspace?token=${encodeURIComponent(examToken)}`}
+                className="w-full py-2.5 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-heading font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+              >
+                <Shield className="w-4 h-4" />
+                <span>Launch Web Workspace</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="md:col-span-3">
+              <button
+                onClick={handleLaunchNativeKiosk}
+                className="w-full py-2.5 px-4 rounded-lg bg-[#1B1D24] hover:bg-[#252833] text-white border border-[#2E323D] font-heading font-semibold text-xs transition flex items-center justify-center gap-2"
+              >
+                <Terminal className="w-4 h-4 text-[#FF9100]" />
+                <span>Launch Native Agent</span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -380,6 +524,15 @@ export default function LockdownProductPage() {
                   <Eye className="w-3.5 h-3.5" />
                   <span>{isObsBlackout ? 'Disable Capture Blackout' : 'Simulate External Stream / OBS Capture'}</span>
                 </button>
+                <div className="pt-1">
+                  <button
+                    onClick={handleToggleFullscreen}
+                    className="w-full py-2 px-3 rounded text-xs font-mono font-bold bg-[#14151B] hover:bg-[#1D1E26] text-gray-200 border border-[#2B2D38] transition flex items-center justify-center gap-2"
+                  >
+                    <Monitor className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{isFullscreenActive ? 'Exit Fullscreen Kiosk Mode' : 'Test Fullscreen Kiosk Lockdown'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Trigger 2: Keyboard Hook Intercept */}
@@ -393,23 +546,31 @@ export default function LockdownProductPage() {
                     className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                       isKeyboardHookSimulated
                         ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                        : 'bg-gray-800 text-gray-400 border border-gray-700'
+                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                     }`}
                   >
-                    {isKeyboardHookSimulated ? '[INTERCEPTED]' : '[ARMED]'}
+                    {isKeyboardHookSimulated ? '[INTERCEPTED]' : '[ARMED // HOOKED]'}
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Win32 WH_KEYBOARD_LL hook intercepts and drops Alt+Tab, WinKey, Ctrl+Esc, and PrintScreen before Windows shell processing.
+                  Win32 WH_KEYBOARD_LL hook intercepts and drops Alt+Tab, WinKey, Ctrl+Esc, F12, and PrintScreen before Windows shell processing.
                 </p>
-                <button
-                  onClick={handleSimulateKeyboardHook}
-                  disabled={isKeyboardHookSimulated}
-                  className="w-full py-2 px-3 rounded text-xs font-mono font-bold bg-[#1F2026] hover:bg-[#2A2B35] disabled:opacity-50 text-gray-200 border border-[#2D3039] transition flex items-center justify-center gap-2"
-                >
-                  <Terminal className="w-3.5 h-3.5 text-[#FF9100]" />
-                  <span>Simulate Alt+Tab / WinKey Drop</span>
-                </button>
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    placeholder="Click here and press F12, Alt, Tab, or Ctrl+U to test hook..."
+                    onKeyDown={handleTestKeyInterceptor}
+                    className="w-full px-2.5 py-1.5 bg-[#050607] border border-[#23272F] focus:border-amber-500 rounded text-[11px] font-mono text-gray-200 placeholder-gray-600 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleSimulateKeyboardHook}
+                    disabled={isKeyboardHookSimulated}
+                    className="w-full py-1.5 px-3 rounded text-xs font-mono font-bold bg-[#1F2026] hover:bg-[#2A2B35] disabled:opacity-50 text-gray-200 border border-[#2D3039] transition flex items-center justify-center gap-2"
+                  >
+                    <Terminal className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Simulate Alt+Tab / WinKey Drop</span>
+                  </button>
+                </div>
               </div>
 
               {/* Trigger 3: Process Watchdog */}

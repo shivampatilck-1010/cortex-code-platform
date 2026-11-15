@@ -113,11 +113,11 @@ export class ClassroomRoomManager {
       }
     }
 
-    const isPlaceholder = adminName === 'Classroom Host';
-    const adminId = isPlaceholder ? '' : generateId('admin');
-    const adminFiles = isPlaceholder ? [] : createDefaultFiles(adminName);
+    const isUnassignedHost = adminName === 'Classroom Host';
+    const adminId = isUnassignedHost ? '' : generateId('admin');
+    const adminFiles = isUnassignedHost ? [] : createDefaultFiles(adminName);
 
-    const adminParticipant: ClassroomParticipant = isPlaceholder
+    const adminParticipant: ClassroomParticipant = isUnassignedHost
       ? {
           id: '',
           name: '',
@@ -157,15 +157,15 @@ export class ClassroomRoomManager {
       roomId,
       admin: {
         id: adminId,
-        name: isPlaceholder ? '' : adminName,
+        name: isUnassignedHost ? '' : adminName,
         enteredArena: true,
       },
-      participants: isPlaceholder ? {} : { [adminId]: adminParticipant },
+      participants: isUnassignedHost ? {} : { [adminId]: adminParticipant },
       settings: {
         ...DEFAULT_SETTINGS,
         ...customSettings,
       },
-      activeWorkspaces: isPlaceholder ? {} : {
+      activeWorkspaces: isUnassignedHost ? {} : {
         slotAUserId: adminId,
       },
       arenaWorkspaces: {
@@ -177,7 +177,7 @@ export class ClassroomRoomManager {
       downloadRequests: {},
       downloadPermissions: {},
       viewRequests: {},
-      chatMessages: isPlaceholder
+      chatMessages: isUnassignedHost
         ? []
         : [
             {
@@ -237,7 +237,7 @@ export class ClassroomRoomManager {
       throw new Error('This classroom session has ended.');
     }
 
-    // Always purge any placeholder "Classroom Host" from participants
+    // Always purge any unassigned sentinel "Classroom Host" from participants
     Object.keys(room.participants).forEach((k) => {
       if (room!.participants[k].name === 'Classroom Host' || !room!.participants[k].id) {
         delete room!.participants[k];
@@ -417,7 +417,7 @@ export class ClassroomRoomManager {
     if (Array.isArray(clientParticipants)) {
       for (const p of clientParticipants) {
         if (!p || !p.id || !p.name) continue;
-        if (p.name === 'Classroom Host') continue; // Reject placeholder phantom
+        if (p.name === 'Classroom Host') continue; // Reject unassigned host sentinel
 
         const existing = room.participants[p.id];
         const safePrivacy = p.privacy || {

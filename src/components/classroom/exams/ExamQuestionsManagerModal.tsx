@@ -183,7 +183,7 @@ export function ExamQuestionsManagerModal({ classroomId, exam, onClose }: ExamQu
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!promptText.trim()) {
-      alert('Prompt text is required');
+      setError('Prompt text is required');
       return;
     }
 
@@ -262,7 +262,7 @@ export function ExamQuestionsManagerModal({ classroomId, exam, onClose }: ExamQu
       resetForm();
       fetchQuestions();
     } catch (err: any) {
-      alert(err.message || 'Error saving question');
+      setError(err.message || 'Error saving question');
     }
   };
 
@@ -278,7 +278,7 @@ export function ExamQuestionsManagerModal({ classroomId, exam, onClose }: ExamQu
       }
       fetchQuestions();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete question');
+      setError(err.message || 'Failed to delete question');
     }
   };
 

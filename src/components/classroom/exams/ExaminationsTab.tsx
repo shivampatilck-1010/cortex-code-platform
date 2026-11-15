@@ -118,7 +118,7 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser }: Examina
       }
       setExams((prev) => prev.filter((e) => e.id !== examId));
     } catch (err: any) {
-      alert(err.message || 'Failed to delete examination');
+      setError(err.message || 'Failed to delete examination');
     }
   };
 
@@ -137,7 +137,7 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser }: Examina
       const data = await res.json();
       setExams((prev) => prev.map((e) => (e.id === exam.id ? { ...e, status: data.status } : e)));
     } catch (err: any) {
-      alert(err.message || 'Failed to update publication status');
+      setError(err.message || 'Failed to update publication status');
     }
   };
 

@@ -20,6 +20,12 @@ export default function SubmissionReviewPage() {
   const [feedback, setFeedback] = useState('');
   const [privateNotes, setPrivateNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   useEffect(() => {
     const fetchSubmission = async () => {
@@ -67,12 +73,12 @@ export default function SubmissionReviewPage() {
       } : null);
 
       if (!isDraft) {
-        alert('Grade released to student.');
+        showToast('Grade released to student.', 'success');
       } else {
-        alert('Draft saved.');
+        showToast('Draft saved successfully.', 'success');
       }
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      showToast(`Error: ${err.message}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -226,6 +232,21 @@ export default function SubmissionReviewPage() {
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-2.5 rounded-lg border text-xs font-mono shadow-xl transition-all ${
+          toast.type === 'error' 
+            ? 'bg-red-950/90 border-red-800 text-red-200' 
+            : 'bg-emerald-950/90 border-emerald-800 text-emerald-200'
+        }`}>
+          {toast.type === 'error' ? (
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }

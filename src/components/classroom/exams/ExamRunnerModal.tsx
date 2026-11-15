@@ -534,7 +534,7 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
       }
     } catch (err: any) {
       setAutosaveStatus('failed');
-      alert(err.message || 'Failed to submit examination');
+      setError(err.message || 'Failed to submit examination');
     } finally {
       setIsSubmittingFinal(false);
     }

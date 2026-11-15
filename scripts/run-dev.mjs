@@ -7,17 +7,19 @@ const WS_PORT = 3002;
 const GATEWAY_PORT = 3000;
 
 const isWin = process.platform === 'win32';
-const nextBin = isWin ? '.\\node_modules\\.bin\\next.cmd' : './node_modules/.bin/next';
-
-// Start Next.js dev server on 3001
-const nextChild = spawn(nextBin, ['dev', '-p', String(NEXT_PORT), '-H', '127.0.0.1'], {
-  stdio: 'inherit',
-  shell: isWin,
-  env: {
-    ...process.env,
-    PORT: String(NEXT_PORT),
-  },
-});
+// Start Next.js dev server on 3001 with direct node process execution and 4GB heap space
+const nextChild = spawn(
+  process.execPath,
+  ['--max-old-space-size=4096', './node_modules/next/dist/bin/next', 'dev', '-p', String(NEXT_PORT), '-H', '127.0.0.1'],
+  {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      PORT: String(NEXT_PORT),
+      NODE_OPTIONS: '--max-old-space-size=4096',
+    },
+  }
+);
 
 nextChild.on('exit', (code, signal) => {
   if (wsChild) wsChild.kill();

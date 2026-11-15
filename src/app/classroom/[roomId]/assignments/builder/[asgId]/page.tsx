@@ -297,8 +297,16 @@ export default function AssignmentBuilderPage({
   const [isSaving, setIsSaving] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importJsonText, setImportJsonText] = useState('');
-  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const showNotice = (message: string, type: 'success' | 'error' = 'success', duration = 4000) => {
+    setNotice({ type, message });
+    if (duration > 0) {
+      setTimeout(() => setNotice(null), duration);
+    }
+  };
 
   useEffect(() => {
     const handleParams = (p: { roomId?: string; asgId?: string }) => {
@@ -359,8 +367,7 @@ export default function AssignmentBuilderPage({
     setStarterCode(tpl.starterCode);
     setTestCases(tpl.testCases);
     setMaxMarks(100);
-    setImportNotice(`Loaded template: ${tpl.name}`);
-    setTimeout(() => setImportNotice(null), 3500);
+    showNotice(`Loaded template: ${tpl.name}`, 'success');
   };
 
   const handleExportJson = () => {
@@ -391,7 +398,13 @@ export default function AssignmentBuilderPage({
 
   const handleImportJson = (text: string) => {
     try {
+      setImportError(null);
       const data = JSON.parse(text);
+      if (!data || typeof data !== 'object') {
+        setImportError("Invalid JSON structure. Root must be an object.");
+        showNotice("Invalid JSON format. Please verify the JSON syntax and try again.", "error");
+        return;
+      }
       if (data.title) setTitle(data.title);
       if (data.description) setDescription(data.description);
       if (data.instructions) setInstructions(data.instructions);
@@ -406,10 +419,10 @@ export default function AssignmentBuilderPage({
         setTestCases(data.testCases);
       }
       setShowImportModal(false);
-      setImportNotice("Assignment successfully loaded from JSON file!");
-      setTimeout(() => setImportNotice(null), 3500);
+      showNotice("Assignment successfully loaded from JSON file!", "success");
     } catch (e: any) {
-      alert("Invalid JSON format. Please verify the JSON syntax and try again.");
+      setImportError("Invalid JSON syntax. Please verify and try again.");
+      showNotice("Invalid JSON format. Please verify the JSON syntax and try again.", "error");
     }
   };
 
@@ -426,13 +439,13 @@ export default function AssignmentBuilderPage({
 
   const handleSave = async () => {
     if (!title.trim() || !description.trim()) {
-      alert("Please provide both an Assignment Title and a Problem Statement");
+      showNotice("Please provide both an Assignment Title and a Problem Statement", "error");
       return;
     }
     
     const hasExecutable = testCases.some(tc => (tc.expectedOutput || '').trim() !== '');
     if (!hasExecutable) {
-      alert("At least one testcase with expected output is required for autograding");
+      showNotice("At least one testcase with expected output is required for autograding", "error");
       return;
     }
 
@@ -469,11 +482,11 @@ export default function AssignmentBuilderPage({
       if (data.success || data.assignment) {
         router.push(`/classroom`);
       } else {
-        alert(data.error || "Failed to publish assignment");
+        showNotice(data.error || "Failed to publish assignment", "error");
       }
     } catch (err) {
       console.error(err);
-      alert("Connection error occurred while saving");
+      showNotice("Connection error occurred while saving", "error");
     } finally {
       setIsSaving(false);
     }
@@ -575,13 +588,29 @@ export default function AssignmentBuilderPage({
       </header>
 
       {/* Floating Notice Banner */}
-      {importNotice && (
-        <div className="bg-emerald-950/90 border-b border-emerald-800 px-6 py-2.5 flex items-center justify-between text-xs font-mono text-emerald-300 transition-all">
+      {notice && (
+        <div className={`border-b px-6 py-2.5 flex items-center justify-between text-xs font-mono transition-all ${
+          notice.type === 'error'
+            ? 'bg-red-950/90 border-red-800 text-red-300'
+            : 'bg-emerald-950/90 border-emerald-800 text-emerald-300'
+        }`}>
           <div className="flex items-center space-x-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>{importNotice}</span>
+            {notice.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            )}
+            <span>{notice.message}</span>
           </div>
-          <button onClick={() => setImportNotice(null)} className="text-emerald-400 hover:text-white p-0.5 rounded" aria-label="Dismiss notice"><X className="w-4 h-4" /></button>
+          <button 
+            onClick={() => setNotice(null)} 
+            className={`p-0.5 rounded hover:text-white ${
+              notice.type === 'error' ? 'text-red-400' : 'text-emerald-400'
+            }`} 
+            aria-label="Dismiss notice"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -973,6 +1002,14 @@ export default function AssignmentBuilderPage({
                 <span>Choose .json file from your computer</span>
               </button>
             </div>
+
+            {/* Error Message */}
+            {importError && (
+              <div className="p-3 bg-red-950/50 border border-red-800 rounded-xl flex items-center space-x-2 text-xs font-mono text-red-300">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{importError}</span>
+              </div>
+            )}
 
             {/* Paste Raw JSON */}
             <div>

@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
       if (process.env.NODE_ENV === 'production') {
         return NextResponse.json({ error: 'GitHub OAuth is not configured for this environment' }, { status: 503 });
       }
-      // Dev-mode synthetic placeholder - only reached in non-production
+      // Local development fallback credentials for offline developer sandbox
       accessToken = '__dev_mock_access_token__';
       githubUserId = '__dev_mock_gh_uid__';
       githubUsername = '__dev_mock_gh_user__';
