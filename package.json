@@ -14,7 +14,8 @@
     "build:vinext": "vinext build",
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
-    "deploy:staging": "node scripts/deploy-staging.mjs"
+    "deploy:staging": "node scripts/deploy-staging.mjs",
+    "deploy:production": "node scripts/deploy-production.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",

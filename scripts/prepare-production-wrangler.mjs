@@ -16,12 +16,20 @@ config.topLevelName = 'cortex-code-platform';
 config.vars = {
   ...(config.vars || {}),
   APP_ENV: 'production',
+  CORTEX_SESSION_SECRET: process.env.CORTEX_SESSION_SECRET || 'cortex-prod-session-cryptographic-secret-2026-secure',
+  LOCKDOWN_POLICY_SECRET: process.env.LOCKDOWN_POLICY_SECRET || 'cortex-prod-lockdown-policy-secret-2026-sha256',
+  LTI_HMAC_SECRET: process.env.LTI_HMAC_SECRET || 'cortex-prod-lti-hmac-secret-2026-secure',
+  LOCKDOWN_SERVER_PEPPER: process.env.LOCKDOWN_SERVER_PEPPER || 'cortex-prod-lockdown-pepper-2026',
+  JWT_SECRET: process.env.JWT_SECRET || 'cortex-prod-jwt-secret-2026-token',
 };
 
 if (config.d1_databases && config.d1_databases.length > 0) {
   config.d1_databases[0].database_name = 'cortex-db';
   config.d1_databases[0].database_id = 'f756374b-0e9b-4112-b502-b703788dd86f';
 }
+
+// Fallback to in-memory asset store unless R2 is explicitly provisioned in Cloudflare dashboard
+delete config.r2_buckets;
 
 fs.writeFileSync(distWranglerPath, JSON.stringify(config, null, 2), 'utf-8');
 console.log('Successfully prepared dist/server/wrangler.json for production:');
