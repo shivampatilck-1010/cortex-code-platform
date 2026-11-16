@@ -139,7 +139,61 @@ const getMonacoLangForFile = (filename: string, defaultMonacoLang: string): stri
   return (ext && map[ext]) ? map[ext] : defaultMonacoLang;
 };
 
-export default function CloudIDEPage() {
+class IdeErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[IdeErrorBoundary] Uncaught IDE error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#0d0e11] p-6 text-center text-white font-mono">
+          <div className="max-w-md rounded-xl border border-white/10 bg-[#16181d] p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-[#FF9100]">IDE Session Recovery</h2>
+            <p className="mt-2 text-xs text-zinc-400">
+              An unexpected client error occurred in the workspace. Your code in local cache is safe.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <button
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="rounded-lg bg-[#FF9100] px-4 py-2 text-xs font-bold text-black hover:bg-[#ffaa33]"
+              >
+                Reset Workspace
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-lg border border-white/20 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+              >
+                Reload Window
+              </button>
+              <a
+                href="/"
+                className="rounded-lg border border-white/20 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+              >
+                Return to Home
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function CloudIDEPageInner() {
   const router = useRouter();
   const [projectId, setProjectId] = useState<string | null>(null);
   const [isProjectLoading, setIsProjectLoading] = useState(true);
@@ -1304,5 +1358,12 @@ export default function CloudIDEPage() {
       </section>
     </div>
   );
+}
 
+export default function CloudIDEPage() {
+  return (
+    <IdeErrorBoundary>
+      <CloudIDEPageInner />
+    </IdeErrorBoundary>
+  );
 }

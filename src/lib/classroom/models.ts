@@ -475,24 +475,31 @@ export type ExamIntegrityEventType =
   | 'multi_monitor_connected'
   | 'vm_environment_detected'
   | 'proctor_note_added'
-  | 'flag_cleared';
+  | 'flag_cleared'
+  | 'hotkey_violation'
+  | 'network_status'
+  | 'right_click_attempt';
 
 export type IntegrityEventSeverity = 'informational' | 'low' | 'medium' | 'high';
 
 export function getIntegrityEventSeverity(eventType: ExamIntegrityEventType): IntegrityEventSeverity {
   switch (eventType) {
     case 'reconnect':
+    case 'network_status':
     case 'proctor_action':
     case 'proctor_note_added':
     case 'flag_cleared':
       return 'informational';
     case 'paste_attempt':
+    case 'right_click_attempt':
     case 'audio_anomaly':
     case 'face_absent':
       return 'low';
     case 'fullscreen_exit':
     case 'window_blur':
     case 'tab_hidden':
+    case 'blocked_key_attempt':
+    case 'hotkey_violation':
     case 'audio_flatline_disconnected':
     case 'scene_shift_detected':
     case 'camera_revoked':

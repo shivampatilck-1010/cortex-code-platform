@@ -1924,6 +1924,7 @@ export function CortexLockdownApp() {
                           }}
                         />
                       </div>
+                    </div>
                   )}
                 </div>
 

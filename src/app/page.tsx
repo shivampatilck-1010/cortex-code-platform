@@ -704,8 +704,45 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
   );
 }
 
+class LandingErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.warn('[LandingErrorBoundary] Caught unhandled landing error:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#070708] text-white flex flex-col items-center justify-center p-8 text-center font-mono">
+          <div className="max-w-md space-y-4">
+            <h1 className="text-2xl font-bold tracking-tight text-[#FF9100]">CORTEX PLATFORM</h1>
+            <p className="text-sm text-zinc-400">High-performance universal code platform and examination kiosk.</p>
+            <div className="flex flex-wrap gap-3 justify-center pt-4">
+              <a href="/ide" className="px-5 py-2.5 rounded-full bg-[#FF9100] text-black font-semibold text-xs hover:bg-[#ffaa33]">Launch Cloud IDE</a>
+              <a href="/classroom" className="px-5 py-2.5 rounded-full border border-zinc-700 text-white text-xs hover:border-[#FF9100]">Classroom Hub</a>
+              <a href="/arena" className="px-5 py-2.5 rounded-full border border-zinc-700 text-white text-xs hover:border-[#FF9100]">Competitive Arena</a>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /* ================= MASTER EXPORT: CORTEX LANDING PAGE ================= */
-export default function CortexLandingPage() {
+function CortexLandingPageInner() {
   // Default Light Theme (Alabaster #F8FAFC) with Dark Mode toggle (Obsidian #08090A)
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [selectedRuntime, setSelectedRuntime] = useState(0);
@@ -1185,5 +1222,13 @@ export default function CortexLandingPage() {
         <LandingFooter isDark={isDark} />
       </div>
     </div>
+  );
+}
+
+export default function CortexLandingPage() {
+  return (
+    <LandingErrorBoundary>
+      <CortexLandingPageInner />
+    </LandingErrorBoundary>
   );
 }

@@ -661,14 +661,17 @@ export async function loadEncryptedAnswers(options: LoadAnswerOptions): Promise<
   let envelopeJson: string | null = null;
 
   // If customStorageDir is explicitly provided (e.g. in test suites), check physical disk first
-  if (customStorageDir && typeof process !== 'undefined' && process.versions?.node) {
+  if (customStorageDir && isNodeRuntime()) {
+    const fs = getNodeFs();
     const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
-    if (fs.existsSync(diskPath)) {
+    if (fs && diskPath && fs.existsSync(diskPath)) {
       envelopeJson = fs.readFileSync(diskPath, 'utf8');
-      try {
-        envelope = JSON.parse(envelopeJson);
-      } catch (err) {
-        throw new Error('Corrupted storage envelope: Invalid JSON');
+      if (envelopeJson) {
+        try {
+          envelope = JSON.parse(envelopeJson);
+        } catch (err) {
+          throw new Error('Corrupted storage envelope: Invalid JSON');
+        }
       }
     }
   }
@@ -865,9 +868,10 @@ export async function listBufferedOfflineAnswers(
   }
 
   // 3. Check Physical Disk fallback (Node.js / desktop / test harnesses)
-  if (results.length === 0 && typeof process !== 'undefined' && process.versions?.node) {
+  if (results.length === 0 && isNodeRuntime()) {
+    const fs = getNodeFs();
     const diskPath = getStorageDiskPath(studentId, examId, customStorageDir);
-    if (fs.existsSync(diskPath)) {
+    if (fs && diskPath && fs.existsSync(diskPath)) {
       try {
         const raw = fs.readFileSync(diskPath, 'utf8');
         const env = JSON.parse(raw) as AnswerEnvelope;

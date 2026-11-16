@@ -243,6 +243,7 @@ function runProcess(
     // Build isolated environment: ONLY allowlisted variables
     const safeEnv: NodeJS.ProcessEnv = {
       NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
     };
     for (const key of ALLOWED_ENV_VARS) {
       if (process.env[key] !== undefined) {

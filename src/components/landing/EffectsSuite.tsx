@@ -9,6 +9,31 @@ export function cn(...inputs: (string | undefined | null | false)[]) {
   return inputs.filter(Boolean).join(' ');
 }
 
+export class SafeVisualEffectBoundary extends React.Component<
+  { children: React.ReactNode; fallback?: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.warn('[SafeVisualEffectBoundary] Visual effect caught and suppressed:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || null;
+    }
+    return this.props.children;
+  }
+}
+
 /* ============================================================================
  * 8. INTERACTIVE CURSOR-GLOW CTA BUTTON (CSS Variables --x / --y + Right Arrow)
  * ========================================================================== */
@@ -230,17 +255,22 @@ export function LiquidEther({
         this.container = container;
         this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
         this.resize();
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        this.renderer.autoClear = false;
-        this.renderer.setClearColor(new THREE.Color(0x000000), 0);
-        this.renderer.setPixelRatio(this.pixelRatio);
-        this.renderer.setSize(this.width, this.height);
-        const el = this.renderer.domElement;
-        el.style.width = '100%';
-        el.style.height = '100%';
-        el.style.display = 'block';
-        this.clock = new THREE.Clock();
-        this.clock.start();
+        try {
+          this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, failIfMajorPerformanceCaveat: false });
+          this.renderer.autoClear = false;
+          this.renderer.setClearColor(new THREE.Color(0x000000), 0);
+          this.renderer.setPixelRatio(this.pixelRatio);
+          this.renderer.setSize(this.width, this.height);
+          const el = this.renderer.domElement;
+          el.style.width = '100%';
+          el.style.height = '100%';
+          el.style.display = 'block';
+          this.clock = new THREE.Clock();
+          this.clock.start();
+        } catch (e) {
+          console.warn('[LiquidEther] WebGLRenderer init failed, falling back:', e);
+          this.renderer = null;
+        }
       }
 
       resize() {
@@ -622,85 +652,118 @@ export function LiquidEther({
     }
 
     const wrapper = mountRef.current;
-    Common.init(wrapper);
-    Mouse.init(wrapper);
-    Mouse.autoIntensity = autoIntensity;
-    Mouse.takeoverDuration = takeoverDuration;
-
-    const sim = new Simulation();
-    const outScene = new THREE.Scene();
-    const outCam = new THREE.Camera();
-    outScene.add(
-      new THREE.Mesh(
-        new THREE.PlaneGeometry(2, 2),
-        new THREE.RawShaderMaterial({
-          vertexShader: face_vert,
-          fragmentShader: color_frag,
-          transparent: true,
-          depthWrite: false,
-          uniforms: { velocity: { value: sim.fbos.vel_0.texture }, boundarySpace: { value: new THREE.Vector2() }, palette: { value: paletteTex }, bgColor: { value: bgVec4 } },
-        })
-      )
-    );
-
-    if (Common.renderer) wrapper.insertBefore(Common.renderer.domElement, wrapper.firstChild);
-
-    const manager = {
+    let manager = {
       lastUserInteraction: performance.now(),
       running: true,
     };
-    const autoDriver = new AutoDriver(Mouse, manager, {
-      enabled: autoDemo,
-      speed: autoSpeed,
-      resumeDelay: autoResumeDelay,
-      rampDuration: autoRampDuration,
-    });
-    Mouse.onInteract = () => {
-      manager.lastUserInteraction = performance.now();
-      autoDriver.forceStop();
-    };
+    let io: IntersectionObserver | null = null;
+    let ro: ResizeObserver | null = null;
 
-    let isVisible = true;
-    const io = new IntersectionObserver(([entry]) => {
-      isVisible = entry.isIntersecting;
-      if (isVisible && !rafRef.current && manager.running) {
-        loop();
-      }
-    }, { threshold: 0.05 });
-    io.observe(wrapper);
-
-    const loop = () => {
-      if (!manager.running || !isVisible) {
-        rafRef.current = null;
+    try {
+      Common.init(wrapper);
+      if (!Common.renderer) {
+        console.warn('[LiquidEther] WebGLRenderer not available, skipping.');
         return;
       }
-      autoDriver.update();
-      Mouse.update();
-      Common.update();
-      sim.update();
-      if (Common.renderer) {
-        Common.renderer.setRenderTarget(null);
-        Common.renderer.render(outScene, outCam);
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    loop();
 
-    const ro = new ResizeObserver(() => {
-      if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
-      resizeRafRef.current = requestAnimationFrame(() => {
-        Common.resize();
-        sim.resize();
+      Mouse.init(wrapper);
+      Mouse.autoIntensity = autoIntensity;
+      Mouse.takeoverDuration = takeoverDuration;
+
+      const sim = new Simulation();
+      const outScene = new THREE.Scene();
+      const outCam = new THREE.Camera();
+      outScene.add(
+        new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 2),
+          new THREE.RawShaderMaterial({
+            vertexShader: face_vert,
+            fragmentShader: color_frag,
+            transparent: true,
+            depthWrite: false,
+            uniforms: { velocity: { value: sim.fbos.vel_0.texture }, boundarySpace: { value: new THREE.Vector2() }, palette: { value: paletteTex }, bgColor: { value: bgVec4 } },
+          })
+        )
+      );
+
+      wrapper.insertBefore(Common.renderer.domElement, wrapper.firstChild);
+
+      const autoDriver = new AutoDriver(Mouse, manager, {
+        enabled: autoDemo,
+        speed: autoSpeed,
+        resumeDelay: autoResumeDelay,
+        rampDuration: autoRampDuration,
       });
-    });
-    ro.observe(wrapper);
-    resizeObserverRef.current = ro;
+      Mouse.onInteract = () => {
+        manager.lastUserInteraction = performance.now();
+        autoDriver.forceStop();
+      };
+
+      let isVisible = true;
+      const onContextLost = (e: Event) => {
+        e.preventDefault();
+        console.warn('[LiquidEther] WebGL context lost, halting animation.');
+        manager.running = false;
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      };
+
+      if (Common.renderer?.domElement) {
+        Common.renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
+      }
+
+      io = new IntersectionObserver(([entry]) => {
+        isVisible = entry.isIntersecting;
+        if (isVisible && !rafRef.current && manager.running) {
+          loop();
+        }
+      }, { threshold: 0.05 });
+      io.observe(wrapper);
+
+      const loop = () => {
+        if (!manager.running || !isVisible) {
+          rafRef.current = null;
+          return;
+        }
+        try {
+          autoDriver.update();
+          Mouse.update();
+          Common.update();
+          sim.update();
+          if (Common.renderer) {
+            Common.renderer.setRenderTarget(null);
+            Common.renderer.render(outScene, outCam);
+          }
+          rafRef.current = requestAnimationFrame(loop);
+        } catch (err) {
+          console.warn('[LiquidEther] Render loop halted safely:', err);
+          manager.running = false;
+          rafRef.current = null;
+        }
+      };
+      loop();
+
+      ro = new ResizeObserver(() => {
+        if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = requestAnimationFrame(() => {
+          try {
+            Common.resize();
+            sim.resize();
+          } catch (_) {}
+        });
+      });
+      ro.observe(wrapper);
+      resizeObserverRef.current = ro;
+    } catch (setupErr) {
+      console.warn('[LiquidEther] Init error suppressed:', setupErr);
+      manager.running = false;
+    }
 
     return () => {
       manager.running = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      io.disconnect();
-      ro.disconnect();
+      if (io) io.disconnect();
+      if (ro) ro.disconnect();
       Mouse.dispose();
       if (Common.renderer) {
         const c = Common.renderer.domElement;
@@ -711,11 +774,17 @@ export function LiquidEther({
   }, [colors, autoDemo, autoSpeed, autoIntensity, takeoverDuration, autoResumeDelay, autoRampDuration]);
 
   return (
-    <div
-      ref={mountRef}
-      className={`relative h-full w-full overflow-hidden pointer-events-none touch-none ${className}`}
-      style={style}
-    />
+    <SafeVisualEffectBoundary
+      fallback={
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-indigo-500/5 pointer-events-none" />
+      }
+    >
+      <div
+        ref={mountRef}
+        className={`relative h-full w-full overflow-hidden pointer-events-none touch-none ${className}`}
+        style={style}
+      />
+    </SafeVisualEffectBoundary>
   );
 }
 
@@ -767,6 +836,15 @@ export function TubesBackground({
     const initTubes = async () => {
       if (!canvasRef.current) return;
       try {
+        canvasRef.current.addEventListener('webglcontextlost', (e) => {
+          e.preventDefault();
+          console.warn('[TubesBackground] WebGL context lost.');
+        }, false);
+
+        // Verify WebGL is actually usable before attempting CDN module load
+        const gl = canvasRef.current.getContext('webgl') || canvasRef.current.getContext('experimental-webgl');
+        if (!gl) return;
+
         // @ts-expect-error -- Dynamic CDN import of untyped ES module; bundler cannot resolve external URL at build time.
         const module = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/npm/threejs-components@0.0.19/build/cursors/tubes1.min.js');
         const TubesCursor = module.default;
@@ -796,23 +874,33 @@ export function TubesBackground({
 
   const handleClick = () => {
     if (!enableClickInteraction || !tubesRef.current?.tubes) return;
-    tubesRef.current.tubes.setColors(randomColors(3));
-    tubesRef.current.tubes.setLightsColors(randomColors(4));
+    try {
+      tubesRef.current.tubes.setColors(randomColors(3));
+      tubesRef.current.tubes.setLightsColors(randomColors(4));
+    } catch (_) {}
   };
 
   return (
-    <div
-      ref={containerRef}
-      onClick={handleClick}
-      className={cn('relative h-full w-full overflow-hidden', className)}
+    <SafeVisualEffectBoundary
+      fallback={
+        <div className={cn('relative h-full w-full overflow-hidden bg-zinc-950/60 rounded-xl', className)}>
+          <div className="relative z-10 h-full w-full">{children}</div>
+        </div>
+      }
     >
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 block h-full w-full opacity-55 transition-opacity duration-300 group-hover:opacity-85"
-        style={{ touchAction: 'none' }}
-      />
-      <div className="relative z-10 h-full w-full">{children}</div>
-    </div>
+      <div
+        ref={containerRef}
+        onClick={handleClick}
+        className={cn('relative h-full w-full overflow-hidden', className)}
+      >
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 block h-full w-full opacity-55 transition-opacity duration-300 group-hover:opacity-85"
+          style={{ touchAction: 'none' }}
+        />
+        <div className="relative z-10 h-full w-full">{children}</div>
+      </div>
+    </SafeVisualEffectBoundary>
   );
 }
 
@@ -949,54 +1037,59 @@ export const InteractiveWavesBackground: React.FC<WavesProps> = ({
         frameIdRef.current = null;
         return;
       }
-      mouse.sx += (mouse.x - mouse.sx) * 0.1;
-      mouse.sy += (mouse.y - mouse.sy) * 0.1;
-      const dx = mouse.x - mouse.lx, dy = mouse.y - mouse.ly;
-      const d = Math.hypot(dx, dy);
-      mouse.v = d;
-      mouse.vs += (d - mouse.vs) * 0.1;
-      mouse.vs = Math.min(100, mouse.vs);
-      mouse.lx = mouse.x;
-      mouse.ly = mouse.y;
-      mouse.a = Math.atan2(dy, dx);
+      try {
+        mouse.sx += (mouse.x - mouse.sx) * 0.1;
+        mouse.sy += (mouse.y - mouse.sy) * 0.1;
+        const dx = mouse.x - mouse.lx, dy = mouse.y - mouse.ly;
+        const d = Math.hypot(dx, dy);
+        mouse.v = d;
+        mouse.vs += (d - mouse.vs) * 0.1;
+        mouse.vs = Math.min(100, mouse.vs);
+        mouse.lx = mouse.x;
+        mouse.ly = mouse.y;
+        mouse.a = Math.atan2(dy, dx);
 
-      const { waveSpeedX, waveSpeedY, waveAmpX, waveAmpY, friction, tension, maxCursorMove, lineColor } = configRef.current;
-      lines.forEach((pts) => {
-        pts.forEach((p) => {
-          const move = noiseRef.current.perlin2((p.x + t * waveSpeedX) * 0.002, (p.y + t * waveSpeedY) * 0.0015) * 12;
-          p.wave.x = Math.cos(move) * waveAmpX;
-          p.wave.y = Math.sin(move) * waveAmpY;
-          const pdx = p.x - mouse.sx, pdy = p.y - mouse.sy;
-          const dist = Math.hypot(pdx, pdy);
-          const l = Math.max(150, mouse.vs);
-          if (dist < l) {
-            const s = 1 - dist / l;
-            const f = Math.cos(dist * 0.001) * s;
-            p.cursor.vx += Math.cos(mouse.a) * f * l * mouse.vs * 0.00065;
-            p.cursor.vy += Math.sin(mouse.a) * f * l * mouse.vs * 0.00065;
-          }
-          p.cursor.vx += (0 - p.cursor.x) * tension;
-          p.cursor.vy += (0 - p.cursor.y) * tension;
-          p.cursor.vx *= friction;
-          p.cursor.vy *= friction;
-          p.cursor.x = Math.min(maxCursorMove, Math.max(-maxCursorMove, p.cursor.x + p.cursor.vx * 2));
-          p.cursor.y = Math.min(maxCursorMove, Math.max(-maxCursorMove, p.cursor.y + p.cursor.vy * 2));
+        const { waveSpeedX, waveSpeedY, waveAmpX, waveAmpY, friction, tension, maxCursorMove, lineColor } = configRef.current;
+        lines.forEach((pts) => {
+          pts.forEach((p) => {
+            const move = noiseRef.current.perlin2((p.x + t * waveSpeedX) * 0.002, (p.y + t * waveSpeedY) * 0.0015) * 12;
+            p.wave.x = Math.cos(move) * waveAmpX;
+            p.wave.y = Math.sin(move) * waveAmpY;
+            const pdx = p.x - mouse.sx, pdy = p.y - mouse.sy;
+            const dist = Math.hypot(pdx, pdy);
+            const l = Math.max(150, mouse.vs);
+            if (dist < l) {
+              const s = 1 - dist / l;
+              const f = Math.cos(dist * 0.001) * s;
+              p.cursor.vx += Math.cos(mouse.a) * f * l * mouse.vs * 0.00065;
+              p.cursor.vy += Math.sin(mouse.a) * f * l * mouse.vs * 0.00065;
+            }
+            p.cursor.vx += (0 - p.cursor.x) * tension;
+            p.cursor.vy += (0 - p.cursor.y) * tension;
+            p.cursor.vx *= friction;
+            p.cursor.vy *= friction;
+            p.cursor.x = Math.min(maxCursorMove, Math.max(-maxCursorMove, p.cursor.x + p.cursor.vx * 2));
+            p.cursor.y = Math.min(maxCursorMove, Math.max(-maxCursorMove, p.cursor.y + p.cursor.vy * 2));
+          });
         });
-      });
 
-      ctx.clearRect(0, 0, bounds.width, bounds.height);
-      ctx.beginPath();
-      ctx.strokeStyle = lineColor;
-      lines.forEach((points) => {
-        points.forEach((p, idx) => {
-          const x = p.x + p.wave.x + p.cursor.x;
-          const y = p.y + p.wave.y + p.cursor.y;
-          if (idx === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+        ctx.clearRect(0, 0, bounds.width, bounds.height);
+        ctx.beginPath();
+        ctx.strokeStyle = lineColor;
+        lines.forEach((points) => {
+          points.forEach((p, idx) => {
+            const x = p.x + p.wave.x + p.cursor.x;
+            const y = p.y + p.wave.y + p.cursor.y;
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
         });
-      });
-      ctx.stroke();
-      frameIdRef.current = requestAnimationFrame(tick);
+        ctx.stroke();
+        frameIdRef.current = requestAnimationFrame(tick);
+      } catch (err) {
+        console.warn('[GhostCursor] Canvas tick error suppressed:', err);
+        frameIdRef.current = null;
+      }
     };
 
     const onMouseMove = (e: MouseEvent) => {
@@ -1190,25 +1283,30 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
 
       let startTime = performance.now();
       const animate = (now: number) => {
-        animId = requestAnimationFrame(animate);
-        const elapsed = (now - startTime) / 1000;
+        try {
+          animId = requestAnimationFrame(animate);
+          const elapsed = (now - startTime) / 1000;
 
-        // Smooth follow
-        currentMouse.lerp(targetMouse, 1.0 - inertia);
-        material.uniforms.iMouse.value.copy(currentMouse);
+          // Smooth follow
+          currentMouse.lerp(targetMouse, 1.0 - inertia);
+          material.uniforms.iMouse.value.copy(currentMouse);
 
-        // Update trail buffer
-        for (let i = maxTrail - 1; i > 0; i--) {
-          trailBuf[i].copy(trailBuf[i - 1]);
+          // Update trail buffer
+          for (let i = maxTrail - 1; i > 0; i--) {
+            trailBuf[i].copy(trailBuf[i - 1]);
+          }
+          trailBuf[0].copy(currentMouse);
+
+          for (let i = 0; i < maxTrail; i++) {
+            material.uniforms.iPrevMouse.value[i].copy(trailBuf[i]);
+          }
+
+          material.uniforms.iTime.value = elapsed;
+          renderer?.render(scene, camera);
+        } catch (err) {
+          console.warn('[GhostCursor] Render frame halted:', err);
+          if (animId) cancelAnimationFrame(animId);
         }
-        trailBuf[0].copy(currentMouse);
-
-        for (let i = 0; i < maxTrail; i++) {
-          material.uniforms.iPrevMouse.value[i].copy(trailBuf[i]);
-        }
-
-        material.uniforms.iTime.value = elapsed;
-        renderer?.render(scene, camera);
       };
       animId = requestAnimationFrame(animate);
 
@@ -1229,11 +1327,13 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
   }, [trailLength, inertia, brightness, color, mixBlendMode, edgeIntensity]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{ zIndex, ...style }}
-      className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)}
-    />
+    <SafeVisualEffectBoundary>
+      <div
+        ref={containerRef}
+        style={{ zIndex, ...style }}
+        className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)}
+      />
+    </SafeVisualEffectBoundary>
   );
 };
 
@@ -1307,63 +1407,73 @@ export const Squares: React.FC<SquaresProps> = ({
         animId = null;
         return;
       }
-      const rect = container.getBoundingClientRect();
-      ctx.clearRect(0, 0, rect.width, rect.height);
+      try {
+        const safeSquareSize = Math.max(16, squareSize || 48);
+        const rect = container.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+          animId = requestAnimationFrame(render);
+          return;
+        }
+        ctx.clearRect(0, 0, rect.width, rect.height);
 
-      // Move offset according to direction and speed
-      const step = speed * 0.6;
-      switch (direction) {
-        case 'up':
-          offset.y = (offset.y - step) % squareSize;
-          break;
-        case 'down':
-          offset.y = (offset.y + step) % squareSize;
-          break;
-        case 'left':
-          offset.x = (offset.x - step) % squareSize;
-          break;
-        case 'right':
-          offset.x = (offset.x + step) % squareSize;
-          break;
-        case 'diagonal':
-        default:
-          offset.x = (offset.x + step) % squareSize;
-          offset.y = (offset.y + step) % squareSize;
-          break;
+        // Move offset according to direction and speed
+        const step = speed * 0.6;
+        switch (direction) {
+          case 'up':
+            offset.y = (offset.y - step) % safeSquareSize;
+            break;
+          case 'down':
+            offset.y = (offset.y + step) % safeSquareSize;
+            break;
+          case 'left':
+            offset.x = (offset.x - step) % safeSquareSize;
+            break;
+          case 'right':
+            offset.x = (offset.x + step) % safeSquareSize;
+            break;
+          case 'diagonal':
+          default:
+            offset.x = (offset.x + step) % safeSquareSize;
+            offset.y = (offset.y + step) % safeSquareSize;
+            break;
+        }
+
+        const startX = Math.floor(offset.x % safeSquareSize) - safeSquareSize;
+        const startY = Math.floor(offset.y % safeSquareSize) - safeSquareSize;
+
+        // Draw hovered cell fill if mouse is inside
+        if (mouseRef.current) {
+          const mouseX = mouseRef.current.x;
+          const mouseY = mouseRef.current.y;
+          const col = Math.floor((mouseX - offset.x) / safeSquareSize);
+          const row = Math.floor((mouseY - offset.y) / safeSquareSize);
+          const cellX = col * safeSquareSize + (offset.x % safeSquareSize);
+          const cellY = row * safeSquareSize + (offset.y % safeSquareSize);
+
+          ctx.fillStyle = hoverFillColor;
+          ctx.fillRect(cellX, cellY, safeSquareSize, safeSquareSize);
+        }
+
+        // Draw grid lines
+        ctx.beginPath();
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 1;
+
+        for (let x = startX; x <= rect.width + safeSquareSize; x += safeSquareSize) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, rect.height);
+        }
+        for (let y = startY; y <= rect.height + safeSquareSize; y += safeSquareSize) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(rect.width, y);
+        }
+        ctx.stroke();
+
+        animId = requestAnimationFrame(render);
+      } catch (err) {
+        console.warn('[Squares] Render loop suppressed:', err);
+        animId = null;
       }
-
-      const startX = Math.floor(offset.x % squareSize) - squareSize;
-      const startY = Math.floor(offset.y % squareSize) - squareSize;
-
-      // Draw hovered cell fill if mouse is inside
-      if (mouseRef.current) {
-        const mouseX = mouseRef.current.x;
-        const mouseY = mouseRef.current.y;
-        const col = Math.floor((mouseX - offset.x) / squareSize);
-        const row = Math.floor((mouseY - offset.y) / squareSize);
-        const cellX = col * squareSize + (offset.x % squareSize);
-        const cellY = row * squareSize + (offset.y % squareSize);
-
-        ctx.fillStyle = hoverFillColor;
-        ctx.fillRect(cellX, cellY, squareSize, squareSize);
-      }
-
-      // Draw grid lines
-      ctx.beginPath();
-      ctx.strokeStyle = borderColor;
-      ctx.lineWidth = 1;
-
-      for (let x = startX; x <= rect.width + squareSize; x += squareSize) {
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, rect.height);
-      }
-      for (let y = startY; y <= rect.height + squareSize; y += squareSize) {
-        ctx.moveTo(0, y);
-        ctx.lineTo(rect.width, y);
-      }
-      ctx.stroke();
-
-      animId = requestAnimationFrame(render);
     };
 
     let io: IntersectionObserver | null = null;
@@ -1554,10 +1664,16 @@ export const Aurora: React.FC<AuroraProps> = ({
           animId = null;
           return;
         }
-        animId = requestAnimationFrame(loop);
-        const elapsed = (now - startTime) / 1000;
-        program.uniforms.uTime.value = elapsed * speed;
-        renderer?.render({ scene: mesh });
+        try {
+          animId = requestAnimationFrame(loop);
+          const elapsed = (now - startTime) / 1000;
+          program.uniforms.uTime.value = elapsed * speed;
+          renderer?.render({ scene: mesh });
+        } catch (err) {
+          console.warn('[Aurora] Render loop stopped:', err);
+          if (animId) cancelAnimationFrame(animId);
+          animId = null;
+        }
       };
 
       let io: IntersectionObserver | null = null;
@@ -1586,10 +1702,12 @@ export const Aurora: React.FC<AuroraProps> = ({
   }, [colorStops, amplitude, blend, speed]);
 
   return (
-    <div
-      ref={containerRef}
-      style={style}
-      className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)}
-    />
+    <SafeVisualEffectBoundary>
+      <div
+        ref={containerRef}
+        style={style}
+        className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)}
+      />
+    </SafeVisualEffectBoundary>
   );
 };
