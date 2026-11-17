@@ -15,8 +15,9 @@ interface CloudflareTurnstileProps {
   className?: string;
 }
 
-// Official Cloudflare Turnstile Always-Passes Test Sitekey
-export const CLOUDFLARE_TEST_SITE_KEY = '1x00000000000000000000AA';
+// Real Cloudflare Turnstile Sitekey for cortex-code-platform.cortexbuild1.workers.dev
+export const CLOUDFLARE_PRODUCTION_SITE_KEY = '0x4AAAAAAGF-NJJkbzT1RhYe';
+export const CLOUDFLARE_TEST_SITE_KEY = CLOUDFLARE_PRODUCTION_SITE_KEY;
 
 declare global {
   interface Window {
@@ -152,19 +153,19 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
     return (
       <div className={`p-3 rounded-xl bg-[#0f1015] border border-[#242732] flex flex-col items-center justify-center space-y-2 text-center ${className}`}>
         {/* Verification Status Header */}
-        <div className="flex items-center justify-between w-full px-1 text-[11px] font-semibold text-gray-400">
+        <div className="flex items-center justify-between w-full px-1 text-[11px] font-medium text-gray-400">
           <div className="flex items-center gap-1.5">
-            {status === 'loading' && <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />}
+            {status === 'loading' && <Loader2 className="w-3.5 h-3.5 text-[#FF9100] animate-spin" />}
             {status === 'ready' && <ShieldCheck className="w-3.5 h-3.5 text-gray-400" />}
             {status === 'verified' && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
             {status === 'error' && <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />}
-            <span className={status === 'verified' ? 'text-emerald-400' : 'text-gray-300'}>
-              {status === 'verified' ? 'Human Verified' : 'Security Verification'}
+            <span className={status === 'verified' ? 'text-emerald-400 font-semibold' : 'text-gray-300'}>
+              {status === 'verified' ? 'Verified' : 'Verification'}
             </span>
           </div>
 
-          <span className="text-[10px] text-gray-500 font-mono tracking-wider">
-            Cloudflare Turnstile
+          <span className="text-[10px] text-gray-500 font-mono">
+            {status === 'verified' ? '✓ Protected' : 'Secure'}
           </span>
         </div>
 
@@ -175,7 +176,7 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
 
         {status === 'error' && (
           <p className="text-[11px] text-rose-400">
-            Security check failed. Please refresh the page or try again.
+            Verification check failed. Please refresh the page or try again.
           </p>
         )}
       </div>

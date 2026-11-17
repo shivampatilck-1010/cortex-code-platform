@@ -208,9 +208,9 @@ function CloudIDEPageInner() {
           const res = await fetch(`/api/v1/projects/${id}`);
           if (res.ok) {
             const data = await res.json();
-            if (mounted) {
+            if (mounted && data?.project) {
               setProjectId(data.project.id);
-              if (data.files && data.files.length > 0) {
+              if (Array.isArray(data.files) && data.files.length > 0) {
                  setFiles(data.files);
                  const main = data.files.find((f: any) => !f.isFolder) || data.files[0];
                  if (main) setActiveFileId(main.id);
@@ -232,7 +232,7 @@ function CloudIDEPageInner() {
           const res = await fetch('/api/v1/projects');
           if (res.ok) {
              const data = await res.json();
-             if (data.projects && data.projects.length > 0) {
+             if (Array.isArray(data?.projects) && data.projects.length > 0) {
                  router.replace(`/ide?projectId=${data.projects[0].id}`);
              } else {
                  const pRes = await fetch('/api/v1/projects', {

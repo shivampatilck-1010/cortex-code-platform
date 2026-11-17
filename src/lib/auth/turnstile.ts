@@ -11,8 +11,9 @@ export interface TurnstileVerificationResult {
   message?: string;
 }
 
-// Official Cloudflare Turnstile test secret key (always passes)
-export const CLOUDFLARE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
+// Real Cloudflare Turnstile secret key for cortex-code-platform
+export const CLOUDFLARE_PRODUCTION_SECRET_KEY = '0x4AAAAAAGF-NMUYAR7cKfbt9ls1QZ1y-do';
+export const CLOUDFLARE_TEST_SECRET_KEY = CLOUDFLARE_PRODUCTION_SECRET_KEY;
 
 export async function verifyTurnstileToken(
   token: string | null | undefined,
@@ -67,7 +68,7 @@ export async function verifyTurnstileToken(
 
     return {
       success: false,
-      message: 'Cloudflare human verification challenge failed or expired.',
+      message: 'Verification challenge failed or expired.',
       errorCodes: data['error-codes'] || ['verification-failed'],
     };
   } catch (err: any) {

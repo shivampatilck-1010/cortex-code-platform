@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       if (!turnstileCheck.success) {
         logger.warn('Turnstile verification failed for login', { clientIp, errorCodes: turnstileCheck.errorCodes });
         return NextResponse.json(
-          { error: turnstileCheck.message || 'Cloudflare human verification failed. Please complete the security check.' },
+          { error: turnstileCheck.message || 'Verification check failed. Please complete the security check.' },
           { status: 403 }
         );
       }
