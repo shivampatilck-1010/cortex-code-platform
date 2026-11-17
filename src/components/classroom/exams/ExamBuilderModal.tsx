@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Award, Shield, Clock, AlertCircle, Save, Check } from 'lucide-react';
-import { Exam, ExamSecurityLevel, ExamStatus } from '@/lib/classroom/models';
+import { X, Award, Shield, Clock, AlertCircle, Save, Check, Palette } from 'lucide-react';
+import { Exam, ExamSecurityLevel, ExamStatus, AssessmentThemePreset, AssessmentBrandingTheme } from '@/lib/classroom/models';
+import { THEME_PRESETS, validateHexColor, hashQuitPassword } from '@/lib/classroom/seb-client';
 
 interface ExamBuilderModalProps {
   classroomId: string;
@@ -44,6 +45,14 @@ export function ExamBuilderModal({ classroomId, existingExam, onClose, onSaved }
   const [shuffleOptions, setShuffleOptions] = useState(existingExam?.shuffleOptions || false);
   const [showResultsImmediately, setShowResultsImmediately] = useState(existingExam?.showResultsImmediately || false);
 
+  // Safe Branding Theme State
+  const initialBranding = existingExam?.brandingTheme;
+  const [themePreset, setThemePreset] = useState<AssessmentThemePreset>(initialBranding?.themePreset || 'cortex-dark');
+  const [accentColor, setAccentColor] = useState<string>(initialBranding?.accentColor || '#FF9100');
+  const [institutionName, setInstitutionName] = useState<string>(initialBranding?.institutionName || '');
+  const [institutionLogoUrl, setInstitutionLogoUrl] = useState<string>(initialBranding?.institutionLogoUrl || '');
+  const [accentColorError, setAccentColorError] = useState<string | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +81,14 @@ export function ExamBuilderModal({ classroomId, existingExam, onClose, onSaved }
     setIsSubmitting(true);
 
     try {
+      const quitPw = sebQuitPassword.trim();
+      let quitPwHash: string | undefined = undefined;
+      if (quitPw) {
+        try {
+          quitPwHash = await hashQuitPassword(quitPw);
+        } catch (_) {}
+      }
+
       const payload = {
         title: title.trim(),
         description: description.trim(),
@@ -82,9 +99,16 @@ export function ExamBuilderModal({ classroomId, existingExam, onClose, onSaved }
         passingMarks: parseFloat(String(passingMarks)),
         attemptsAllowed: parseInt(String(attemptsAllowed), 10),
         securityLevel,
-        sebQuitPassword: sebQuitPassword.trim() || undefined,
+        sebQuitPassword: quitPw || undefined,
+        sebQuitPasswordHash: quitPwHash || undefined,
         sebAllowReload,
         sebShowReloadWarning,
+        brandingTheme: {
+          themePreset,
+          accentColor: validateHexColor(accentColor) ? accentColor : undefined,
+          institutionName: institutionName.trim() || undefined,
+          institutionLogoUrl: institutionLogoUrl.trim() || undefined,
+        },
         status,
         shuffleQuestions,
         shuffleOptions,
@@ -367,6 +391,107 @@ export function ExamBuilderModal({ classroomId, existingExam, onClose, onSaved }
                     />
                     <span>Show warning before reload</span>
                   </label>
+                </div>
+              </div>
+
+              {/* Safe Branding Theme Picker */}
+              <div className="border-t border-rose-900/30 pt-3 space-y-2.5">
+                <label className="block text-[11px] font-semibold text-gray-300 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-[#FF9100]" />
+                  <span>Safe Branding &amp; Theme Customization</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {THEME_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setThemePreset(preset.id as AssessmentThemePreset);
+                        setAccentColor(preset.accent);
+                        setAccentColorError(null);
+                      }}
+                      className={`p-2 rounded-lg border text-left transition flex flex-col gap-1 ${
+                        themePreset === preset.id
+                          ? 'border-[#FF9100] bg-[#FF9100]/10 text-white'
+                          : 'border-[#262832] bg-[#121318] text-gray-400 hover:text-white hover:border-[#3a3d4a]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold">{preset.name}</span>
+                        <span
+                          className="w-2.5 h-2.5 rounded-full border border-black/30 shrink-0"
+                          style={{ backgroundColor: preset.accent }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ backgroundColor: preset.bg }} />
+                        <div className="w-3 h-3 rounded" style={{ backgroundColor: preset.cardBg }} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] text-gray-300 mb-1">
+                      Accent Color (Strict Hex)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={validateHexColor(accentColor) ? (accentColor.length === 4 ? `#${accentColor[1]}${accentColor[1]}${accentColor[2]}${accentColor[2]}${accentColor[3]}${accentColor[3]}` : accentColor) : '#FF9100'}
+                        onChange={(e) => {
+                          setAccentColor(e.target.value);
+                          setAccentColorError(null);
+                        }}
+                        className="w-7 h-7 rounded border border-[#2b2d38] bg-transparent cursor-pointer p-0"
+                      />
+                      <input
+                        type="text"
+                        value={accentColor}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAccentColor(val);
+                          if (val && !validateHexColor(val)) {
+                            setAccentColorError('Must be valid hex (#RGB or #RRGGBB)');
+                          } else {
+                            setAccentColorError(null);
+                          }
+                        }}
+                        placeholder="#FF9100"
+                        maxLength={7}
+                        className="flex-1 px-2.5 py-1.5 bg-[#141519] border border-[#252730] rounded text-xs text-white focus:outline-none focus:border-[#FF9100]/60 font-mono"
+                      />
+                    </div>
+                    {accentColorError && (
+                      <span className="text-[10px] text-rose-400 mt-1 block">{accentColorError}</span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-300 mb-1">
+                      Institution Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={institutionName}
+                      onChange={(e) => setInstitutionName(e.target.value)}
+                      placeholder="e.g. Faculty of Engineering"
+                      className="w-full px-2.5 py-1.5 bg-[#141519] border border-[#252730] rounded text-xs text-white focus:outline-none focus:border-[#FF9100]/60"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-gray-300 mb-1">
+                    Institution Logo URL (HTTPS, Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={institutionLogoUrl}
+                    onChange={(e) => setInstitutionLogoUrl(e.target.value)}
+                    placeholder="https://example.edu/logo.png"
+                    className="w-full px-2.5 py-1.5 bg-[#141519] border border-[#252730] rounded text-xs text-white focus:outline-none focus:border-[#FF9100]/60"
+                  />
                 </div>
               </div>
             </div>

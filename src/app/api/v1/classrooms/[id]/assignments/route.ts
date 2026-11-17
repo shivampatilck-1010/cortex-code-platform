@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { realtimeCoordinator } from '@/lib/classroom/realtime';
-import { Assignment } from '@/lib/classroom/models';
+import { Assignment, sanitizeBrandingTheme } from '@/lib/classroom/models';
+import { hashQuitPassword } from '@/lib/classroom/seb-security';
 
 export async function GET(
   req: NextRequest,
@@ -16,7 +17,11 @@ export async function GET(
     }
     
     const user = await ClassroomAuth.getCurrentUser(req);
-    const isTeacher = auth.context?.membership?.role === 'teacher' || (await classroomDb.getClassroom(id))?.teacherId === user.id;
+    const classroom = await classroomDb.getClassroom(id);
+    const isTeacher =
+      user.role === 'admin' ||
+      auth.context?.membership?.role === 'teacher' ||
+      classroom?.teacherId === user.id;
 
     let assignments = await classroomDb.listAssignments(id);
     
@@ -83,6 +88,15 @@ export async function POST(
       plagiarismPolicy,
       testCases,
       rubric,
+      securityLevel,
+      sebConfigKey,
+      sebBrowserExamKey,
+      sebQuitPassword,
+      sebQuitPasswordHash,
+      sebAllowReload,
+      sebShowReloadWarning,
+      durationMinutes,
+      brandingTheme,
     } = body;
 
     if (!title || !title.trim()) {
@@ -90,6 +104,8 @@ export async function POST(
     }
 
     const assignmentId = `asg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const quitPw = typeof sebQuitPassword === 'string' && sebQuitPassword.trim() ? sebQuitPassword.trim() : null;
+    const quitPwHash = sebQuitPasswordHash || (quitPw ? hashQuitPassword(quitPw) : null);
 
     const assignment: Assignment = {
       id: assignmentId,
@@ -100,6 +116,7 @@ export async function POST(
       type: (type as any) || 'code',
       language: language || 'cpp',
       startercode: starterCode || '// Write your solution here\n',
+      starterCode: starterCode || '// Write your solution here\n',
       difficulty: difficulty || 'Intermediate',
       maxMarks: maxMarks || 100,
       dueAt: dueAt || Date.now() + 7 * 24 * 3600 * 1000,
@@ -119,13 +136,23 @@ export async function POST(
           input: '5',
           expectedOutput: '120',
           isHidden: false,
-          points: 50,
-          description: 'Basic sample test case',
+          visibility: 'public',
+          weight: 50,
           timeoutMs: 2000,
           memoryLimitMb: 128,
         },
       ],
       rubric: rubric || [],
+      securityLevel: securityLevel || 'standard',
+      sebConfigKey: sebConfigKey || null,
+      sebBrowserExamKey: sebBrowserExamKey || null,
+      sebQuitPassword: null,
+      sebQuitPasswordHash: quitPwHash,
+      hasQuitPassword: Boolean(quitPwHash),
+      sebAllowReload: sebAllowReload !== undefined ? Boolean(sebAllowReload) : false,
+      sebShowReloadWarning: sebShowReloadWarning !== undefined ? Boolean(sebShowReloadWarning) : true,
+      durationMinutes: typeof durationMinutes === 'number' ? durationMinutes : 0,
+      brandingTheme: sanitizeBrandingTheme(brandingTheme),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };

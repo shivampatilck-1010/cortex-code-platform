@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { computeActiveExamRoute } from '@/lib/classroom/exam-branching';
+import { verifySafeExamBrowserRequest } from '@/lib/classroom/seb-security';
 
 export async function GET(
   req: NextRequest,
@@ -21,14 +22,38 @@ export async function GET(
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
+    const classroom = await classroomDb.getClassroom(id);
     const isTeacher =
       user.role === 'admin' ||
       auth.context?.membership?.role === 'teacher' ||
-      (await classroomDb.getClassroom(id))?.teacherId === user.id;
+      classroom?.teacherId === user.id;
 
     // Students can only view their own responses
     if (!isTeacher && session.userId !== user.id) {
       return NextResponse.json({ error: 'Access denied to session responses' }, { status: 403 });
+    }
+
+    const exam = await classroomDb.getExam(examId);
+    if (!exam || (exam.classroomId !== id && exam.classroomId !== id.toUpperCase().trim() && exam.classroomId.toLowerCase() !== id.toLowerCase().trim())) {
+      return NextResponse.json({ error: 'Examination not found' }, { status: 404 });
+    }
+
+    // Strict SEB enforcement for examinees
+    if (!isTeacher && (exam.securityLevel === 'seb' || (exam.securityLevel as string) === 'seb_required')) {
+      const clientConfigKey = req.headers.get('x-seb-client-config-key') || undefined;
+      const clientBrowserExamKey = req.headers.get('x-seb-client-browser-exam-key') || undefined;
+      const sebResult = verifySafeExamBrowserRequest(req, exam, {
+        clientConfigKey,
+        clientBrowserExamKey,
+        authoritative: true,
+      });
+      if (!sebResult.verified) {
+        return NextResponse.json({
+          error: 'Forbidden: responses query rejected outside Safe Exam Browser.',
+          sebRequired: true,
+          reason: sebResult.reason,
+        }, { status: 403 });
+      }
     }
 
     const responses = await classroomDb.listExamResponses(sessionId);
@@ -58,8 +83,26 @@ export async function PUT(
 
     const user = await ClassroomAuth.getCurrentUser(req);
     const exam = await classroomDb.getExam(examId);
-    if (!exam || exam.classroomId !== id.toUpperCase().trim()) {
+    if (!exam || (exam.classroomId !== id && exam.classroomId !== id.toUpperCase().trim() && exam.classroomId.toLowerCase() !== id.toLowerCase().trim())) {
       return NextResponse.json({ error: 'Examination not found' }, { status: 404 });
+    }
+
+    // Strict Safe Exam Browser cryptographic verification for autosave
+    if (exam.securityLevel === 'seb' || (exam.securityLevel as string) === 'seb_required') {
+      const clientConfigKey = req.headers.get('x-seb-client-config-key') || undefined;
+      const clientBrowserExamKey = req.headers.get('x-seb-client-browser-exam-key') || undefined;
+      const sebResult = verifySafeExamBrowserRequest(req, exam, {
+        clientConfigKey,
+        clientBrowserExamKey,
+        authoritative: true,
+      });
+      if (!sebResult.verified) {
+        return NextResponse.json({
+          error: 'Forbidden: autosave rejected outside Safe Exam Browser.',
+          sebRequired: true,
+          reason: sebResult.reason,
+        }, { status: 403 });
+      }
     }
 
     const session = await classroomDb.getExamSession(sessionId);

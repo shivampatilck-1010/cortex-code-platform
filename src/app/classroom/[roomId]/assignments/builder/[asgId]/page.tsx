@@ -288,6 +288,13 @@ export default function AssignmentBuilderPage({
   const [attemptsAllowed, setAttemptsAllowed] = useState(5);
   const [aiPolicy, setAiPolicy] = useState('hints_only');
   const [plagiarismPolicy, setPlagiarismPolicy] = useState('review_only');
+
+  // Safe Exam Browser (SEB) Settings
+  const [securityLevel, setSecurityLevel] = useState<'standard' | 'seb'>('standard');
+  const [sebQuitPassword, setSebQuitPassword] = useState('');
+  const [sebAllowReload, setSebAllowReload] = useState(false);
+  const [sebShowReloadWarning, setSebShowReloadWarning] = useState(true);
+  const [durationMinutes, setDurationMinutes] = useState(60);
   
   const [testCases, setTestCases] = useState<any[]>([
     { id: 'tc_1', input: '', expectedOutput: '', visibility: 'public', weight: 50, timeoutMs: 2000, memoryLimitMb: 128 },
@@ -333,6 +340,11 @@ export default function AssignmentBuilderPage({
                 setAttemptsAllowed(a.attemptsAllowed || 5);
                 setAiPolicy(a.aiPolicy || 'hints_only');
                 setPlagiarismPolicy(a.plagiarismPolicy || 'review_only');
+                setSecurityLevel(a.securityLevel || (a as any).security_level || 'standard');
+                setSebQuitPassword(a.sebQuitPassword || (a as any).seb_quit_password || '');
+                setSebAllowReload(!!(a.sebAllowReload ?? (a as any).seb_allow_reload));
+                setSebShowReloadWarning((a.sebShowReloadWarning ?? (a as any).seb_show_reload_warning) !== false);
+                setDurationMinutes(a.durationMinutes || (a as any).duration_minutes || 60);
                 if (a.testCases && a.testCases.length > 0) {
                   setTestCases(a.testCases);
                 }
@@ -462,6 +474,11 @@ export default function AssignmentBuilderPage({
       aiPolicy,
       plagiarismPolicy,
       testCases,
+      securityLevel,
+      sebQuitPassword: sebQuitPassword.trim() || undefined,
+      sebAllowReload,
+      sebShowReloadWarning,
+      durationMinutes,
       status: 'published'
     };
 
@@ -716,6 +733,89 @@ export default function AssignmentBuilderPage({
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* SECTION: Safe Exam Browser & Security Enforcement */}
+          <section className="p-6 bg-[#111217] border border-[#252830] rounded-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#252830] pb-3">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-4 h-4 text-rose-400" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-200">Security &amp; Safe Exam Browser (SEB)</h2>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                securityLevel === 'seb'
+                  ? 'bg-rose-950/60 text-rose-300 border-rose-800/60 font-bold'
+                  : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+              }`}>
+                {securityLevel === 'seb' ? 'SEB ENFORCED' : 'STANDARD'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 mb-1.5">Security Level</label>
+                <select
+                  value={securityLevel}
+                  onChange={(e) => setSecurityLevel(e.target.value as 'standard' | 'seb')}
+                  className="w-full bg-[#16171f] border border-[#2b2e38] rounded-xl px-3 py-2.5 text-white text-sm focus:border-rose-500 outline-none"
+                >
+                  <option value="standard">Standard Browser (Unrestricted)</option>
+                  <option value="seb">Safe Exam Browser (SEB Locked Assessment)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 mb-1.5">Assessment Duration (Minutes)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={600}
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                  className="w-full bg-[#16171f] border border-[#2b2e38] rounded-xl px-3 py-2.5 text-white text-sm focus:border-rose-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {securityLevel === 'seb' && (
+              <div className="p-4 bg-rose-950/20 border border-rose-900/40 rounded-xl space-y-3">
+                <p className="text-xs text-rose-300">
+                  When SEB is enforced, students cannot access problem details or submit answers outside a cryptographically verified Safe Exam Browser session.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-400 mb-1">Quit Password (Optional)</label>
+                    <input
+                      type="password"
+                      value={sebQuitPassword}
+                      onChange={(e) => setSebQuitPassword(e.target.value)}
+                      placeholder="Enter password required to exit SEB"
+                      className="w-full bg-[#16171f] border border-[#2b2e38] rounded-lg px-3 py-2 text-white text-xs focus:border-rose-500 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2 pt-2">
+                    <label className="flex items-center space-x-2 text-xs text-zinc-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sebAllowReload}
+                        onChange={(e) => setSebAllowReload(e.target.checked)}
+                        className="rounded border-[#2b2e38] bg-[#16171f] text-rose-500"
+                      />
+                      <span>Allow page reload in Safe Exam Browser</span>
+                    </label>
+                    <label className="flex items-center space-x-2 text-xs text-zinc-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sebShowReloadWarning}
+                        onChange={(e) => setSebShowReloadWarning(e.target.checked)}
+                        className="rounded border-[#2b2e38] bg-[#16171f] text-rose-500"
+                      />
+                      <span>Show warning before reload</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* SECTION 3: Problem Statement & Instructions */}

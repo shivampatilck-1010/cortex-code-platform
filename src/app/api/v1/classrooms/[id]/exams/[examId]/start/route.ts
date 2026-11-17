@@ -6,7 +6,11 @@ import {
   generateSessionQuestionOrder,
   generateSessionOptionOrder,
 } from '@/lib/classroom/exam-sanitizer';
-import { verifySafeExamBrowserRequest } from '@/lib/classroom/seb-security';
+import {
+  verifySafeExamBrowserRequest,
+  verifyAndConsumeSebLaunchToken,
+  createSebLaunchToken,
+} from '@/lib/classroom/seb-security';
 import { verifyLaunchGrant } from '@/lib/lockdown/security-policy';
 
 export async function POST(
@@ -23,7 +27,7 @@ export async function POST(
     const user = await ClassroomAuth.getCurrentUser(req);
     const exam = await classroomDb.getExam(examId);
 
-    if (!exam || exam.classroomId !== id.toUpperCase().trim()) {
+    if (!exam || (exam.classroomId !== id && exam.classroomId !== id.toUpperCase().trim() && exam.classroomId.toLowerCase() !== id.toLowerCase().trim())) {
       return NextResponse.json({ error: 'Examination not found' }, { status: 404 });
     }
 
@@ -34,15 +38,91 @@ export async function POST(
 
     // Strict Safe Exam Browser (SEB) cryptographic verification
     if (exam.securityLevel === 'seb' || (exam.securityLevel as string) === 'seb_required') {
-      const sebResult = verifySafeExamBrowserRequest(req, exam);
+      // Support client-forwarded JS API keys (window.SafeExamBrowser.security.updateKeys)
+      const clientConfigKey = req.headers.get('x-seb-client-config-key') || undefined;
+      const clientBrowserExamKey = req.headers.get('x-seb-client-browser-exam-key') || undefined;
+
+      const sebResult = verifySafeExamBrowserRequest(req, exam, {
+        clientConfigKey,
+        clientBrowserExamKey,
+        authoritative: true,
+      });
+
       if (!sebResult.verified) {
+        const fwdProto = req.headers.get('x-forwarded-proto');
+        const fwdHost = req.headers.get('x-forwarded-host') || req.headers.get('host') || req.nextUrl.host || 'localhost:3000';
+        const proto = (fwdProto || '').toLowerCase() === 'https' ? 'https' : (req.nextUrl.protocol.replace(':', '') || 'http');
+        const origin = `${proto}://${fwdHost.trim()}`;
+
+        // Generate fresh single-use launch token for the student setup gate
+        const launchToken = createSebLaunchToken({
+          userId: user.id,
+          assessmentId: exam.id,
+          assessmentType: 'exam',
+          classroomId: id,
+          durationMinutes: exam.durationMinutes,
+        });
+
+        const configUrl = `/api/v1/classrooms/${encodeURIComponent(id)}/exams/${encodeURIComponent(examId)}/seb-config?launchToken=${encodeURIComponent(launchToken)}`;
+        const fullConfigUrl = `${origin}${configUrl}`;
+        const protocolUri = fullConfigUrl.replace(/^http:\/\//i, 'seb://').replace(/^https:\/\//i, 'sebs://');
+
         return NextResponse.json({
           error: 'Safe Exam Browser is required for this examination. A genuine, cryptographically verified Safe Exam Browser session must be used.',
           sebRequired: true,
           verificationReason: sebResult.reason,
-          downloadUrl: 'https://safeexambrowser.org',
-          configUrl: `/api/v1/classrooms/${id}/exams/${examId}/seb-config`,
+          downloadUrl: 'https://safeexambrowser.org/download_en.html',
+          configUrl,
+          protocolUri,
+          launchToken,
         }, { status: 403 });
+      }
+
+      // Extract and validate single-use launch token on verified requests
+      let launchToken =
+        req.headers.get('x-seb-launch-token') ||
+        req.nextUrl.searchParams.get('launchToken') ||
+        req.nextUrl.searchParams.get('sebToken');
+
+      if (!launchToken) {
+        try {
+          const clonedReq = req.clone();
+          const body = await clonedReq.json();
+          if (body && typeof body.launchToken === 'string') {
+            launchToken = body.launchToken;
+          } else if (body && typeof body.sebToken === 'string') {
+            launchToken = body.sebToken;
+          }
+        } catch (_) {}
+      }
+
+      // If initializing a new session, consume and validate launch token
+      if (launchToken) {
+        const tokenValidation = await verifyAndConsumeSebLaunchToken(launchToken, {
+          userId: user.id,
+          assessmentId: exam.id,
+          assessmentType: 'exam',
+          classroomId: id,
+        });
+        if (!tokenValidation.valid) {
+          return NextResponse.json({
+            error: `Launch token validation failed: ${tokenValidation.reason || 'Invalid or replayed token'}`,
+            sebRequired: true,
+            tokenInvalid: true,
+            reason: tokenValidation.reason,
+          }, { status: 403 });
+        }
+      } else {
+        // Allow session resumption for in-progress session without consuming a second token
+        const existingSessions = await classroomDb.getUserExamSessions(examId, user.id);
+        const hasActiveSession = existingSessions.some((s) => s.status === 'in_progress');
+        if (!hasActiveSession) {
+          return NextResponse.json({
+            error: 'Missing single-use launch token for SEB-enforced examination.',
+            sebRequired: true,
+            tokenMissing: true,
+          }, { status: 403 });
+        }
       }
     }
 

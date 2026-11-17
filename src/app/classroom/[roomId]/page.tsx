@@ -53,6 +53,27 @@ export default function ClassroomLivePage() {
   const [isJoinNeeded, setIsJoinNeeded] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
+  // Classroom Deep Link Handler (redirect to assessment if examId or assignmentId present)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const search = new URLSearchParams(window.location.search);
+    const qExamId = search.get('examId');
+    const qAssignmentId = search.get('assignmentId') || search.get('asgId');
+    const qToken = search.get('launchToken') || search.get('sebToken') || search.get('token');
+
+    if (qAssignmentId && roomId) {
+      const tokenQuery = qToken ? `?sebToken=${encodeURIComponent(qToken)}` : '';
+      router.push(`/classroom/${roomId}/assignments/${qAssignmentId}/solve${tokenQuery}`);
+      return;
+    }
+
+    if (qExamId && roomId) {
+      const tokenQuery = qToken ? `&launchToken=${encodeURIComponent(qToken)}` : '';
+      router.push(`/classroom?classroomId=${encodeURIComponent(roomId)}&examId=${encodeURIComponent(qExamId)}${tokenQuery}`);
+      return;
+    }
+  }, [roomId, router]);
+
   // Room state
   const [room, setRoom] = useState<ClassroomRoom | null>(null);
   const [isLoading, setIsLoading] = useState(true);

@@ -240,6 +240,10 @@ export default function ClassroomHubPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // Deep Link & Assessment Launch State
+  const [deepLinkLaunchToken, setDeepLinkLaunchToken] = useState<string | null>(null);
+  const [deepLinkExamId, setDeepLinkExamId] = useState<string | null>(null);
+
   // Announcement Edit/Delete state
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [editAnnTitle, setEditAnnTitle] = useState('');
@@ -469,6 +473,59 @@ export default function ClassroomHubPage() {
       setJoinCodeInput(pendingCode);
     }
   }, []);
+
+  // Classroom Deep Link Handler (classroomId, examId, assignmentId, launchToken, sebToken)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const qClassroomId = params.get('classroomId') || params.get('roomId');
+    const qExamId = params.get('examId');
+    const qAssignmentId = params.get('assignmentId') || params.get('asgId');
+    const qToken = params.get('launchToken') || params.get('sebToken') || params.get('token');
+
+    if (qToken) {
+      setDeepLinkLaunchToken(qToken);
+    }
+
+    if (qAssignmentId) {
+      const targetRoom = qClassroomId || selectedClassroom?.id || 'CLS_DEFAULT';
+      const tokenQuery = qToken ? `?sebToken=${encodeURIComponent(qToken)}` : '';
+      router.push(`/classroom/${targetRoom}/assignments/${qAssignmentId}/solve${tokenQuery}`);
+      return;
+    }
+
+    if (qExamId) {
+      setDeepLinkExamId(qExamId);
+      setActiveTab('examinations');
+      if (qClassroomId) {
+        const found = classrooms.find(
+          (c) => c.id === qClassroomId || c.id.toUpperCase() === qClassroomId.toUpperCase()
+        );
+        if (found) {
+          setSelectedClassroom(found);
+        } else if (!selectedClassroom) {
+          setSelectedClassroom({
+            id: qClassroomId,
+            name: 'Classroom Assessment',
+            coursecode: qClassroomId,
+            section: 'Sec 1',
+            teacherId: '',
+            teacherName: '',
+            subject: 'Assessment',
+            academicYear: '2026',
+            description: '',
+            joinCode: '',
+            joinEnabled: true,
+            status: 'active',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            settings: {} as any,
+          });
+        }
+      }
+    }
+  }, [classrooms, router, selectedClassroom]);
 
   useEffect(() => {
     if (selectedClassroom) {
@@ -2661,6 +2718,8 @@ export default function ClassroomHubPage() {
                   name: currentUserName,
                   email: currentUserEmail,
                 }}
+                initialLaunchToken={deepLinkLaunchToken || undefined}
+                initialExamId={deepLinkExamId || undefined}
               />
             )}
 

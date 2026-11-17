@@ -1,4 +1,4 @@
-﻿import { DBInstance, getDbInstance, DatabaseProviderCapabilities } from '@/lib/db';
+﻿import type { DBInstance, DatabaseProviderCapabilities } from '@/lib/db';
 import crypto from 'crypto';
 // Cortex Classroom Database Layer
 // High-performance relational store using Node.js 22 native node:sqlite with ACID durability,
@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
-import {
+import type {
   User,
   Classroom,
   ClassroomMember,
@@ -48,7 +48,6 @@ import {
   ExamSessionStatus,
   ExamGradingStatus,
   ExamIntegrityEventType,
-  VALID_EXAM_TRANSITIONS,
   QuestionBankItem,
   QuestionBankFilter,
   QuestionBankDifficulty,
@@ -56,12 +55,18 @@ import {
   PlatformAdminAnalytics,
   ExamQuestionPerformance,
   ExamScoreDistribution,
+  AssessmentBrandingTheme,
+  ExamSecurityLevel,
 } from '../models';
+import { VALID_EXAM_TRANSITIONS, sanitizeBrandingTheme } from '../models';
 import { ClassroomIdentity } from '../identity';
 
 
 class D1Wrapper implements DBInstance {
-  constructor(private d1: D1Database) {}
+  private d1: D1Database;
+  constructor(d1: D1Database) {
+    this.d1 = d1;
+  }
   async exec(sql: string): Promise<void> {
     await this.d1.exec(sql);
   }
@@ -83,20 +88,33 @@ class D1Wrapper implements DBInstance {
 }
 
 class SqliteWrapper implements DBInstance {
-  constructor(private sqlite: any) {}
+  private sqlite: any;
+  constructor(sqlite: any) {
+    this.sqlite = sqlite;
+  }
   async exec(sql: string): Promise<void> {
     this.sqlite.exec(sql);
+  }
+  private normalizeParams(params: any[]): any[] {
+    return params.map((p) => {
+      if (p === undefined) return null;
+      if (typeof p === 'boolean') return p ? 1 : 0;
+      return p;
+    });
   }
   prepare(sql: string) {
     return {
       run: async (...params: any[]) => {
-        return this.sqlite.prepare(sql).run(...params);
+        const safe = this.normalizeParams(params);
+        return this.sqlite.prepare(sql).run(...safe);
       },
       get: async (...params: any[]) => {
-        return this.sqlite.prepare(sql).get(...params);
+        const safe = this.normalizeParams(params);
+        return this.sqlite.prepare(sql).get(...safe);
       },
       all: async (...params: any[]) => {
-        return this.sqlite.prepare(sql).all(...params);
+        const safe = this.normalizeParams(params);
+        return this.sqlite.prepare(sql).all(...safe);
       }
     };
   }
@@ -171,7 +189,7 @@ class ClassroomDatabase {
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
-      this.dbPath = path.join(dataDir, 'cortex_classroom.db');
+      this.dbPath = process.env.CORTEX_DB_PATH || path.join(dataDir, 'cortex_classroom.db');
 
       // Dynamically load node:sqlite safely across ESM and CJS
       let DatabaseSync: any = null;
@@ -183,7 +201,9 @@ class ClassroomDatabase {
       }
 
       const sqliteDb = new DatabaseSync(this.dbPath);
-      sqliteDb.exec('PRAGMA journal_mode = WAL;');
+      if (this.dbPath !== ':memory:') {
+        sqliteDb.exec('PRAGMA journal_mode = WAL;');
+      }
       sqliteDb.exec('PRAGMA foreign_keys = ON;');
       sqliteDb.exec('PRAGMA busy_timeout = 5000;');
       this.db = new SqliteWrapper(sqliteDb);
@@ -195,6 +215,10 @@ class ClassroomDatabase {
       this.db = null;
       // Do NOT fall back to in-memory. Fail hard so bugs are visible.
     }
+  }
+
+  async initSchema(): Promise<void> {
+    await this.getDb();
   }
 
   private async createTables() {
@@ -328,6 +352,15 @@ class ClassroomDatabase {
         updated_at INTEGER NOT NULL,
         test_cases_json TEXT NOT NULL DEFAULT '[]',
         rubric_json TEXT,
+        security_level TEXT NOT NULL DEFAULT 'standard',
+        seb_config_key TEXT,
+        seb_browser_exam_key TEXT,
+        seb_quit_password TEXT,
+        seb_quit_password_hash TEXT,
+        seb_allow_reload INTEGER NOT NULL DEFAULT 0,
+        seb_show_reload_warning INTEGER NOT NULL DEFAULT 1,
+        duration_minutes INTEGER NOT NULL DEFAULT 0,
+        branding_theme_json TEXT NOT NULL DEFAULT '{}',
         FOREIGN KEY(classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE
       );
 
@@ -514,6 +547,7 @@ class ClassroomDatabase {
         created_by TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
+        branding_theme_json TEXT NOT NULL DEFAULT '{}',
         FOREIGN KEY (classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE,
         FOREIGN KEY (created_by) REFERENCES users(id)
       );
@@ -566,6 +600,7 @@ class ClassroomDatabase {
         teacher_feedback TEXT NOT NULL DEFAULT '',
         submission_receipt TEXT,
         answer_digest TEXT,
+        last_heartbeat_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         UNIQUE(exam_id, user_id, attempt_number),
@@ -658,6 +693,17 @@ class ClassroomDatabase {
       CREATE INDEX IF NOT EXISTS idx_exam_responses_session_updated ON exam_question_responses(session_id, updated_at);
       CREATE INDEX IF NOT EXISTS idx_exam_sessions_heartbeat ON exam_sessions(exam_id, last_heartbeat_at);
       CREATE INDEX IF NOT EXISTS idx_exams_status_time ON exams(status, start_time, end_time);
+
+      CREATE TABLE IF NOT EXISTS seb_consumed_tokens (
+        nonce TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        consumed_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_seb_consumed_tokens_expires ON seb_consumed_tokens(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_seb_consumed_tokens_lookup ON seb_consumed_tokens(assessment_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_assignments_security ON assignments(classroom_id, security_level);
 
       CREATE TABLE IF NOT EXISTS lockdown_emergency_authorizations (
         id TEXT PRIMARY KEY,
@@ -822,6 +868,54 @@ class ClassroomDatabase {
     await safeAlterTable('ALTER TABLE live_sessions ADD COLUMN state_json TEXT', 'add state_json to live_sessions');
     await safeAlterTable('ALTER TABLE live_sessions ADD COLUMN updated_at INTEGER', 'add updated_at to live_sessions');
     await safeAlterTable('CREATE INDEX IF NOT EXISTS idx_live_sessions_room_status ON live_sessions(classroom_id, status)', 'create index on live_sessions(classroom_id, status)');
+
+    // Migration 0011: Safe Exam Browser Hardening & Branding Parity
+    await safeAlterTable("ALTER TABLE exams ADD COLUMN branding_theme_json TEXT NOT NULL DEFAULT '{}'", 'add branding_theme_json to exams');
+
+    await safeAlterTable("ALTER TABLE assignments ADD COLUMN security_level TEXT NOT NULL DEFAULT 'standard'", 'add security_level to assignments');
+    await safeAlterTable('ALTER TABLE assignments ADD COLUMN seb_config_key TEXT', 'add seb_config_key to assignments');
+    await safeAlterTable('ALTER TABLE assignments ADD COLUMN seb_browser_exam_key TEXT', 'add seb_browser_exam_key to assignments');
+    await safeAlterTable('ALTER TABLE assignments ADD COLUMN seb_quit_password TEXT', 'add seb_quit_password to assignments');
+    await safeAlterTable('ALTER TABLE assignments ADD COLUMN seb_quit_password_hash TEXT', 'add seb_quit_password_hash to assignments');
+    await safeAlterTable('ALTER TABLE assignments ADD COLUMN seb_allow_reload INTEGER NOT NULL DEFAULT 0', 'add seb_allow_reload to assignments');
+    await safeAlterTable('ALTER TABLE assignments ADD COLUMN seb_show_reload_warning INTEGER NOT NULL DEFAULT 1', 'add seb_show_reload_warning to assignments');
+    await safeAlterTable('ALTER TABLE assignments ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 0', 'add duration_minutes to assignments');
+    await safeAlterTable("ALTER TABLE assignments ADD COLUMN branding_theme_json TEXT NOT NULL DEFAULT '{}'", 'add branding_theme_json to assignments');
+    await safeAlterTable('CREATE INDEX IF NOT EXISTS idx_assignments_security ON assignments(classroom_id, security_level)', 'create index on assignments security');
+
+    await safeAlterTable(`
+      CREATE TABLE IF NOT EXISTS seb_consumed_tokens (
+        nonce TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        consumed_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      )
+    `, 'create seb_consumed_tokens table');
+    await safeAlterTable('CREATE INDEX IF NOT EXISTS idx_seb_consumed_tokens_expires ON seb_consumed_tokens(expires_at)', 'create index on seb_consumed_tokens.expires_at');
+    await safeAlterTable('CREATE INDEX IF NOT EXISTS idx_seb_consumed_tokens_lookup ON seb_consumed_tokens(assessment_id, user_id)', 'create index on seb_consumed_tokens.lookup');
+
+    // Backfill legacy assignment quit passwords into SHA-256 hashes and clear plaintext
+    try {
+      const legacyAsgPasswordRows = (await this.db!.prepare(
+        'SELECT id, seb_quit_password, seb_quit_password_hash FROM assignments WHERE seb_quit_password IS NOT NULL'
+      ).all()) as Array<{ id: string; seb_quit_password: string | null; seb_quit_password_hash: string | null }>;
+
+      for (const row of legacyAsgPasswordRows || []) {
+        if (!row.id) continue;
+        const plaintext = (row.seb_quit_password || '').trim();
+        if (plaintext.length > 0) {
+          const hash = row.seb_quit_password_hash || crypto.createHash('sha256').update(plaintext).digest('hex').toLowerCase();
+          await this.db!.prepare(
+            'UPDATE assignments SET seb_quit_password_hash = ?, seb_quit_password = NULL WHERE id = ?'
+          ).run(hash, row.id);
+        } else {
+          await this.db!.prepare('UPDATE assignments SET seb_quit_password = NULL WHERE id = ?').run(row.id);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[ClassroomDatabase] Warning during assignment SEB password backfill:', err?.message || err);
+    }
 
     // Backfill any legacy plaintext quit passwords into hashes and null out plaintext
     try {
@@ -1536,28 +1630,42 @@ class ClassroomDatabase {
   // --- ASSIGNMENTS ---
   async createAssignment(asg: Assignment): Promise<Assignment> {
     if (!(await this.getDb())) throw new Error('Database unavailable');
+    
+    // Secure quit password hashing (never store plaintext)
+    const quitHash = asg.sebQuitPassword && asg.sebQuitPassword.trim()
+      ? crypto.createHash('sha256').update(asg.sebQuitPassword.trim()).digest('hex').toLowerCase()
+      : (asg.sebQuitPasswordHash || null);
+
+    const brandingJson = JSON.stringify(sanitizeBrandingTheme(asg.brandingTheme));
+
     const stmt = (await this.getDb()).prepare(`
       INSERT OR REPLACE INTO assignments (
         id, classroom_id, title, description, instructions, type, language,
         starter_code, difficulty, max_marks, due_at, published_at, scheduled_at,
         attempts_allowed, allow_late_submission, late_penalty_percent, auto_grade,
         manual_grade, ai_policy, plagiarism_policy, status, created_by,
-        created_at, updated_at, test_cases_json, rubric_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, updated_at, test_cases_json, rubric_json,
+        security_level, seb_config_key, seb_browser_exam_key, seb_quit_password,
+        seb_quit_password_hash, seb_allow_reload, seb_show_reload_warning,
+        duration_minutes, branding_theme_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    const id = asg.id || `asg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = Date.now();
+
     await stmt.run(
-      asg.id,
+      id,
       asg.classroomId,
-      asg.title,
-      asg.description,
-      asg.instructions,
-      asg.type,
-      asg.language,
-      asg.startercode || '',
+      asg.title || 'Untitled Assignment',
+      asg.description || '',
+      asg.instructions || '',
+      asg.type || 'homework',
+      asg.language || 'typescript',
+      asg.starterCode || (asg as any).startercode || '',
       asg.difficulty || 'medium',
       asg.maxMarks ?? 100,
-      asg.dueAt || null,
-      asg.publishedAt || Date.now(),
+      asg.dueAt || (now + 7 * 86400000),
+      asg.publishedAt || now,
       asg.scheduledAt || null,
       asg.attemptsAllowed ?? 1,
       asg.allowLateSubmission ? 1 : 0,
@@ -1567,13 +1675,102 @@ class ClassroomDatabase {
       asg.aiPolicy || 'allowed',
       asg.plagiarismPolicy || 'strict',
       asg.status || 'published',
-      asg.createdBy,
-      asg.createdAt || Date.now(),
-      asg.updatedAt || Date.now(),
+      asg.createdBy || 'system',
+      asg.createdAt || now,
+      asg.updatedAt || now,
       JSON.stringify(asg.testCases || []),
-      asg.rubric ? JSON.stringify(asg.rubric) : null
+      asg.rubric ? JSON.stringify(asg.rubric) : null,
+      asg.securityLevel || 'standard',
+      asg.sebConfigKey || null,
+      asg.sebBrowserExamKey || null,
+      null, // Plaintext quit password is NEVER stored
+      quitHash,
+      asg.sebAllowReload ? 1 : 0,
+      asg.sebShowReloadWarning !== false ? 1 : 0,
+      asg.durationMinutes || 0,
+      brandingJson
     );
-    return asg;
+    return {
+      ...asg,
+      id,
+      title: asg.title || 'Untitled Assignment',
+      description: asg.description || '',
+      securityLevel: asg.securityLevel || 'standard',
+      sebQuitPassword: null,
+      sebQuitPasswordHash: quitHash,
+      hasQuitPassword: Boolean(quitHash),
+      brandingTheme: sanitizeBrandingTheme(asg.brandingTheme),
+    };
+  }
+
+  async updateAssignment(id: string, updates: Partial<Assignment>): Promise<Assignment | null> {
+    const db = await this.getDb();
+    if (!db) throw new Error('Database unavailable');
+    const existing = await this.getAssignment(id);
+    if (!existing) return null;
+
+    const now = Date.now();
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
+    if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
+    if (updates.instructions !== undefined) { fields.push('instructions = ?'); values.push(updates.instructions); }
+    if (updates.type !== undefined) { fields.push('type = ?'); values.push(updates.type); }
+    if (updates.language !== undefined) { fields.push('language = ?'); values.push(updates.language); }
+    if (updates.starterCode !== undefined || updates.startercode !== undefined) {
+      fields.push('starter_code = ?');
+      values.push(updates.starterCode ?? updates.startercode ?? '');
+    }
+    if (updates.difficulty !== undefined) { fields.push('difficulty = ?'); values.push(updates.difficulty); }
+    if (updates.maxMarks !== undefined) { fields.push('max_marks = ?'); values.push(updates.maxMarks); }
+    if (updates.dueAt !== undefined) { fields.push('due_at = ?'); values.push(updates.dueAt); }
+    if (updates.publishedAt !== undefined) { fields.push('published_at = ?'); values.push(updates.publishedAt); }
+    if (updates.scheduledAt !== undefined) { fields.push('scheduled_at = ?'); values.push(updates.scheduledAt); }
+    if (updates.attemptsAllowed !== undefined) { fields.push('attempts_allowed = ?'); values.push(updates.attemptsAllowed); }
+    if (updates.allowLateSubmission !== undefined) { fields.push('allow_late_submission = ?'); values.push(updates.allowLateSubmission ? 1 : 0); }
+    if (updates.latePenaltyPercent !== undefined) { fields.push('late_penalty_percent = ?'); values.push(updates.latePenaltyPercent); }
+    if (updates.autoGrade !== undefined) { fields.push('auto_grade = ?'); values.push(updates.autoGrade ? 1 : 0); }
+    if (updates.manualGrade !== undefined) { fields.push('manual_grade = ?'); values.push(updates.manualGrade ? 1 : 0); }
+    if (updates.aiPolicy !== undefined) { fields.push('ai_policy = ?'); values.push(updates.aiPolicy); }
+    if (updates.plagiarismPolicy !== undefined) { fields.push('plagiarism_policy = ?'); values.push(updates.plagiarismPolicy); }
+    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+    if (updates.testCases !== undefined) { fields.push('test_cases_json = ?'); values.push(JSON.stringify(updates.testCases)); }
+    if (updates.rubric !== undefined) { fields.push('rubric_json = ?'); values.push(updates.rubric ? JSON.stringify(updates.rubric) : null); }
+
+    // SEB & Hardening fields
+    if (updates.securityLevel !== undefined) { fields.push('security_level = ?'); values.push(updates.securityLevel); }
+    if (updates.sebConfigKey !== undefined) { fields.push('seb_config_key = ?'); values.push(updates.sebConfigKey); }
+    if (updates.sebBrowserExamKey !== undefined) { fields.push('seb_browser_exam_key = ?'); values.push(updates.sebBrowserExamKey); }
+    if (updates.sebQuitPassword !== undefined) {
+      if (updates.sebQuitPassword && updates.sebQuitPassword.trim()) {
+        const hash = crypto.createHash('sha256').update(updates.sebQuitPassword.trim()).digest('hex').toLowerCase();
+        fields.push('seb_quit_password_hash = ?');
+        values.push(hash);
+        fields.push('seb_quit_password = NULL');
+      } else {
+        fields.push('seb_quit_password_hash = NULL');
+        fields.push('seb_quit_password = NULL');
+      }
+    } else if (updates.sebQuitPasswordHash !== undefined) {
+      fields.push('seb_quit_password_hash = ?');
+      values.push(updates.sebQuitPasswordHash ? updates.sebQuitPasswordHash.trim().toLowerCase() : null);
+      fields.push('seb_quit_password = NULL');
+    }
+    if (updates.sebAllowReload !== undefined) { fields.push('seb_allow_reload = ?'); values.push(updates.sebAllowReload ? 1 : 0); }
+    if (updates.sebShowReloadWarning !== undefined) { fields.push('seb_show_reload_warning = ?'); values.push(updates.sebShowReloadWarning ? 1 : 0); }
+    if (updates.durationMinutes !== undefined) { fields.push('duration_minutes = ?'); values.push(updates.durationMinutes); }
+    if (updates.brandingTheme !== undefined) {
+      fields.push('branding_theme_json = ?');
+      values.push(JSON.stringify(sanitizeBrandingTheme(updates.brandingTheme)));
+    }
+
+    fields.push('updated_at = ?');
+    values.push(now);
+    values.push(id);
+
+    await db.prepare(`UPDATE assignments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return await this.getAssignment(id);
   }
 
   async getAssignment(id: string): Promise<Assignment | null> {
@@ -1590,6 +1787,17 @@ class ClassroomDatabase {
   }
 
   private mapAssignment(row: any): Assignment {
+    let brandingTheme: AssessmentBrandingTheme | undefined = undefined;
+    if (row.branding_theme_json) {
+      try {
+        brandingTheme = sanitizeBrandingTheme(JSON.parse(row.branding_theme_json));
+      } catch (_) {
+        brandingTheme = sanitizeBrandingTheme({});
+      }
+    }
+
+    const quitHash = row.seb_quit_password_hash || (row.seb_quit_password ? crypto.createHash('sha256').update(row.seb_quit_password).digest('hex').toLowerCase() : null);
+
     return {
       id: row.id,
       classroomId: row.classroom_id,
@@ -1628,6 +1836,18 @@ class ClassroomDatabase {
         memoryLimitMb: tc.memoryLimitMb || 128,
       })),
       rubric: row.rubric_json ? JSON.parse(row.rubric_json) : undefined,
+
+      // SEB & Hardening Properties
+      securityLevel: (row.security_level as ExamSecurityLevel) || 'standard',
+      sebConfigKey: row.seb_config_key || null,
+      sebBrowserExamKey: row.seb_browser_exam_key || null,
+      sebQuitPassword: null,
+      sebQuitPasswordHash: quitHash,
+      hasQuitPassword: Boolean(quitHash),
+      sebAllowReload: row.seb_allow_reload === 1,
+      sebShowReloadWarning: row.seb_show_reload_warning !== 0,
+      durationMinutes: typeof row.duration_minutes === 'number' ? row.duration_minutes : 0,
+      brandingTheme,
     };
   }
 
@@ -2923,6 +3143,7 @@ class ClassroomDatabase {
     const quitHash = exam.sebQuitPassword && exam.sebQuitPassword.trim()
       ? crypto.createHash('sha256').update(exam.sebQuitPassword.trim()).digest('hex').toLowerCase()
       : (exam.sebQuitPasswordHash || null);
+    const sanitizedBranding = sanitizeBrandingTheme(exam.brandingTheme);
 
     await db.prepare(`
       INSERT INTO exams (
@@ -2931,8 +3152,8 @@ class ClassroomDatabase {
         security_level, status, shuffle_questions, shuffle_options, show_results_immediately,
         assigned_student_ids_json, created_by,
         seb_config_key, seb_browser_exam_key, seb_quit_password, seb_quit_password_hash, seb_allow_reload, seb_show_reload_warning,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        branding_theme_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       cid,
@@ -2957,6 +3178,7 @@ class ClassroomDatabase {
       quitHash,
       exam.sebAllowReload ? 1 : 0,
       exam.sebShowReloadWarning !== false ? 1 : 0,
+      JSON.stringify(sanitizedBranding),
       now,
       now
     );
@@ -2980,6 +3202,7 @@ class ClassroomDatabase {
       hasQuitPassword: !!quitHash,
       sebAllowReload: !!exam.sebAllowReload,
       sebShowReloadWarning: exam.sebShowReloadWarning !== false,
+      brandingTheme: sanitizedBranding,
       status: (exam.status as any) || 'draft',
       shuffleQuestions: !!exam.shuffleQuestions,
       shuffleOptions: !!exam.shuffleOptions,
@@ -2999,6 +3222,15 @@ class ClassroomDatabase {
 
     let assignedStudentIds: string[] = [];
     try { assignedStudentIds = JSON.parse(row.assigned_student_ids_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
+
+    let brandingTheme: AssessmentBrandingTheme | undefined;
+    if (row.branding_theme_json) {
+      try {
+        brandingTheme = sanitizeBrandingTheme(JSON.parse(row.branding_theme_json));
+      } catch (parseErr) {
+        console.warn('[ClassroomDB] Failed to parse branding_theme_json:', parseErr);
+      }
+    }
 
     const sections = await this.listExamSections(examId);
     const questions = await this.listExamQuestions(examId);
@@ -3023,6 +3255,7 @@ class ClassroomDatabase {
       hasQuitPassword: !!row.seb_quit_password_hash || !!row.seb_quit_password,
       sebAllowReload: row.seb_allow_reload === 1,
       sebShowReloadWarning: row.seb_show_reload_warning === 1,
+      brandingTheme,
       status: row.status,
       shuffleQuestions: row.shuffle_questions === 1,
       shuffleOptions: row.shuffle_options === 1,
@@ -3057,6 +3290,15 @@ class ClassroomDatabase {
       let assignedStudentIds: string[] = [];
       try { assignedStudentIds = JSON.parse(row.assigned_student_ids_json || '[]'); } catch (parseErr) { console.warn('[ClassroomDB] Failed to parse JSON column:', parseErr); }
 
+      let brandingTheme: AssessmentBrandingTheme | undefined;
+      if (row.branding_theme_json) {
+        try {
+          brandingTheme = sanitizeBrandingTheme(JSON.parse(row.branding_theme_json));
+        } catch (parseErr) {
+          console.warn('[ClassroomDB] Failed to parse branding_theme_json in listExams:', parseErr);
+        }
+      }
+
       const qCountRow: any = await db.prepare('SELECT COUNT(*) as count FROM exam_questions WHERE exam_id = ?').get(row.id);
       const questionCount = qCountRow?.count || 0;
 
@@ -3073,6 +3315,7 @@ class ClassroomDatabase {
         attemptsAllowed: row.attempts_allowed,
         securityLevel: row.security_level,
         hasQuitPassword: !!row.seb_quit_password_hash || !!row.seb_quit_password,
+        brandingTheme,
         status: row.status,
         shuffleQuestions: row.shuffle_questions === 1,
         shuffleOptions: row.shuffle_options === 1,
@@ -3126,9 +3369,17 @@ class ClassroomDatabase {
         fields.push('seb_quit_password_hash = NULL');
         fields.push('seb_quit_password = NULL');
       }
+    } else if (updates.sebQuitPasswordHash !== undefined) {
+      fields.push('seb_quit_password_hash = ?');
+      values.push(updates.sebQuitPasswordHash ? updates.sebQuitPasswordHash.trim().toLowerCase() : null);
+      fields.push('seb_quit_password = NULL');
     }
     if (updates.sebAllowReload !== undefined) { fields.push('seb_allow_reload = ?'); values.push(updates.sebAllowReload ? 1 : 0); }
     if (updates.sebShowReloadWarning !== undefined) { fields.push('seb_show_reload_warning = ?'); values.push(updates.sebShowReloadWarning ? 1 : 0); }
+    if (updates.brandingTheme !== undefined) {
+      fields.push('branding_theme_json = ?');
+      values.push(JSON.stringify(sanitizeBrandingTheme(updates.brandingTheme)));
+    }
 
     fields.push('updated_at = ?');
     values.push(now);
@@ -5539,6 +5790,43 @@ class ClassroomDatabase {
 
     const rows: any = await db.prepare(query).all(...params);
     return (rows && rows.results) ? rows.results : (Array.isArray(rows) ? rows : []);
+  }
+
+  // --- SEB SINGLE-USE LAUNCH TOKEN PERSISTENCE ---
+
+  async consumeSebToken(
+    nonce: string,
+    userId: string,
+    assessmentId: string,
+    expiresAt: number
+  ): Promise<boolean> {
+    const db = await this.getDb();
+    const now = Date.now();
+    try {
+      await db.prepare(`
+        INSERT INTO seb_consumed_tokens (nonce, user_id, assessment_id, consumed_at, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(nonce, userId, assessmentId, now, expiresAt);
+      return true;
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      if (msg.includes('UNIQUE constraint failed') || msg.includes('PRIMARY KEY') || msg.includes('constraint failed')) {
+        return false;
+      }
+      throw err;
+    }
+  }
+
+  async isSebTokenConsumed(nonce: string): Promise<boolean> {
+    const db = await this.getDb();
+    const row = await db.prepare('SELECT 1 FROM seb_consumed_tokens WHERE nonce = ?').get(nonce);
+    return !!row;
+  }
+
+  async cleanupExpiredSebTokens(now = Date.now()): Promise<number> {
+    const db = await this.getDb();
+    const result: any = await db.prepare('DELETE FROM seb_consumed_tokens WHERE expires_at < ?').run(now);
+    return result?.changes || 0;
   }
 
   async getHealthStats(): Promise<{ userCount: number; examCount: number; sessionCount: number }> {

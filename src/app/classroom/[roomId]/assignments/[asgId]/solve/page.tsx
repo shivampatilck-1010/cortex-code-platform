@@ -4,13 +4,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { 
   Play, Send, CheckCircle, AlertTriangle, RefreshCw, ArrowLeft, 
-  Terminal, Lock, Shield, ChevronUp, ChevronDown, Copy, Check, FileCode, Award, X
+  Terminal, Lock, Shield, ChevronUp, ChevronDown, Copy, Check, FileCode, Award, X, Download
 } from 'lucide-react';
 import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
 import { ProjectFile, ExecutionResult } from '@/lib/execution/types';
 import { Assignment, SubmissionTestCaseResult } from '@/lib/classroom/models';
 import Markdown from 'react-markdown';
 import { CortexLogo } from '@/components/brand/CortexLogo';
+import {
+  getSebClientKeys,
+  buildSebHeaders,
+  getSebProtocolUri,
+} from '@/lib/classroom/seb-client';
 
 export default function SolveAssignmentPage({
   params
@@ -40,6 +45,16 @@ export default function SolveAssignmentPage({
   const [isConsoleOpen, setIsConsoleOpen] = useState(true);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
+  // Safe Exam Browser (SEB) Security State
+  const [launchToken, setLaunchToken] = useState<string | null>(null);
+  const [sebRequiredInfo, setSebRequiredInfo] = useState<{
+    downloadUrl: string;
+    configUrl: string;
+    protocolUri?: string;
+    launchToken?: string;
+    verificationReason?: string;
+  } | null>(null);
+
   useEffect(() => {
     if (routeParams?.roomId) setRoomId(routeParams.roomId as string);
     if (routeParams?.asgId) setAsgId(routeParams.asgId as string);
@@ -58,33 +73,77 @@ export default function SolveAssignmentPage({
     }
   }, [params, routeParams]);
 
-  useEffect(() => {
+  const fetchAsg = React.useCallback(async () => {
     if (!roomId || !asgId) return;
 
-    const fetchAsg = async () => {
-      try {
-        const res = await fetch(`/api/v1/classrooms/${roomId}/assignments/${asgId}`);
-        const data = await res.json();
-        if (data.assignment) {
-          setAssignment(data.assignment);
-          const starter = data.assignment.starterCode || (data.assignment as any).startercode || (data.assignment as any).starter_code || '';
-          codeRef.current = starter;
-          const ext = data.assignment.language === 'python' ? 'py' : data.assignment.language === 'cpp' ? 'cpp' : 'ts';
-          setFiles([
-            {
-              id: 'main',
-              name: `main.${ext}`,
-              path: `/main.${ext}`,
-              content: starter
-            }
-          ]);
+    try {
+      const searchToken = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('sebToken') ||
+          new URLSearchParams(window.location.search).get('launchToken') ||
+          new URLSearchParams(window.location.search).get('token')
+        : null;
+      const effectiveToken = launchToken || searchToken || undefined;
+      if (searchToken && !launchToken) setLaunchToken(searchToken);
+
+      const keys = await getSebClientKeys();
+      const sebHeaders = {
+        ...buildSebHeaders({
+          configKey: keys.configKey,
+          browserExamKey: keys.browserExamKey,
+          launchToken: effectiveToken,
+        }),
+        ...(keys.configKey ? { 'x-seb-client-config-key': keys.configKey } : {}),
+        ...(keys.browserExamKey ? { 'x-seb-client-browser-exam-key': keys.browserExamKey } : {}),
+      };
+
+      const queryParam = effectiveToken ? `?launchToken=${encodeURIComponent(effectiveToken)}` : '';
+      const res = await fetch(`/api/v1/classrooms/${roomId}/assignments/${asgId}${queryParam}`, {
+        headers: {
+          ...sebHeaders,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        if (data.sebRequired || res.status === 403) {
+          const configUrl = data.configUrl || `/api/v1/classrooms/${roomId}/assignments/${asgId}/seb-config`;
+          const protocolUri = data.protocolUri || getSebProtocolUri(configUrl);
+          setSebRequiredInfo({
+            downloadUrl: data.downloadUrl || 'https://safeexambrowser.org/download_en.html',
+            configUrl,
+            protocolUri,
+            launchToken: data.launchToken || effectiveToken,
+            verificationReason: data.verificationReason || data.reason || data.error || 'Safe Exam Browser is required to view this assignment.',
+          });
+          if (data.launchToken) setLaunchToken(data.launchToken);
+          return;
         }
-      } catch (err) {
-        console.error(err);
+        throw new Error(data.error || 'Failed to load assignment');
       }
-    };
+
+      if (data.assignment) {
+        setAssignment(data.assignment);
+        setSebRequiredInfo(null);
+        const starter = data.assignment.starterCode || (data.assignment as any).startercode || (data.assignment as any).starter_code || '';
+        codeRef.current = starter;
+        const ext = data.assignment.language === 'python' ? 'py' : data.assignment.language === 'cpp' ? 'cpp' : 'ts';
+        setFiles([
+          {
+            id: 'main',
+            name: `main.${ext}`,
+            path: `/main.${ext}`,
+            content: starter
+          }
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [roomId, asgId, launchToken]);
+
+  useEffect(() => {
     fetchAsg();
-  }, [roomId, asgId]);
+  }, [fetchAsg]);
 
   const handleCopy = (text: string, idx: number) => {
     navigator.clipboard.writeText(text);
@@ -189,16 +248,49 @@ export default function SolveAssignmentPage({
     setActiveTab('results');
     
     try {
+      const keys = await getSebClientKeys();
+      const sebHeaders = {
+        ...buildSebHeaders({
+          configKey: keys.configKey,
+          browserExamKey: keys.browserExamKey,
+          launchToken: launchToken || undefined,
+        }),
+        ...(keys.configKey ? { 'x-seb-client-config-key': keys.configKey } : {}),
+        ...(keys.browserExamKey ? { 'x-seb-client-browser-exam-key': keys.browserExamKey } : {}),
+      };
+
       const submitCode = codeRef.current || files[0]?.content || '';
       const res = await fetch(`/api/v1/classrooms/${roomId}/assignments/${asgId}/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...sebHeaders,
+        },
         body: JSON.stringify({
           code: submitCode,
           language: assignment.language,
+          clientConfigKey: keys.configKey,
+          clientBrowserExamKey: keys.browserExamKey,
         })
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        if (data.sebRequired || res.status === 403) {
+          const configUrl = data.configUrl || `/api/v1/classrooms/${roomId}/assignments/${asgId}/seb-config`;
+          const protocolUri = data.protocolUri || getSebProtocolUri(configUrl);
+          setSebRequiredInfo({
+            downloadUrl: data.downloadUrl || 'https://safeexambrowser.org/download_en.html',
+            configUrl,
+            protocolUri,
+            launchToken: data.launchToken || launchToken || undefined,
+            verificationReason: data.verificationReason || data.reason || data.error || 'Safe Exam Browser is required to submit this assignment.',
+          });
+          return;
+        }
+        throw new Error(data.error || 'Submission failed');
+      }
+
       if (data.success) {
         setTestResults(data.testOutcome.results);
         setSubmissionScore({
@@ -215,6 +307,96 @@ export default function SolveAssignmentPage({
       setIsSubmitting(false);
     }
   };
+
+  if (sebRequiredInfo) {
+    return (
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="seb-assignment-gate-title"
+        aria-describedby="seb-assignment-gate-desc"
+        className="fixed inset-0 z-50 bg-[#08080a] flex items-center justify-center p-4 text-white font-sans"
+      >
+        <div className="bg-[#101116] border border-rose-900/50 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-center">
+          <div className="w-12 h-12 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-400 flex items-center justify-center mx-auto">
+            <Shield className="w-6 h-6" />
+          </div>
+
+          <h2 id="seb-assignment-gate-title" className="text-base font-bold text-white">
+            Safe Exam Browser (SEB) Required
+          </h2>
+
+          <p id="seb-assignment-gate-desc" className="text-xs text-gray-400 leading-relaxed">
+            This assignment requires high-integrity kiosk lockdown. Standard web browsers cannot access this problem statement or starter code. You must solve this assignment using Safe Exam Browser.
+          </p>
+
+          {sebRequiredInfo.verificationReason && (
+            <div className="p-2.5 bg-rose-950/30 border border-rose-900/40 rounded-lg text-left text-[11px] text-rose-300">
+              <span className="font-semibold block text-rose-200">Security Gate Notice:</span>
+              {sebRequiredInfo.verificationReason}
+            </div>
+          )}
+
+          <div className="p-3 bg-[#161720] rounded-xl border border-[#242732] text-left text-xs space-y-2">
+            <span className="font-semibold text-gray-300 block">Required Setup Steps:</span>
+            <ol className="list-decimal pl-4 space-y-1.5 text-gray-400 text-[11px]">
+              <li>
+                Install Safe Exam Browser on your computer if you have not already{' '}
+                <a
+                  href={sebRequiredInfo.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#FF9100] hover:underline inline-flex items-center gap-0.5 ml-1 font-semibold"
+                >
+                  (Download Official Installer)
+                </a>.
+              </li>
+              <li>Click <strong>&quot;Launch in Safe Exam Browser&quot;</strong> to start automatically, or download the configuration file.</li>
+              <li>If downloaded, open or double-click the <strong>.seb</strong> file to begin your secure session.</li>
+              <li>If already running inside Safe Exam Browser, click <strong>&quot;Retry Verification&quot;</strong> below.</li>
+            </ol>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+            {sebRequiredInfo.protocolUri && (
+              <a
+                href={sebRequiredInfo.protocolUri}
+                className="w-full sm:w-auto px-4 py-2 bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Launch in Safe Exam Browser</span>
+              </a>
+            )}
+            <a
+              href={`${sebRequiredInfo.configUrl}${sebRequiredInfo.configUrl.includes('?') ? '&' : '?'}format=plist`}
+              download
+              className="w-full sm:w-auto px-4 py-2 bg-[#1b1c24] hover:bg-[#252732] text-gray-200 border border-[#2c2f3b] text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download .seb Configuration</span>
+            </a>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => fetchAsg()}
+              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Verification</span>
+            </button>
+            <span className="text-gray-600">|</span>
+            <button
+              onClick={() => router.push(roomId ? `/classroom/${roomId}` : '/classroom')}
+              className="text-xs text-gray-500 hover:text-gray-300 transition"
+            >
+              Return to Classroom
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!assignment) {
     return (

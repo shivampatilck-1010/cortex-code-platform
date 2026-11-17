@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
-
-/**
- * Escapes XML strings for safe plist generation.
- */
-function escapeXml(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+import {
+  generateSafeExamBrowserConfigPlist,
+  buildSebExamStartUrl,
+  buildSebExamQuitUrl,
+  createSebLaunchToken,
+  getExpectedBrowserExamKey,
+  hashQuitPassword,
+} from '@/lib/classroom/seb-security';
 
 export async function GET(
   req: NextRequest,
@@ -27,13 +22,14 @@ export async function GET(
     }
 
     const user = await ClassroomAuth.getCurrentUser(req);
+    const classroom = await classroomDb.getClassroom(id);
     const isTeacher =
       user.role === 'admin' ||
       auth.context?.membership?.role === 'teacher' ||
-      (await classroomDb.getClassroom(id))?.teacherId === user.id;
+      classroom?.teacherId === user.id;
 
     const exam = await classroomDb.getExam(examId);
-    if (!exam || exam.classroomId !== id.toUpperCase().trim()) {
+    if (!exam || (exam.classroomId !== id && exam.classroomId !== id.toUpperCase().trim() && exam.classroomId.toLowerCase() !== id.toLowerCase().trim())) {
       return NextResponse.json({ error: 'Examination not found' }, { status: 404 });
     }
 
@@ -47,93 +43,91 @@ export async function GET(
       }
     }
 
-    const origin = req.nextUrl.origin || 'http://localhost:3000';
-    const startUrl = `${origin}/classroom`;
-    const quitUrl = `${origin}/classroom`;
+    // Safe base URL resolution with HTTPS preference for production environments
+    const fwdProto = req.headers.get('x-forwarded-proto');
+    const fwdHost = req.headers.get('x-forwarded-host') || req.headers.get('host') || req.nextUrl.host || 'localhost:3000';
+    const proto = (fwdProto || '').toLowerCase() === 'https' ? 'https' : (req.nextUrl.protocol.replace(':', '') || 'http');
+    const origin = `${proto}://${fwdHost.trim()}`;
 
-    // Retrieve hashed quit password from database
-    const hashedQuitPassword = exam.sebQuitPasswordHash || (exam.sebQuitPassword ? crypto.createHash('sha256').update(exam.sebQuitPassword).digest('hex') : '');
+    // Resolve or issue single-use signed launch token bound to user, exam, and classroom
+    const requestedToken = req.nextUrl.searchParams.get('launchToken') || req.nextUrl.searchParams.get('token') || req.nextUrl.searchParams.get('sebToken');
+    const launchToken = requestedToken || createSebLaunchToken({
+      userId: user.id || 'anonymous_student',
+      assessmentId: exam.id,
+      assessmentType: 'exam',
+      classroomId: id,
+      durationMinutes: exam.durationMinutes,
+    });
 
-    // Generate Browser Exam Key hash if not explicitly set
-    const browserExamKey = exam.sebBrowserExamKey || crypto
-      .createHash('sha256')
-      .update(`${exam.id}_${exam.classroomId}_cortex_seb`)
-      .digest('hex');
+    // Exact assessment deep-link startURL and post-submit quitURL
+    const startUrl = buildSebExamStartUrl(origin, exam.id, exam.classroomId || id, launchToken);
+    const quitUrl = buildSebExamQuitUrl(origin, exam.classroomId || id);
+
+    // Retrieve or derive authoritative Browser Exam Key and quit password hash
+    const browserExamKey = getExpectedBrowserExamKey(exam, { authoritative: true });
+    const hashedQuitPassword =
+      exam.sebQuitPasswordHash ||
+      (exam.sebQuitPassword ? hashQuitPassword(exam.sebQuitPassword) : '');
+
+    // Generate Apple Plist XML and official Config Key
+    const { xml, configKey, configDict } = generateSafeExamBrowserConfigPlist({
+      startUrl,
+      quitUrl,
+      quitPasswordHash: hashedQuitPassword,
+      sebQuitPassword: exam.sebQuitPassword,
+      browserExamKey,
+      allowReload: Boolean(exam.sebAllowReload),
+      showReloadWarning: exam.sebShowReloadWarning !== false,
+      allowPreferencesWindow: false,
+      brandingTheme: exam.brandingTheme,
+    });
+
+    // Construct direct sebs:// protocol launch URI
+    const configDownloadUrl = `${origin}/api/v1/classrooms/${encodeURIComponent(id)}/exams/${encodeURIComponent(examId)}/seb-config?launchToken=${encodeURIComponent(launchToken)}`;
+    const protocolUri = configDownloadUrl
+      .replace(/^https:\/\//i, 'sebs://')
+      .replace(/^http:\/\//i, 'seb://');
 
     const format = req.nextUrl.searchParams.get('format');
+    const isJsonRequested =
+      format === 'json' ||
+      (req.headers.get('accept')?.includes('application/json') &&
+        format !== 'seb' &&
+        format !== 'plist' &&
+        !req.nextUrl.searchParams.has('download'));
 
-    // JSON format support for API inspection (strictly limited to instructors/administrators)
-    if (format === 'json') {
-      if (!isTeacher) {
-        return NextResponse.json({
-          error: 'JSON inspection format is restricted to instructors; examinees must download the .seb configuration file',
-        }, { status: 403 });
-      }
+    // JSON format support for client modals, setup gates, and teacher inspection
+    if (isJsonRequested) {
       return NextResponse.json({
-        originatorVersion: 'Cortex Examination System 3.0',
+        success: true,
+        sebRequired: true,
         examId: exam.id,
-        classroomId: exam.classroomId,
-        startURL: startUrl,
-        quitURL: quitUrl,
-        browserExamKey,
-        allowQuit: true,
-        hashedQuitPassword: hashedQuitPassword || undefined,
-        allowPreferencesWindow: false,
-        allowReload: !!exam.sebAllowReload,
+        classroomId: exam.classroomId || id,
+        configKey,
+        configXml: xml,
+        startUrl,
+        quitUrl,
+        protocolUri,
+        downloadUrl: 'https://safeexambrowser.org/download_en.html',
+        launchToken,
+        configUrl: configDownloadUrl,
+        filename: `cortex-exam-${exam.id}.seb`,
+        allowReload: Boolean(exam.sebAllowReload),
         showReloadWarning: exam.sebShowReloadWarning !== false,
-        sendBrowserExamKey: true,
-        browserViewMode: 0,
-        enableAltTab: false,
-        hookKeys: true,
-        allowDeveloperConsole: false,
         securityLevel: exam.securityLevel,
-        limitationsNote: 'Browser-based detection identifies User-Agent and headers; full cryptographic attestation requires the external Safe Exam Browser desktop client.',
+        browserExamKey: isTeacher ? browserExamKey : undefined,
+        configDict: isTeacher ? configDict : undefined,
       });
     }
 
-    // Standard XML Plist (.seb) format
-    const sebXml = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>originatorVersion</key>
-  <string>Cortex Examination System 3.0</string>
-  <key>startURL</key>
-  <string>${escapeXml(startUrl)}</string>
-  <key>quitURL</key>
-  <string>${escapeXml(quitUrl)}</string>
-  <key>allowQuit</key>
-  <true/>
-  ${hashedQuitPassword ? `<key>hashedQuitPassword</key>\n  <string>${escapeXml(hashedQuitPassword)}</string>` : ''}
-  <key>allowPreferencesWindow</key>
-  <false/>
-  <key>allowReload</key>
-  <${exam.sebAllowReload ? 'true' : 'false'}/>
-  <key>showReloadWarning</key>
-  <${exam.sebShowReloadWarning !== false ? 'true' : 'false'}/>
-  <key>sendBrowserExamKey</key>
-  <true/>
-  <key>browserExamKey</key>
-  <string>${escapeXml(browserExamKey)}</string>
-  <key>browserViewMode</key>
-  <integer>0</integer>
-  <key>enableAltTab</key>
-  <false/>
-  <key>hookKeys</key>
-  <true/>
-  <key>allowDeveloperConsole</key>
-  <false/>
-  <key>allowSpellCheck</key>
-  <false/>
-</dict>
-</plist>`;
-
-    return new NextResponse(sebXml, {
+    // Standard Apple XML Plist (.seb) file download
+    return new NextResponse(xml, {
       status: 200,
       headers: {
         'Content-Type': 'application/seb; charset=utf-8',
         'Content-Disposition': `attachment; filename="cortex-exam-${exam.id}.seb"`,
         'Cache-Control': 'no-store, max-age=0',
+        'X-SafeExamBrowser-ConfigKey': configKey,
       },
     });
   } catch (err: any) {

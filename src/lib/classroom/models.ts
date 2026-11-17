@@ -151,6 +151,85 @@ export interface RubricCriterion {
   maxPoints: number;
 }
 
+// --- SAFE EXAM BROWSER & BRANDING THEME DEFINITIONS ---
+
+export type AssessmentThemePreset = 'cortex-dark' | 'slate-dark' | 'midnight-blue' | 'classic-light';
+
+export interface AssessmentBrandingTheme {
+  accentColor?: string; // Strictly validated hex color (e.g. #0ea5e9)
+  institutionName?: string;
+  institutionLogoUrl?: string; // Strictly https:// or relative /... path
+  themePreset?: AssessmentThemePreset;
+  customInstructions?: string;
+}
+export const AssessmentBrandingTheme = {};
+
+export const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+export const VALID_THEME_PRESETS: ReadonlySet<AssessmentThemePreset> = new Set([
+  'cortex-dark',
+  'slate-dark',
+  'midnight-blue',
+  'classic-light',
+]);
+
+/**
+ * Validates whether a given value is a valid 3-character or 6-character hex color code.
+ */
+export function isValidHexColor(color: unknown): boolean {
+  if (typeof color !== 'string') return false;
+  return HEX_COLOR_REGEX.test(color.trim());
+}
+
+/**
+ * Validates whether a given string is an allowed theme preset.
+ */
+export function isValidThemePreset(preset: unknown): preset is AssessmentThemePreset {
+  return typeof preset === 'string' && VALID_THEME_PRESETS.has(preset as AssessmentThemePreset);
+}
+
+/**
+ * Sanitizes an incoming branding theme object to prevent CSS injection, XSS in URLs,
+ * and ensure clean fallback values.
+ */
+export function sanitizeBrandingTheme(raw: unknown): AssessmentBrandingTheme {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      themePreset: 'cortex-dark',
+    };
+  }
+
+  const obj = raw as Record<string, unknown>;
+  const result: AssessmentBrandingTheme = {
+    themePreset: isValidThemePreset(obj.themePreset) ? obj.themePreset : 'cortex-dark',
+  };
+
+  if (typeof obj.accentColor === 'string' && isValidHexColor(obj.accentColor)) {
+    result.accentColor = obj.accentColor.trim().toLowerCase();
+  }
+
+  if (typeof obj.institutionName === 'string') {
+    const trimmed = obj.institutionName.trim().slice(0, 100);
+    if (trimmed) result.institutionName = trimmed;
+  }
+
+  if (typeof obj.institutionLogoUrl === 'string') {
+    const trimmed = obj.institutionLogoUrl.trim();
+    // Allow only https:// or absolute relative paths starting with /
+    // Disallow javascript:, data:, and control characters
+    if (/^(https:\/\/|\/[a-zA-Z0-9_\-./]+)/i.test(trimmed) && !trimmed.toLowerCase().includes('javascript:')) {
+      result.institutionLogoUrl = trimmed.slice(0, 500);
+    }
+  }
+
+  if (typeof obj.customInstructions === 'string') {
+    const trimmed = obj.customInstructions.trim().slice(0, 2000);
+    if (trimmed) result.customInstructions = trimmed;
+  }
+
+  return result;
+}
+
 export interface Assignment {
   id: string;
   classroomId: string;
@@ -181,7 +260,21 @@ export interface Assignment {
   updatedAt: number;
   testCases: TestCase[];
   rubric?: RubricCriterion[];
+
+  // --- SEB & Assessment Hardening Extensions ---
+  securityLevel?: ExamSecurityLevel;
+  sebConfigKey?: string | null;
+  sebBrowserExamKey?: string | null;
+  sebQuitPassword?: string | null;
+  sebQuitPasswordHash?: string | null;
+  hasQuitPassword?: boolean;
+  sebAllowReload?: boolean;
+  sebShowReloadWarning?: boolean;
+  durationMinutes?: number;
+  brandingTheme?: AssessmentBrandingTheme;
 }
+
+export const Assignment = {};
 
 export interface SubmissionTestCaseResult {
   testCaseId: string;
@@ -576,7 +669,12 @@ export interface Exam {
   questions?: ExamQuestion[];
   branchingRules?: ExamBranchingRule[];
   questionCount?: number;
+
+  // --- Safe Branding Theme Extension ---
+  brandingTheme?: AssessmentBrandingTheme;
 }
+
+export const Exam = {};
 
 export interface ExamSection {
   id: string;
@@ -830,5 +928,46 @@ export interface PlatformAdminAnalytics {
   };
   generatedAt: number;
 }
+
+// Declaration merging runtime exports for ESM type-stripping environments
+export const User = {};
+export const Classroom = {};
+export const ClassroomMember = {};
+export const Announcement = {};
+export const ClassroomMessage = {};
+export const TestCase = {};
+export const Submission = {};
+export const Grade = {};
+export const Feedback = {};
+export const LiveClassSession = {};
+export const ClassroomResource = {};
+export const Notification = {};
+export const ClassroomEvent = {};
+export const StudentProgress = {};
+export const LeaderboardEntry = {};
+export const ClassroomAnalytics = {};
+export const ClassroomTeamSettings = {};
+export const ProjectTeam = {};
+export const ProjectTeamMember = {};
+export const ExamSection = {};
+export const ExamQuestion = {};
+export const ExamSession = {};
+export const ExamQuestionResponse = {};
+export const ExamIntegrityEvent = {};
+export const ExamBranchingRule = {};
+export const ExamAdaptiveProfile = {};
+export const ExamQuestionPool = {};
+export const ExamQuestionPoolItem = {};
+export const ExamCohort = {};
+export const ExamAccommodations = {};
+export const ExamStudentAccommodations = {};
+export const ExamTemplate = {};
+export const ExamBulkQuestionDraft = {};
+export const ExamBulkImportJob = {};
+export const ExamRubric = {};
+export const ExamRubricCriterion = {};
+export const ExamRubricLevel = {};
+export const ExamRegradeJob = {};
+export const ExamAnalyticsSummary = {};
 
 

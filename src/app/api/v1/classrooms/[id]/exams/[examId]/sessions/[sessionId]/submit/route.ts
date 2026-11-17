@@ -3,6 +3,7 @@ import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { gradeQuestionResponse } from '@/lib/classroom/exam-grader';
 import { computeActiveExamRoute } from '@/lib/classroom/exam-branching';
+import { verifySafeExamBrowserRequest } from '@/lib/classroom/seb-security';
 
 export async function POST(
   req: NextRequest,
@@ -26,13 +27,55 @@ export async function POST(
       return NextResponse.json({ error: 'Cannot submit another student\'s examination' }, { status: 403 });
     }
 
-    if (session.status !== 'in_progress') {
-      return NextResponse.json({ error: `Cannot submit a session with status '${session.status}'` }, { status: 400 });
+    const exam = await classroomDb.getExam(examId);
+    if (!exam || (exam.classroomId !== id && exam.classroomId !== id.toUpperCase().trim() && exam.classroomId.toLowerCase() !== id.toLowerCase().trim())) {
+      return NextResponse.json({ error: 'Examination not found' }, { status: 404 });
     }
 
-    const exam = await classroomDb.getExam(examId);
-    if (!exam || exam.classroomId !== id.toUpperCase().trim()) {
-      return NextResponse.json({ error: 'Examination not found' }, { status: 404 });
+    // Strict Safe Exam Browser (SEB) cryptographic verification for submission
+    if (exam.securityLevel === 'seb' || (exam.securityLevel as string) === 'seb_required') {
+      const clientConfigKey = req.headers.get('x-seb-client-config-key') || undefined;
+      const clientBrowserExamKey = req.headers.get('x-seb-client-browser-exam-key') || undefined;
+      const sebResult = verifySafeExamBrowserRequest(req, exam, {
+        clientConfigKey,
+        clientBrowserExamKey,
+        authoritative: true,
+      });
+      if (!sebResult.verified) {
+        return NextResponse.json({
+          error: 'Forbidden: exam submission rejected outside Safe Exam Browser.',
+          sebRequired: true,
+          reason: sebResult.reason,
+        }, { status: 403 });
+      }
+    }
+
+    // Idempotent Resubmission Handling: return 200 OK if session is already submitted
+    if (session.status === 'submitted') {
+      const showImmediate = exam.showResultsImmediately === true;
+      const effectiveScore = session.finalScore ?? session.autoScore ?? 0;
+      return NextResponse.json({
+        success: true,
+        alreadySubmitted: true,
+        message: 'Examination has already been submitted.',
+        session: {
+          id: session.id,
+          status: 'submitted',
+          submittedAt: session.submittedAt,
+          autoScore: showImmediate ? session.autoScore : null,
+          finalScore: showImmediate ? session.finalScore : null,
+          score: effectiveScore,
+          totalMarks: exam.totalMarks,
+          passingMarks: exam.passingMarks,
+          passed: showImmediate && effectiveScore !== undefined && effectiveScore !== null
+            ? effectiveScore >= exam.passingMarks
+            : null,
+        },
+      }, { status: 200 });
+    }
+
+    if (session.status !== 'in_progress') {
+      return NextResponse.json({ error: `Cannot submit a session with status '${session.status}'` }, { status: 400 });
     }
 
     const now = Date.now();
@@ -44,7 +87,7 @@ export async function POST(
     const responseMap = new Map(existingResponses.map((r) => [r.questionId, r]));
 
     // The 30-second grace period permits only final network delivery, not additional answering time.
-    // Therefore, accept final batch responses ONLY if received within valid examination time (now <= session.expiresAt).
+    // Accept final batch responses ONLY if received within valid examination time (now <= session.expiresAt).
     const body = await req.json().catch(() => ({}));
     const canAcceptFinalAnswers = now <= session.expiresAt;
     if (canAcceptFinalAnswers && body.finalResponses && typeof body.finalResponses === 'object') {
@@ -133,6 +176,7 @@ export async function POST(
     const finalStatus = isLate ? 'timed_out' : 'submitted';
     const autoScore = Math.max(0, Math.round(totalEarnedScore * 100) / 100);
     const finalScore = pendingManualGradingCount === 0 ? autoScore : null;
+    const effectiveScore = finalScore !== null ? finalScore : autoScore;
 
     const updatedSession = await classroomDb.updateExamSession(sessionId, {
       status: finalStatus,
@@ -143,6 +187,27 @@ export async function POST(
     }, 'in_progress');
 
     if (!updatedSession) {
+      // Concurrent submission race condition recovery
+      const reloadedSession = await classroomDb.getExamSession(sessionId);
+      if (reloadedSession && reloadedSession.status === 'submitted') {
+        const showImmediate = exam.showResultsImmediately === true;
+        const score = reloadedSession.finalScore ?? reloadedSession.autoScore ?? 0;
+        return NextResponse.json({
+          success: true,
+          alreadySubmitted: true,
+          message: 'Examination has already been submitted.',
+          session: {
+            id: reloadedSession.id,
+            status: 'submitted',
+            submittedAt: reloadedSession.submittedAt,
+            autoScore: showImmediate ? reloadedSession.autoScore : null,
+            finalScore: showImmediate ? reloadedSession.finalScore : null,
+            score,
+            totalMarks: exam.totalMarks,
+            passingMarks: exam.passingMarks,
+          },
+        }, { status: 200 });
+      }
       return NextResponse.json({ error: 'Cannot submit a session that has already been submitted or completed' }, { status: 400 });
     }
 
@@ -150,12 +215,14 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      alreadySubmitted: false,
       session: {
         id: updatedSession?.id,
         status: updatedSession?.status,
         submittedAt: updatedSession?.submittedAt,
         autoScore: showImmediate ? updatedSession?.autoScore : null,
         finalScore: showImmediate ? updatedSession?.finalScore : null,
+        score: effectiveScore,
         totalMarks: exam.totalMarks,
         passingMarks: exam.passingMarks,
         passed: showImmediate && finalScore !== null ? finalScore >= exam.passingMarks : null,

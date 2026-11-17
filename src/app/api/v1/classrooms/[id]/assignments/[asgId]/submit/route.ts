@@ -4,6 +4,7 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { realtimeCoordinator } from '@/lib/classroom/realtime';
 import { runAssignmentTestCases, calculateCodeSimilarity } from '@/lib/classroom/tester';
 import { Submission } from '@/lib/classroom/models';
+import { verifySafeExamBrowserRequest } from '@/lib/classroom/seb-security';
 
 const rateLimits = new Map<string, number>();
 
@@ -21,11 +22,52 @@ export async function POST(
     }
 
     const assignment = await classroomDb.getAssignment(asgId);
-    if (!assignment || assignment.classroomId !== id) {
+    if (!assignment || (assignment.classroomId !== id && assignment.classroomId !== id.toUpperCase().trim() && assignment.classroomId.toLowerCase() !== id.toLowerCase().trim())) {
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
     }
 
-    const body = await req.json();
+    // Strict Safe Exam Browser (SEB) verification for assignment submission
+    const isSebRequired =
+      assignment.securityLevel === 'seb' ||
+      (assignment.securityLevel as string) === 'seb_required' ||
+      (assignment as any).security_level === 'seb';
+
+    if (isSebRequired) {
+      const clientConfigKey = req.headers.get('x-seb-client-config-key') || undefined;
+      const clientBrowserExamKey = req.headers.get('x-seb-client-browser-exam-key') || undefined;
+      let sebVerify = verifySafeExamBrowserRequest(req, assignment, {
+        clientConfigKey,
+        clientBrowserExamKey,
+        authoritative: true,
+      });
+
+      // If header verification did not match, attempt reading JS API keys from JSON body
+      if (!sebVerify.verified) {
+        try {
+          const clonedReq = req.clone();
+          const bodyPeek = await clonedReq.json();
+          if (bodyPeek && (bodyPeek.clientBrowserExamKey || bodyPeek.clientConfigKey)) {
+            sebVerify = verifySafeExamBrowserRequest(req, assignment, {
+              clientBrowserExamKey: bodyPeek.clientBrowserExamKey,
+              clientConfigKey: bodyPeek.clientConfigKey,
+              authoritative: true,
+            });
+          }
+        } catch (_) {
+          // Body peek is non-JSON or empty; header verification remains authoritative
+        }
+      }
+
+      if (!sebVerify.verified) {
+        return NextResponse.json({
+          error: 'Assignment submission rejected outside Safe Exam Browser.',
+          sebRequired: true,
+          verificationReason: sebVerify.reason,
+        }, { status: 403 });
+      }
+    }
+
+    const body = await req.json().catch(() => ({}));
     const { code, language } = body;
 
     if (!code || typeof code !== 'string') {
@@ -60,10 +102,6 @@ export async function POST(
     if (isLate && !assignment.allowLateSubmission) {
       return NextResponse.json({ error: 'The deadline has passed and late submissions are not permitted.' }, { status: 400 });
     }
-
-
-
-
 
     const studentPrior = await classroomDb.getStudentSubmission(asgId, user.id);
     const version = (studentPrior?.version || 0) + 1;
@@ -133,8 +171,6 @@ export async function POST(
       testResults: testOutcome.results,
       similarityScore: maxSim,
       similarStudentName: maxSim >= 50 ? mostSimilarStudent : undefined,
-      // Immutable snapshot: records exactly what was submitted at this moment
-      // so future project edits do not silently rewrite this history
       ...(body.projectId ? { projectId: body.projectId } : {}),
       snapshotJson: JSON.stringify([{ name: 'main', content: code, language: language || assignment.language }]),
 

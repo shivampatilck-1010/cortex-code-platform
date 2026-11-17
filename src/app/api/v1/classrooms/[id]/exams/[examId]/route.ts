@@ -141,8 +141,10 @@ export async function PUT(
       sebConfigKey: body.sebConfigKey !== undefined ? body.sebConfigKey : undefined,
       sebBrowserExamKey: body.sebBrowserExamKey !== undefined ? body.sebBrowserExamKey : undefined,
       sebQuitPassword: body.sebQuitPassword !== undefined ? body.sebQuitPassword : undefined,
+      sebQuitPasswordHash: body.sebQuitPasswordHash !== undefined ? body.sebQuitPasswordHash : undefined,
       sebAllowReload: body.sebAllowReload !== undefined ? !!body.sebAllowReload : undefined,
       sebShowReloadWarning: body.sebShowReloadWarning !== undefined ? !!body.sebShowReloadWarning : undefined,
+      brandingTheme: body.brandingTheme !== undefined ? body.brandingTheme : undefined,
     });
 
     const { sebQuitPasswordHash, ...safeExam } = (updated || {}) as any;

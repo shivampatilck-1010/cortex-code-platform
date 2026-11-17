@@ -28,8 +28,8 @@ import {
   getExpectedBrowserExamKey,
   generateCandidateUrls,
   verifySafeExamBrowserRequest,
-} from '../src/lib/classroom/seb-security';
-import { Exam } from '../src/lib/classroom/models';
+} from '../src/lib/classroom/seb-security.ts';
+import { Exam } from '../src/lib/classroom/models.ts';
 
 let totalTests = 0;
 let passedTests = 0;

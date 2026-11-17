@@ -25,8 +25,10 @@ import {
   BookOpen,
   GitBranch,
   Activity,
+  Download,
 } from 'lucide-react';
 import { Exam, ExamStatus } from '@/lib/classroom/models';
+import { getSebProtocolUri } from '@/lib/classroom/seb-client';
 import { ExamBuilderModal } from './ExamBuilderModal';
 import { ExamQuestionsManagerModal } from './ExamQuestionsManagerModal';
 import { ExamPreviewModal } from './ExamPreviewModal';
@@ -41,9 +43,11 @@ interface ExaminationsTabProps {
   classroomId: string;
   isTeacher: boolean;
   currentUser: { id: string; name: string; email: string };
+  initialLaunchToken?: string;
+  initialExamId?: string;
 }
 
-export function ExaminationsTab({ classroomId, isTeacher, currentUser }: ExaminationsTabProps) {
+export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLaunchToken, initialExamId }: ExaminationsTabProps) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,8 +70,8 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser }: Examina
   // Reusable Question Bank modal state
   const [isQuestionBankOpen, setIsQuestionBankOpen] = useState(false);
 
-  // Active student examination runner
-  const [activeRunningExamId, setActiveRunningExamId] = useState<string | null>(null);
+  // Active student examination runner (pre-focused on deep-link if provided)
+  const [activeRunningExamId, setActiveRunningExamId] = useState<string | null>(initialExamId || null);
 
   // Sections and Branching modal state
   const [isSectionsOpen, setIsSectionsOpen] = useState(false);
@@ -176,9 +180,9 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser }: Examina
       case 'restricted':
         return <span className="flex items-center gap-1 text-[11px] text-cyan-300 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/60"><Shield className="w-3 h-3 text-[#FF9100]" /> Cortex Lockdown</span>;
       case 'seb':
-        return <span className="flex items-center gap-1 text-[11px] text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-800/60"><Shield className="w-3 h-3" /> Level 3 SEB</span>;
+        return <span className="flex items-center gap-1 text-[11px] text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-800/60 font-semibold"><Shield className="w-3 h-3" /> Safe Exam Browser (SEB Required)</span>;
       default:
-        return <span className="flex items-center gap-1 text-[11px] text-gray-400 bg-gray-900 px-2 py-0.5 rounded border border-gray-800"><Shield className="w-3 h-3" /> Level 1 Standard</span>;
+        return <span className="flex items-center gap-1 text-[11px] text-gray-400 bg-gray-900 px-2 py-0.5 rounded border border-gray-800"><Shield className="w-3 h-3" /> Standard Browser</span>;
     }
   };
 
@@ -470,34 +474,82 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser }: Examina
                           )}
                         </div>
                       ) : studentState?.hasActiveSession ? (
-                        <button
-                          onClick={() => setActiveRunningExamId(exam.id)}
-                          className="h-8 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs transition flex items-center gap-1.5 animate-pulse"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          Resume Exam
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {exam.securityLevel === 'seb' && (
+                            <>
+                              <a
+                                href={getSebProtocolUri(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config`)}
+                                className="h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow"
+                                title="Resume directly in Safe Exam Browser"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                                <span>Launch in SEB</span>
+                              </a>
+                              <a
+                                href={`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config?format=plist`}
+                                download
+                                className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-rose-300 hover:text-white border border-rose-900/50 transition flex items-center gap-1"
+                                title="Download .seb configuration file"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>.seb</span>
+                              </a>
+                            </>
+                          )}
+                          <button
+                            onClick={() => setActiveRunningExamId(exam.id)}
+                            className="h-8 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs transition flex items-center gap-1.5 animate-pulse"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            Resume Exam
+                          </button>
+                        </div>
                       ) : (
-                        <button
-                          onClick={() => setActiveRunningExamId(exam.id)}
-                          disabled={isBeforeStart || isAfterEnd || studentState?.attemptsRemaining <= 0}
-                          className={`h-8 px-4 rounded-lg font-semibold text-xs transition flex items-center gap-1.5 ${
-                            isBeforeStart || isAfterEnd || studentState?.attemptsRemaining <= 0
-                              ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
-                              : 'bg-[#FF9100] hover:bg-[#e08000] text-black shadow-md shadow-[#FF9100]/10'
-                          }`}
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          {isBeforeStart
-                            ? 'Starts Later'
-                            : isAfterEnd
-                            ? 'Window Closed'
-                            : studentState?.attemptsRemaining <= 0
-                            ? 'No Attempts Left'
-                            : exam.securityLevel === 'restricted'
-                            ? 'Take in Lockdown'
-                            : 'Start Exam'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {exam.securityLevel === 'seb' && !isBeforeStart && !isAfterEnd && (studentState?.attemptsRemaining > 0 || studentState?.attemptsRemaining === undefined) && (
+                            <>
+                              <a
+                                href={getSebProtocolUri(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config`)}
+                                className="h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow"
+                                title="Launch directly in Safe Exam Browser"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                                <span>Launch in SEB</span>
+                              </a>
+                              <a
+                                href={`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config?format=plist`}
+                                download
+                                className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-rose-300 hover:text-white border border-rose-900/50 transition flex items-center gap-1"
+                                title="Download .seb configuration file"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>.seb</span>
+                              </a>
+                            </>
+                          )}
+                          <button
+                            onClick={() => setActiveRunningExamId(exam.id)}
+                            disabled={isBeforeStart || isAfterEnd || studentState?.attemptsRemaining <= 0}
+                            className={`h-8 px-4 rounded-lg font-semibold text-xs transition flex items-center gap-1.5 ${
+                              isBeforeStart || isAfterEnd || studentState?.attemptsRemaining <= 0
+                                ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
+                                : 'bg-[#FF9100] hover:bg-[#e08000] text-black shadow-md shadow-[#FF9100]/10'
+                            }`}
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            {isBeforeStart
+                              ? 'Starts Later'
+                              : isAfterEnd
+                              ? 'Window Closed'
+                              : studentState?.attemptsRemaining <= 0
+                              ? 'No Attempts Left'
+                              : exam.securityLevel === 'restricted'
+                              ? 'Take in Lockdown'
+                              : exam.securityLevel === 'seb'
+                              ? 'Open Exam Gate'
+                              : 'Start Exam'}
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -587,6 +639,7 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser }: Examina
           classroomId={classroomId}
           examId={activeRunningExamId}
           currentUser={currentUser}
+          initialLaunchToken={initialLaunchToken}
           onClose={() => {
             setActiveRunningExamId(null);
             fetchExams();

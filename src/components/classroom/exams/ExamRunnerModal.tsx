@@ -27,6 +27,13 @@ import {
 import { Exam, ExamQuestion, ExamQuestionResponse, ExamSession } from '@/lib/classroom/models';
 import dynamic from 'next/dynamic';
 import { CortexLockdownPrepModal } from './CortexLockdownPrepModal';
+import {
+  getSebClientKeys,
+  buildSebHeaders,
+  getSebProtocolUri,
+  validateHexColor,
+  THEME_PRESETS,
+} from '@/lib/classroom/seb-client';
 
 // Dynamic Monaco editor import to avoid SSR issues
 const MonacoEditor = dynamic(
@@ -50,9 +57,10 @@ interface ExamRunnerModalProps {
   examId: string;
   currentUser: { id: string; name: string; email: string };
   onClose: () => void;
+  initialLaunchToken?: string;
 }
 
-export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: ExamRunnerModalProps) {
+export function ExamRunnerModal({ classroomId, examId, currentUser, onClose, initialLaunchToken }: ExamRunnerModalProps) {
   const [exam, setExam] = useState<Exam | null>(null);
   const [session, setSession] = useState<ExamSession | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
@@ -64,8 +72,21 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sebRequiredInfo, setSebRequiredInfo] = useState<{ downloadUrl: string; configUrl: string } | null>(null);
+  const [launchToken, setLaunchToken] = useState<string | null>(initialLaunchToken || null);
+  const [sebRequiredInfo, setSebRequiredInfo] = useState<{
+    downloadUrl: string;
+    configUrl: string;
+    protocolUri?: string;
+    launchToken?: string;
+    verificationReason?: string;
+  } | null>(null);
   const [lockdownRequiredInfo, setLockdownRequiredInfo] = useState<{ downloadUrl: string; launchUrl: string } | null>(null);
+
+  // Authoritative Monotonic Server Timer Refs
+  const serverTimeOffsetRef = useRef<number>(0);
+  const serverTimeAtSyncRef = useRef<number>(0);
+  const clientMonotonicAtSyncRef = useRef<number>(0);
+  const expiresAtRef = useRef<number | null>(null);
 
   // Timer state
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -95,6 +116,16 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
   const [sampleOutput, setSampleOutput] = useState<string | null>(null);
   const [isRunningSample, setIsRunningSample] = useState(false);
 
+  // Centralized SEB Headers Helper
+  const getSebHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const keys = await getSebClientKeys();
+    return buildSebHeaders({
+      configKey: keys.configKey,
+      browserExamKey: keys.browserExamKey,
+      launchToken: launchToken || undefined,
+    });
+  }, [launchToken]);
+
   // Network connection monitoring
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -115,18 +146,27 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
 
       // Authoritative time resynchronization with server
       if (session) {
-        fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/heartbeat`, {
-          method: 'POST',
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data?.expiresAt) {
-              const now = Date.now();
-              const rem = Math.max(0, Math.floor((data.expiresAt - now) / 1000));
-              setRemainingSeconds(rem);
-            }
+        getSebHeaders().then((sebHeaders) => {
+          fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/heartbeat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...sebHeaders,
+            },
           })
-          .catch(() => {});
+            .then((res) => res.json())
+            .then((data) => {
+              if (data?.expiresAt && data?.serverTime) {
+                serverTimeOffsetRef.current = data.serverTime - Date.now();
+                serverTimeAtSyncRef.current = data.serverTime;
+                clientMonotonicAtSyncRef.current = performance.now();
+                expiresAtRef.current = data.expiresAt;
+                const rem = Math.max(0, Math.floor((data.expiresAt - data.serverTime) / 1000));
+                setRemainingSeconds(rem);
+              }
+            })
+            .catch(() => {});
+        });
       }
     };
 
@@ -142,127 +182,190 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [classroomId, examId, session]);
+  }, [classroomId, examId, session, getSebHeaders]);
 
   // Start or resume examination session
-  useEffect(() => {
-    async function startSession() {
-      try {
-        setIsStarting(true);
-        setError(null);
+  const startSession = useCallback(async () => {
+    try {
+      setIsStarting(true);
+      setError(null);
 
-        const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/start`, {
-          method: 'POST',
-        });
+      // Read query launch token on initial load if not already provided
+      const searchToken = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('sebToken') ||
+          new URLSearchParams(window.location.search).get('launchToken') ||
+          new URLSearchParams(window.location.search).get('token')
+        : null;
 
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          if (data.sebRequired) {
-            setSebRequiredInfo({
-              downloadUrl: data.downloadUrl || 'https://safeexambrowser.org',
-              configUrl: data.configUrl || `/api/v1/classrooms/${classroomId}/exams/${examId}/seb-config`,
-            });
-            return;
-          }
-          if (data.lockdownRequired) {
-            let grantParam = '';
-            try {
-              const authRes = await fetch('/api/v1/lockdown/authorize-launch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classroomId, examId }),
-              });
-              if (authRes.ok) {
-                const authData = await authRes.json();
-                if (authData.launchGrant) {
-                  grantParam = `&grant=${encodeURIComponent(authData.launchGrant)}`;
-                }
-              }
-            } catch (err) {
-              console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
-            }
+      const effectiveToken = launchToken || searchToken || undefined;
+      if (searchToken && !launchToken) {
+        setLaunchToken(searchToken);
+      }
 
-            setLockdownRequiredInfo({
-              downloadUrl: data.downloadUrl || '/lockdown/download',
-              launchUrl: `cortex-lockdown://launch?examId=${examId}${grantParam}`,
-            });
-            return;
-          }
-          throw new Error(data.error || 'Failed to start examination');
-        }
+      const keys = await getSebClientKeys();
+      const sebHeaders = buildSebHeaders({
+        configKey: keys.configKey,
+        browserExamKey: keys.browserExamKey,
+        launchToken: effectiveToken,
+      });
 
-        setExam(data.exam);
-        setSession(data.session);
-        setQuestions(data.exam?.questions || []);
+      const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...sebHeaders,
+        },
+        body: effectiveToken
+          ? JSON.stringify({
+              launchToken: effectiveToken,
+              clientConfigKey: keys.configKey,
+              clientBrowserExamKey: keys.browserExamKey,
+            })
+          : undefined,
+      });
 
-        // Load existing saved responses if session was resumed
-        const initialResp: Record<string, any> = {};
-        const initialFlags: Record<string, boolean> = {};
-
-        if (Array.isArray(data.savedResponses)) {
-          data.savedResponses.forEach((r: ExamQuestionResponse) => {
-            initialResp[r.questionId] = r.response;
-            if (r.flaggedForReview) initialFlags[r.questionId] = true;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.sebRequired) {
+          const configUrl = data.configUrl || `/api/v1/classrooms/${classroomId}/exams/${examId}/seb-config`;
+          const protocolUri = data.protocolUri || getSebProtocolUri(configUrl);
+          setSebRequiredInfo({
+            downloadUrl: data.downloadUrl || 'https://safeexambrowser.org/download_en.html',
+            configUrl,
+            protocolUri,
+            launchToken: data.launchToken || effectiveToken,
+            verificationReason: data.verificationReason || data.reason || data.error,
           });
+          if (data.launchToken) setLaunchToken(data.launchToken);
+          return;
         }
-
-        // Check local storage backup if available
-        if (typeof window !== 'undefined' && data.session?.id) {
+        if (data.lockdownRequired) {
+          let grantParam = '';
           try {
-            const localBackup = localStorage.getItem(`cortex_exam_${data.session.id}_responses`);
-            if (localBackup) {
-              const parsed = JSON.parse(localBackup);
-              Object.keys(parsed).forEach((k) => {
-                if (initialResp[k] === undefined) {
-                  initialResp[k] = parsed[k];
-                }
-              });
+            const authRes = await fetch('/api/v1/lockdown/authorize-launch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ classroomId, examId }),
+            });
+            if (authRes.ok) {
+              const authData = await authRes.json();
+              if (authData.launchGrant) {
+                grantParam = `&grant=${encodeURIComponent(authData.launchGrant)}`;
+              }
             }
           } catch (err) {
             console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
           }
+
+          setLockdownRequiredInfo({
+            downloadUrl: data.downloadUrl || '/lockdown/download',
+            launchUrl: `cortex-lockdown://launch?examId=${examId}${grantParam}`,
+          });
+          return;
         }
-
-        setResponses(initialResp);
-        setFlaggedQuestions(initialFlags);
-        setAutosaveStatus('saved');
-        setLastSavedAt(Date.now());
-
-        // Compute remaining seconds from server expiresAt
-        const now = Date.now();
-        const rem = Math.max(0, Math.floor((data.session.expiresAt - now) / 1000));
-        setRemainingSeconds(rem);
-
-        // Request browser fullscreen if supported and permitted
-        try {
-          if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(() => { /* browser fullscreen request denied or unsupported */ });
-          }
-        } catch (_) { /* browser fullscreen request denied or unsupported */ }
-      } catch (err: any) {
-        setError(err.message || 'Error initializing examination session');
-      } finally {
-        setIsStarting(false);
-        setIsLoading(false);
+        throw new Error(data.error || 'Failed to start examination');
       }
+
+      setExam(data.exam);
+      setSession(data.session);
+      setQuestions(data.exam?.questions || []);
+
+      // Load existing saved responses if session was resumed
+      const initialResp: Record<string, any> = {};
+      const initialFlags: Record<string, boolean> = {};
+
+      if (Array.isArray(data.savedResponses)) {
+        data.savedResponses.forEach((r: ExamQuestionResponse) => {
+          initialResp[r.questionId] = r.response;
+          if (r.flaggedForReview) initialFlags[r.questionId] = true;
+        });
+      }
+
+      // Check local storage backup if available
+      if (typeof window !== 'undefined' && data.session?.id) {
+        try {
+          const localBackup = localStorage.getItem(`cortex_exam_${data.session.id}_responses`);
+          if (localBackup) {
+            const parsed = JSON.parse(localBackup);
+            Object.keys(parsed).forEach((k) => {
+              if (initialResp[k] === undefined) {
+                initialResp[k] = parsed[k];
+              }
+            });
+          }
+        } catch (err) {
+          console.warn('[ExamRunnerModal] Non-fatal error caught:', err);
+        }
+      }
+
+      setResponses(initialResp);
+      setFlaggedQuestions(initialFlags);
+      setAutosaveStatus('saved');
+      setLastSavedAt(Date.now());
+
+      // Authoritative monotonic server time synchronization
+      const serverTime = typeof data.serverTime === 'number' ? data.serverTime : Date.now();
+      const expiresAt = data.session.expiresAt;
+      serverTimeOffsetRef.current = serverTime - Date.now();
+      serverTimeAtSyncRef.current = serverTime;
+      clientMonotonicAtSyncRef.current = performance.now();
+      expiresAtRef.current = expiresAt;
+
+      const rem = Math.max(0, Math.floor((expiresAt - serverTime) / 1000));
+      setRemainingSeconds(rem);
+
+      // Request browser fullscreen if supported and permitted
+      try {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } catch (_) {}
+    } catch (err: any) {
+      setError(err.message || 'Error initializing examination session');
+    } finally {
+      setIsStarting(false);
+      setIsLoading(false);
     }
+  }, [classroomId, examId, launchToken]);
 
-    startSession();
-  }, [classroomId, examId]);
-
-  // Countdown timer effect
   useEffect(() => {
-    if (remainingSeconds === null || remainingSeconds <= 0 || submissionResult) return;
+    startSession();
+  }, [startSession]);
+
+  // Authoritative Monotonic Countdown timer effect
+  useEffect(() => {
+    if (remainingSeconds === null || submissionResult) return;
 
     timerRef.current = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(timerRef.current!);
+      if (expiresAtRef.current && serverTimeAtSyncRef.current) {
+        const elapsed = performance.now() - clientMonotonicAtSyncRef.current;
+        const currentServerTime = serverTimeAtSyncRef.current + elapsed;
+        const rem = Math.max(0, Math.floor((expiresAtRef.current - currentServerTime) / 1000));
+        setRemainingSeconds(rem);
+
+        if (rem <= 0) {
+          if (timerRef.current) clearInterval(timerRef.current);
           handleAutoSubmitOnExpiry();
-          return 0;
         }
-        return prev - 1;
-      });
+      } else if (expiresAtRef.current) {
+        const currentServerTime = Date.now() + serverTimeOffsetRef.current;
+        const rem = Math.max(0, Math.floor((expiresAtRef.current - currentServerTime) / 1000));
+        setRemainingSeconds(rem);
+
+        if (rem <= 0) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          handleAutoSubmitOnExpiry();
+        }
+      } else {
+        setRemainingSeconds((prev) => {
+          if (prev === null || prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            handleAutoSubmitOnExpiry();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
     }, 1000);
 
     return () => {
@@ -333,14 +436,22 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
       if (typeof window !== 'undefined' && !window.navigator.onLine) return;
 
       try {
+        const sebHeaders = await getSebHeaders();
         const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/heartbeat`, {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...sebHeaders,
+          },
         });
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          if (data?.expiresAt) {
-            const now = Date.now();
-            const rem = Math.max(0, Math.floor((data.expiresAt - now) / 1000));
+          if (data?.expiresAt && data?.serverTime) {
+            serverTimeOffsetRef.current = data.serverTime - Date.now();
+            serverTimeAtSyncRef.current = data.serverTime;
+            clientMonotonicAtSyncRef.current = performance.now();
+            expiresAtRef.current = data.expiresAt;
+            const rem = Math.max(0, Math.floor((data.expiresAt - data.serverTime) / 1000));
             setRemainingSeconds(rem);
           }
         }
@@ -350,7 +461,7 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
     }, 25000);
 
     return () => clearInterval(heartbeatInterval);
-  }, [session, classroomId, examId, submissionResult]);
+  }, [session, classroomId, examId, submissionResult, getSebHeaders]);
 
   // Core Queue Processing for Autosave
   const processPendingQueue = useCallback(async () => {
@@ -372,9 +483,13 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
 
     for (const [qId, item] of entries) {
       try {
+        const sebHeaders = await getSebHeaders();
         const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/responses`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...sebHeaders,
+          },
           body: JSON.stringify({
             questionId: qId,
             response: item.val,
@@ -383,7 +498,21 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
         });
 
         if (!res.ok) {
-          throw new Error('Save request failed with status ' + res.status);
+          const errData = await res.json().catch(() => ({}));
+          if (res.status === 403 && (errData.sebRequired || exam?.securityLevel === 'seb')) {
+            const configUrl = errData.configUrl || `/api/v1/classrooms/${classroomId}/exams/${examId}/seb-config`;
+            const protocolUri = errData.protocolUri || getSebProtocolUri(configUrl);
+            setSebRequiredInfo({
+              downloadUrl: errData.downloadUrl || 'https://safeexambrowser.org/download_en.html',
+              configUrl,
+              protocolUri,
+              launchToken: errData.launchToken || launchToken || undefined,
+              verificationReason: errData.verificationReason || errData.reason || errData.error || 'Safe Exam Browser verification required',
+            });
+            setAutosaveStatus('failed');
+            return;
+          }
+          throw new Error(errData.error || 'Save request failed with status ' + res.status);
         }
 
         const respData = await res.json().catch(() => ({}));
@@ -425,7 +554,7 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
       setAutosaveStatus('saved');
       setLastSavedAt(Date.now());
     }
-  }, [classroomId, examId, session]);
+  }, [classroomId, examId, session, getSebHeaders]);
 
   // Trigger autosave helper
   const scheduleAutosave = (qId: string, answerVal: any, flagged: boolean = false) => {
@@ -508,14 +637,30 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
     setAutosaveStatus('submitting');
 
     try {
+      const sebHeaders = await getSebHeaders();
       const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...sebHeaders,
+        },
         body: JSON.stringify({ finalResponses: responses }),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && (data.sebRequired || exam?.securityLevel === 'seb')) {
+          const configUrl = data.configUrl || `/api/v1/classrooms/${classroomId}/exams/${examId}/seb-config`;
+          const protocolUri = data.protocolUri || getSebProtocolUri(configUrl);
+          setSebRequiredInfo({
+            downloadUrl: data.downloadUrl || 'https://safeexambrowser.org/download_en.html',
+            configUrl,
+            protocolUri,
+            launchToken: data.launchToken || launchToken || undefined,
+            verificationReason: data.verificationReason || data.reason || data.error || 'Safe Exam Browser verification required for submission',
+          });
+          return;
+        }
         throw new Error(data.error || 'Submission failed');
       }
 
@@ -558,49 +703,89 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
 
   if (sebRequiredInfo) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#08080a] flex items-center justify-center p-4 text-white">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="seb-gate-title"
+        aria-describedby="seb-gate-desc"
+        className="fixed inset-0 z-50 bg-[#08080a] flex items-center justify-center p-4 text-white font-sans"
+      >
         <div className="bg-[#101116] border border-rose-900/50 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-center">
           <div className="w-12 h-12 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-400 flex items-center justify-center mx-auto">
             <Shield className="w-6 h-6" />
           </div>
-          <h2 className="text-base font-bold text-white">Safe Exam Browser (SEB) Required</h2>
-          <p className="text-xs text-gray-400 leading-relaxed">
-            This examination is configured with high-integrity kiosk lockdown. Standard web browsers cannot access this assessment. You must launch the examination using Safe Exam Browser.
+
+          <h2 id="seb-gate-title" className="text-base font-bold text-white">
+            Safe Exam Browser (SEB) Required
+          </h2>
+
+          <p id="seb-gate-desc" className="text-xs text-gray-400 leading-relaxed">
+            This examination is protected with high-integrity kiosk lockdown. Standard web browsers cannot access this assessment. You must launch the examination using Safe Exam Browser.
           </p>
+
+          {sebRequiredInfo.verificationReason && (
+            <div className="p-2.5 bg-rose-950/30 border border-rose-900/40 rounded-lg text-left text-[11px] text-rose-300">
+              <span className="font-semibold block text-rose-200">Security Gate Notice:</span>
+              {sebRequiredInfo.verificationReason}
+            </div>
+          )}
 
           <div className="p-3 bg-[#161720] rounded-xl border border-[#242732] text-left text-xs space-y-2">
             <span className="font-semibold text-gray-300 block">Required Setup Steps:</span>
-            <ol className="list-decimal pl-4 space-y-1 text-gray-400 text-[11px]">
-              <li>Install Safe Exam Browser on your computer if you have not already.</li>
-              <li>Download the official examination configuration (.seb) file.</li>
-              <li>Open or double-click the .seb file to enter your secure exam session.</li>
+            <ol className="list-decimal pl-4 space-y-1.5 text-gray-400 text-[11px]">
+              <li>
+                Install Safe Exam Browser on your computer if you have not already{' '}
+                <a
+                  href={sebRequiredInfo.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#FF9100] hover:underline inline-flex items-center gap-0.5 ml-1 font-semibold"
+                >
+                  (Download Official Installer)
+                </a>.
+              </li>
+              <li>Click <strong>&quot;Launch in Safe Exam Browser&quot;</strong> to start automatically, or download the configuration file.</li>
+              <li>If downloaded, open or double-click the <strong>.seb</strong> file to begin your secure session.</li>
+              <li>If already running inside Safe Exam Browser, click <strong>&quot;Retry Verification&quot;</strong> below.</li>
             </ol>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+            {sebRequiredInfo.protocolUri && (
+              <a
+                href={sebRequiredInfo.protocolUri}
+                className="w-full sm:w-auto px-4 py-2 bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Launch in Safe Exam Browser</span>
+              </a>
+            )}
             <a
-              href={sebRequiredInfo.configUrl}
+              href={`${sebRequiredInfo.configUrl}${sebRequiredInfo.configUrl.includes('?') ? '&' : '?'}format=plist`}
               download
-              className="w-full sm:w-auto px-4 py-2 bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs rounded-lg transition"
+              className="w-full sm:w-auto px-4 py-2 bg-[#1b1c24] hover:bg-[#252732] text-gray-200 border border-[#2c2f3b] text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5"
             >
-              Download Exam .seb File
-            </a>
-            <a
-              href={sebRequiredInfo.downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full sm:w-auto px-4 py-2 bg-[#1b1c24] hover:bg-[#252732] text-gray-200 border border-[#2c2f3b] text-xs font-semibold rounded-lg transition"
-            >
-              Get Safe Exam Browser
+              <Download className="w-3.5 h-3.5" />
+              <span>Download .seb Configuration</span>
             </a>
           </div>
 
-          <button
-            onClick={onClose}
-            className="text-xs text-gray-500 hover:text-gray-300 pt-2 block mx-auto transition"
-          >
-            Return to Classroom
-          </button>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => startSession()}
+              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Verification</span>
+            </button>
+            <span className="text-gray-600">|</span>
+            <button
+              onClick={onClose}
+              className="text-xs text-gray-500 hover:text-gray-300 transition"
+            >
+              Return to Classroom
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -690,16 +875,57 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
     return <span className="text-gray-500">Ready</span>;
   };
 
+  // Safe Theme Token Resolution
+  const branding = exam?.brandingTheme;
+  const themePresetId = branding?.themePreset || 'cortex-dark';
+  const presetConfig = THEME_PRESETS.find((p) => p.id === themePresetId) || THEME_PRESETS[0];
+  const accentColor = (branding?.accentColor && validateHexColor(branding.accentColor))
+    ? branding.accentColor
+    : presetConfig.accent;
+  const safeBg = (presetConfig.bg && validateHexColor(presetConfig.bg)) ? presetConfig.bg : '#08080a';
+  const safeCardBg = (presetConfig.cardBg && validateHexColor(presetConfig.cardBg)) ? presetConfig.cardBg : '#101116';
+  const safeBorder = (presetConfig.border && validateHexColor(presetConfig.border)) ? presetConfig.border : '#242732';
+
+  const themeStyles: Record<string, string> = {
+    '--exam-primary-color': accentColor,
+    '--exam-accent-color': accentColor,
+    '--exam-bg-color': safeBg,
+    '--exam-card-bg': safeCardBg,
+    '--exam-border-color': safeBorder,
+    '--exam-accent': accentColor,
+    '--exam-bg': safeBg,
+    '--exam-card-bg': safeCardBg,
+    '--exam-border': safeBorder,
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-[#08080a] flex flex-col overflow-hidden text-white font-sans">
+    <div
+      style={themeStyles as React.CSSProperties}
+      className="fixed inset-0 z-50 bg-[#08080a] flex flex-col overflow-hidden text-white font-sans"
+    >
       {/* Top Header Bar */}
       <div className="h-14 px-4 bg-[#0d0e12] border-b border-[#20222a] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="p-1.5 rounded-lg bg-[#FF9100]/10 border border-[#FF9100]/30 text-[#FF9100]">
-            <Award className="w-5 h-5" />
-          </div>
+          {branding?.institutionLogoUrl ? (
+            <img
+              src={branding.institutionLogoUrl}
+              alt={branding.institutionName || 'Institution Logo'}
+              className="h-8 max-w-[120px] object-contain rounded"
+            />
+          ) : (
+            <div className="p-1.5 rounded-lg bg-[#FF9100]/10 border border-[#FF9100]/30 text-[#FF9100]">
+              <Award className="w-5 h-5" />
+            </div>
+          )}
           <div>
-            <h1 className="text-xs sm:text-sm font-bold text-white line-clamp-1">{exam?.title || 'Examination'}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xs sm:text-sm font-bold text-white line-clamp-1">{exam?.title || 'Examination'}</h1>
+              {branding?.institutionName && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium">
+                  {branding.institutionName}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2.5 text-[11px] text-gray-400">
               <span>Candidate: {currentUser.name}</span>
               <span>Attempt #{session?.attemptNumber || 1}</span>
@@ -830,12 +1056,26 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose }: E
             </div>
           )}
 
-          <button
-            onClick={onClose}
-            className="px-6 py-2 rounded-lg bg-[#FF9100] text-black font-bold text-xs"
-          >
-            Return to Classroom
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+            {(exam?.securityLevel === 'seb' || (typeof window !== 'undefined' && (window as any).SafeExamBrowser)) && (
+              <button
+                onClick={() => {
+                  const quitUrl = (exam as any)?.quitUrl || (exam as any)?.quitURL || `/classroom/${encodeURIComponent(classroomId)}?sebQuit=true`;
+                  window.location.href = quitUrl;
+                }}
+                className="px-6 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg transition"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Exit Safe Exam Browser</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="px-6 py-2 rounded-lg bg-[#FF9100] text-black font-bold text-xs hover:bg-[#e08000] transition"
+            >
+              Return to Classroom
+            </button>
+          </div>
         </div>
       )}
 
