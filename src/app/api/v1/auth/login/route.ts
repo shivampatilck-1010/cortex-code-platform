@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
         cortexId: user.cortex_id,
         professionalEmail: (user as any).professional_email || (user as any).professionalEmail,
       },
+      sessionId,
     });
 
     response.headers.append(

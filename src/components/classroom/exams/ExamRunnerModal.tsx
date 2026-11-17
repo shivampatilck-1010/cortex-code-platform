@@ -147,15 +147,25 @@ export function ExamRunnerModal({
   const [confirmAgreement, setConfirmAgreement] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any | null>(null);
 
-  // Centralized SEB Headers Helper
-  const getSebHeaders = useCallback(async (): Promise<Record<string, string>> => {
+  // Centralized SEB & Session Headers Helper
+  const getExamAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const keys = await getSebClientKeys();
-    return buildSebHeaders({
+    const seb = buildSebHeaders({
       configKey: keys.configKey,
       browserExamKey: keys.browserExamKey,
       launchToken: launchToken || undefined,
     });
+    const headers: Record<string, string> = { ...seb };
+    if (typeof window !== 'undefined') {
+      const sessId = localStorage.getItem('cortex_session_id');
+      if (sessId) {
+        headers['x-session-id'] = sessId;
+      }
+    }
+    return headers;
   }, [launchToken]);
+
+  const getSebHeaders = getExamAuthHeaders;
 
   // Network connection monitoring
   useEffect(() => {
@@ -179,6 +189,7 @@ export function ExamRunnerModal({
         getSebHeaders().then((sebHeaders) => {
           fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/heartbeat`, {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json', ...sebHeaders },
           }).catch(() => {});
         });
@@ -218,6 +229,7 @@ export function ExamRunnerModal({
           `/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/responses`,
           {
             method: 'POST',
+            credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
               ...sebHeaders,
@@ -382,6 +394,7 @@ export function ExamRunnerModal({
       const sebHeaders = await getSebHeaders();
       const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/submit`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...sebHeaders,
@@ -456,6 +469,7 @@ export function ExamRunnerModal({
 
       const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/start`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...sebHeaders,
@@ -630,6 +644,7 @@ export function ExamRunnerModal({
       try {
         await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/sessions/${session.id}/integrity-event`, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ eventType, details }),
         });
@@ -1376,28 +1391,36 @@ export function ExamRunnerModal({
 
           {/* B. Main Answering Workspace */}
           <main className="flex-1 flex flex-col overflow-hidden bg-[#090a0d]">
-            {/* Question Top Subheader */}
-            <div className="px-5 py-3 bg-[#0d0e12] border-b border-[#1c1d22] flex items-center justify-between text-xs text-gray-400 shrink-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-white text-sm">
-                  Question {currentIndex + 1}
-                  <span className="text-gray-500 font-normal ml-1">of {visibleQuestions.length}</span>
-                </span>
-                <span className="px-2 py-0.5 rounded bg-[#161720] text-gray-300 text-[10px] font-semibold border border-[#282a36]">
-                  {currentQ.questionType.toUpperCase().replace('_', ' ')}
-                </span>
-                <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 text-[10px] font-semibold border border-emerald-800">
-                  +{currentQ.points} {currentQ.points === 1 ? 'Mark' : 'Marks'}
-                </span>
-                {currentQ.negativeMarks > 0 && (
-                  <span className="px-2 py-0.5 rounded bg-rose-950/60 text-rose-300 text-[10px] font-semibold border border-rose-800">
-                    -{currentQ.negativeMarks} Wrong
-                  </span>
-                )}
-                {dirtyQuestions.includes(currentQ.id) && (
-                  <span className="text-amber-400 font-mono text-[10px] animate-pulse">Syncing...</span>
-                )}
+            {!currentQ ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-500">
+                <FileText className="w-10 h-10 text-gray-600 mb-2 opacity-50" />
+                <p className="text-gray-400 font-medium text-sm">No question available</p>
+                <p className="text-xs text-gray-600 mt-1">Please select another section from the header or refresh.</p>
               </div>
+            ) : (
+              <>
+                {/* Question Top Subheader */}
+                <div className="px-5 py-3 bg-[#0d0e12] border-b border-[#1c1d22] flex items-center justify-between text-xs text-gray-400 shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-white text-sm">
+                      Question {currentIndex + 1}
+                      <span className="text-gray-500 font-normal ml-1">of {visibleQuestions.length}</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-[#161720] text-gray-300 text-[10px] font-semibold border border-[#282a36]">
+                      {(currentQ.questionType || 'mcq_single').toUpperCase().replace('_', ' ')}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 text-[10px] font-semibold border border-emerald-800">
+                      +{currentQ.points ?? 1} {(currentQ.points ?? 1) === 1 ? 'Mark' : 'Marks'}
+                    </span>
+                    {(currentQ.negativeMarks ?? 0) > 0 && (
+                      <span className="px-2 py-0.5 rounded bg-rose-950/60 text-rose-300 text-[10px] font-semibold border border-rose-800">
+                        -{currentQ.negativeMarks} Wrong
+                      </span>
+                    )}
+                    {dirtyQuestions.includes(currentQ.id) && (
+                      <span className="text-amber-400 font-mono text-[10px] animate-pulse">Syncing...</span>
+                    )}
+                  </div>
 
               {/* Action Buttons: Clear & Mark for Review */}
               <div className="flex items-center gap-2">
@@ -1788,7 +1811,7 @@ export function ExamRunnerModal({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    if (!flaggedQuestions[currentQ.id]) {
+                    if (currentQ && !flaggedQuestions[currentQ.id]) {
                       toggleFlagReview(currentQ.id);
                     }
                     setCurrentIndex((prev) => Math.min(visibleQuestions.length - 1, prev + 1));
@@ -1821,6 +1844,8 @@ export function ExamRunnerModal({
                 )}
               </div>
             </footer>
+              </>
+            )}
           </main>
         </div>
       )}

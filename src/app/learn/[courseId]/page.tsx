@@ -50,8 +50,9 @@ export default function CourseLessonPage() {
           
           // Find first uncompleted lesson, or default to 0
           let initialIdx = 0;
-          for (let i = 0; i < cRes.course.lessons.length; i++) {
-            const lessonProgress = userProgress.find((p: any) => p.lesson_id === cRes.course.lessons[i].id);
+          const courseLessons = Array.isArray(cRes?.course?.lessons) ? cRes.course.lessons : [];
+          for (let i = 0; i < courseLessons.length; i++) {
+            const lessonProgress = userProgress.find((p: any) => p.lesson_id === courseLessons[i].id);
             if (!lessonProgress || lessonProgress.status !== 'completed') {
               initialIdx = i;
               break;
@@ -59,9 +60,9 @@ export default function CourseLessonPage() {
           }
           
           setCurrentLessonIdx(initialIdx);
-          const initialLesson = cRes.course.lessons[initialIdx];
-          const initialProg = userProgress.find((p: any) => p.lesson_id === initialLesson.id);
-          setCode(initialProg?.last_code || initialLesson.starter_code);
+          const initialLesson = courseLessons[initialIdx];
+          const initialProg = userProgress.find((p: any) => p.lesson_id === initialLesson?.id);
+          setCode(initialProg?.last_code || initialLesson?.starter_code || '');
         }
       } catch (e) {
         console.error(e);
@@ -164,7 +165,7 @@ export default function CourseLessonPage() {
         {/* Progress & Run Actions */}
         <div className="flex items-center space-x-3">
           <span className="text-gray-400 font-mono">
-            Lesson {currentLessonIdx + 1} of {course.lessons.length}
+            Lesson {currentLessonIdx + 1} of {course.lessons?.length ?? 0}
           </span>
           <button
             onClick={handleCheckSolution}
@@ -279,7 +280,7 @@ export default function CourseLessonPage() {
             </div>
 
             {/* Next Lesson Button */}
-            {isPassed && currentLessonIdx + 1 < course.lessons.length && (
+            {isPassed && currentLessonIdx + 1 < (course.lessons?.length ?? 0) && (
               <div className="flex justify-end pt-2">
                 <button
                   onClick={() => handleLessonSwitch(currentLessonIdx + 1)}

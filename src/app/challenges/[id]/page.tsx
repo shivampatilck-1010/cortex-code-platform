@@ -252,7 +252,7 @@ export default function ChallengeSolverPage() {
                 activeTab === 'hints' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-gray-400'
               }`}
             >
-              Hints ({challenge.hints.length})
+              Hints ({challenge.hints?.length ?? 0})
             </button>
           </div>
 
@@ -264,7 +264,7 @@ export default function ChallengeSolverPage() {
                 {/* Examples */}
                 <div className="space-y-3">
                   <span className="font-bold text-gray-200 block">Examples:</span>
-                  {challenge.examples.map((ex, idx) => (
+                  {(challenge.examples || []).map((ex, idx) => (
                     <div key={idx} className="p-3 bg-[#131417] rounded border border-[#252832] space-y-1 font-mono">
                       <div>
                         <span className="text-gray-500">Input: </span>
@@ -285,7 +285,7 @@ export default function ChallengeSolverPage() {
                 <div className="space-y-1">
                   <span className="font-bold text-gray-200 block">Constraints:</span>
                   <ul className="list-disc list-inside text-gray-400 space-y-0.5 font-mono text-[11px]">
-                    {challenge.constraints.map((c, i) => (
+                    {(challenge.constraints || []).map((c, i) => (
                       <li key={i}>{c}</li>
                     ))}
                   </ul>
@@ -295,7 +295,7 @@ export default function ChallengeSolverPage() {
 
             {activeTab === 'hints' && (
               <div className="space-y-3">
-                {challenge.hints.map((hint, i) => (
+                {(challenge.hints || []).map((hint, i) => (
                   <div key={i} className="p-3 bg-[#131417] rounded border border-[#252832] space-y-1">
                     <span className="font-bold text-yellow-400 block">Hint {i + 1}:</span>
                     <p className="text-gray-300">{hint}</p>

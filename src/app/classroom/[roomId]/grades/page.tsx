@@ -122,7 +122,7 @@ export default function GradebookPage() {
                             <span className="text-[9px] bg-red-500/20 text-red-400 px-1 py-0.5 rounded font-bold uppercase">LATE</span>
                           )}
                         </div>
-                        {data.rows.length > 1 && cell.submissionId && (
+                        {(data?.rows?.length ?? 0) > 1 && cell.submissionId && (
                            <button
                              onClick={() => router.push(`/classroom/${roomId}/submissions/${cell.submissionId}`)}
                              className="text-[10px] text-[#ff9100] hover:underline mt-1 block"

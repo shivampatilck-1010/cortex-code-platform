@@ -227,7 +227,7 @@ export const CodeVisualizationWorkspace: React.FC<CodeVisualizationWorkspaceProp
                 : 'text-[#71717A] hover:text-[#E4E4E7]'
             }`}
           >
-            Visual Canvas ({snapshot.structureVisualizations.length})
+            Visual Canvas ({snapshot.structureVisualizations?.length ?? 0})
           </button>
           <button
             onClick={() => setActiveTab('state')}
@@ -237,7 +237,7 @@ export const CodeVisualizationWorkspace: React.FC<CodeVisualizationWorkspaceProp
                 : 'text-[#71717A] hover:text-[#E4E4E7]'
             }`}
           >
-            Variables ({Object.keys(snapshot.variables).length})
+            Variables ({Object.keys(snapshot.variables || {}).length})
           </button>
           <button
             onClick={() => setActiveTab('callstack')}
@@ -247,7 +247,7 @@ export const CodeVisualizationWorkspace: React.FC<CodeVisualizationWorkspaceProp
                 : 'text-[#71717A] hover:text-[#E4E4E7]'
             }`}
           >
-            Call Stack ({snapshot.callStack.length})
+            Call Stack ({snapshot.callStack?.length ?? 0})
           </button>
           <button
             onClick={() => setActiveTab('output')}
@@ -483,7 +483,7 @@ export const CodeVisualizationWorkspace: React.FC<CodeVisualizationWorkspaceProp
             <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
               <div className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider font-bold flex items-center space-x-1.5">
                 <Variable className="w-3.5 h-3.5 text-[#06B6D4]" />
-                <span>Active Scope Variables ({Object.keys(snapshot.variables).length})</span>
+                <span>Active Scope Variables ({Object.keys(snapshot.variables || {}).length})</span>
               </div>
               <VariableInspector
                 variables={snapshot.variables}
@@ -510,7 +510,7 @@ export const CodeVisualizationWorkspace: React.FC<CodeVisualizationWorkspaceProp
             <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
               <div className="text-[11px] font-mono text-[#71717A] uppercase tracking-wider font-bold flex items-center space-x-1.5">
                 <Layers className="w-3.5 h-3.5 text-[#FF9100]" />
-                <span>Call Stack Frames ({snapshot.callStack.length})</span>
+                <span>Call Stack Frames ({snapshot.callStack?.length ?? 0})</span>
               </div>
               <CallStackInspector callStack={snapshot.callStack} />
             </div>

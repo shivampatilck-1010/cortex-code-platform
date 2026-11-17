@@ -337,7 +337,7 @@ export class ClassroomAuth {
       cookieHeader = req.headers.cookie;
     }
     
-    let sessionId = null;
+    let sessionId: string | null = null;
     
     if (req.cookies) {
       const sessCookie = typeof req.cookies.get === 'function' ? req.cookies.get('cortex_session')?.value : req.cookies.cortex_session;
@@ -354,6 +354,13 @@ export class ClassroomAuth {
       );
       if (cookies.cortex_session) {
         sessionId = cookies.cortex_session;
+      }
+    }
+
+    if (!sessionId) {
+      const headerSess = typeof req.headers?.get === 'function' ? req.headers.get('x-session-id') : req.headers?.['x-session-id'];
+      if (headerSess && typeof headerSess === 'string' && headerSess.trim()) {
+        sessionId = headerSess.trim();
       }
     }
 

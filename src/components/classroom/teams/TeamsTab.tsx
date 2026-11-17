@@ -136,7 +136,7 @@ export function TeamsTab({
 
   // Find user's current team (if student)
   const myTeam = useMemo(() => {
-    return cards.find((c) => c.members.some((m) => m.userId === currentUserId));
+    return cards.find((c) => (c.members || []).some((m) => m.userId === currentUserId));
   }, [cards, currentUserId]);
 
   const myTeamRole = useMemo(() => {
@@ -256,7 +256,7 @@ export function TeamsTab({
 
             <div className="flex items-center space-x-2">
               <span className="text-xs text-[#8A8F98] font-mono">
-                {myTeam.members.length} / {myTeam.max_size} members
+                {myTeam.members?.length ?? 0} / {myTeam.max_size} members
               </span>
             </div>
           </div>
@@ -278,7 +278,7 @@ export function TeamsTab({
             <BookOpen className="w-4 h-4" />
             <span>Project Gallery</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/40 font-mono">
-              {cards.length}
+              {cards?.length ?? 0}
             </span>
           </button>
 
@@ -314,7 +314,7 @@ export function TeamsTab({
             <Activity className="w-4 h-4" />
             <span>Activity Log</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/40 font-mono">
-              {activity.length}
+              {activity?.length ?? 0}
             </span>
           </button>
         </div>

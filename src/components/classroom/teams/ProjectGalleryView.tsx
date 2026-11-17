@@ -72,9 +72,9 @@ export function ProjectGalleryView({
   const canJoinAny = useMemo(() => {
     if (isTeacherOrAdmin) return false;
     if (formationMode === 'teacher_controlled') return false; // Teacher assigns strictly
-    if (!settings?.allowMultipleTeams && userTeamIds.length > 0) return false;
+    if (!settings?.allowMultipleTeams && (userTeamIds?.length ?? 0) > 0) return false;
     return true;
-  }, [isTeacherOrAdmin, formationMode, settings?.allowMultipleTeams, userTeamIds.length]);
+  }, [isTeacherOrAdmin, formationMode, settings?.allowMultipleTeams, userTeamIds?.length]);
 
   // Filter & Sort Cards
   const filteredCards = useMemo(() => {
@@ -196,7 +196,7 @@ export function ProjectGalleryView({
           <div className="w-8 h-8 border-2 border-[#FF9100] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm">Loading Project Teams...</p>
         </div>
-      ) : filteredCards.length === 0 ? (
+      ) : (filteredCards?.length ?? 0) === 0 ? (
         <div className="bg-[#111216] border border-[#282A36] rounded-xl py-16 px-6 text-center">
           <BookOpen className="w-10 h-10 mx-auto text-[#444] mb-3" />
           <h4 className="text-base font-bold text-white">No Project Teams Found</h4>
@@ -310,7 +310,7 @@ export function ProjectGalleryView({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-[#8A8F98]">
-                    Team Members ({selectedCardForDetails.members.length} / {selectedCardForDetails.max_size})
+                    Team Members ({(selectedCardForDetails.members?.length ?? 0)} / {selectedCardForDetails.max_size})
                   </h4>
                   {selectedCardForDetails.is_locked && (
                     <span className="text-[11px] text-amber-400 font-mono">Roster Locked</span>
@@ -318,7 +318,7 @@ export function ProjectGalleryView({
                 </div>
 
                 <div className="space-y-2">
-                  {selectedCardForDetails.members.map((member) => (
+                  {(selectedCardForDetails.members || []).map((member) => (
                     <div
                       key={member.id}
                       className="bg-[#17181F] border border-[#282A36] rounded-lg p-3 flex items-center justify-between"
@@ -354,7 +354,7 @@ export function ProjectGalleryView({
                     </div>
                   ))}
 
-                  {selectedCardForDetails.members.length === 0 && (
+                  {(selectedCardForDetails.members?.length ?? 0) === 0 && (
                     <p className="text-xs text-[#8A8F98] italic text-center py-4 bg-[#17181F] rounded-lg border border-[#282A36]">
                       No students currently assigned to this team
                     </p>

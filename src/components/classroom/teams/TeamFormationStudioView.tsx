@@ -214,7 +214,7 @@ export function TeamFormationStudioView({
 
   // Handle Manual Assign
   const handleManualAssign = async () => {
-    if (selectedStudentIds.length === 0 || !targetTeamId) {
+    if ((selectedStudentIds?.length ?? 0) === 0 || !targetTeamId) {
       showToast('Select at least one student and a destination team');
       return;
     }
@@ -252,10 +252,10 @@ export function TeamFormationStudioView({
 
   // Select all visible unassigned
   const toggleSelectAll = () => {
-    if (selectedStudentIds.length === filteredUnassigned.length) {
+    if ((selectedStudentIds?.length ?? 0) === (filteredUnassigned?.length ?? 0)) {
       setSelectedStudentIds([]);
     } else {
-      setSelectedStudentIds(filteredUnassigned.map((s) => s.userId));
+      setSelectedStudentIds((filteredUnassigned || []).map((s) => s.userId));
     }
   };
 
@@ -544,16 +544,16 @@ export function TeamFormationStudioView({
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <span>Unassigned Students</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-mono">
-                  {unassignedStudents.length}
+                  {unassignedStudents?.length ?? 0}
                 </span>
               </h3>
-              {filteredUnassigned.length > 0 && (
+              {(filteredUnassigned?.length ?? 0) > 0 && (
                 <button
                   type="button"
                   onClick={toggleSelectAll}
                   className="text-[11px] text-[#FF9100] hover:underline font-medium"
                 >
-                  {selectedStudentIds.length === filteredUnassigned.length ? 'Deselect All' : 'Select All'}
+                  {(selectedStudentIds?.length ?? 0) === (filteredUnassigned?.length ?? 0) ? 'Deselect All' : 'Select All'}
                 </button>
               )}
             </div>
@@ -573,13 +573,13 @@ export function TeamFormationStudioView({
 
           {/* Student Roster List */}
           <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-            {filteredUnassigned.length === 0 ? (
+            {(filteredUnassigned?.length ?? 0) === 0 ? (
               <div className="py-12 text-center text-[#666]">
                 <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-400/40 mb-2" />
                 <p className="text-xs">All enrolled students are assigned to teams</p>
               </div>
             ) : (
-              filteredUnassigned.map((student) => {
+              (filteredUnassigned || []).map((student) => {
                 const isSelected = selectedStudentIds.includes(student.userId);
                 return (
                   <div
@@ -613,7 +613,7 @@ export function TeamFormationStudioView({
           {/* Quick-Assign Bar */}
           <div className="pt-3 border-t border-[#282A36] mt-3 space-y-2">
             <div className="text-xs text-[#8A8F98]">
-              {selectedStudentIds.length} student(s) selected
+              {selectedStudentIds?.length ?? 0} student(s) selected
             </div>
             <div className="flex items-center space-x-2">
               <select
@@ -622,18 +622,18 @@ export function TeamFormationStudioView({
                 className="flex-1 bg-[#17181F] border border-[#282A36] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#FF9100]"
               >
                 <option value="">Select Target Team...</option>
-                {teams
+                {(teams || [])
                   .filter((t) => !t.isLocked)
                   .map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.members.length}/{t.max_size || settingsForm.maxTeamSize})
+                      {t.name} ({(t.members?.length ?? 0)}/{t.max_size || settingsForm.maxTeamSize})
                     </option>
                   ))}
               </select>
               <button
                 type="button"
                 onClick={handleManualAssign}
-                disabled={isAssigningManual || selectedStudentIds.length === 0 || !targetTeamId}
+                disabled={isAssigningManual || (selectedStudentIds?.length ?? 0) === 0 || !targetTeamId}
                 className="px-3 py-1.5 rounded-lg bg-[#FF9100] hover:bg-[#FF9100]/90 text-black text-xs font-semibold transition disabled:opacity-50"
               >
                 Assign
@@ -649,7 +649,7 @@ export function TeamFormationStudioView({
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <span>Formed Teams & Rosters</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-[#282A36] text-[#A0A0A0] font-mono">
-                  {teams.length}
+                  {teams?.length ?? 0}
                 </span>
               </h3>
             </div>
@@ -657,7 +657,7 @@ export function TeamFormationStudioView({
 
           {/* Teams list */}
           <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-            {teams.length === 0 ? (
+            {(teams?.length ?? 0) === 0 ? (
               <div className="py-20 text-center text-[#666]">
                 <Users className="w-10 h-10 mx-auto text-[#444] mb-3" />
                 <p className="text-sm font-semibold text-[#8A8F98]">No teams created yet</p>
@@ -666,7 +666,7 @@ export function TeamFormationStudioView({
                 </p>
               </div>
             ) : (
-              teams.map((team) => {
+              (teams || []).map((team) => {
                 const maxSize = team.max_size || settingsForm.maxTeamSize;
                 return (
                   <div
@@ -681,7 +681,7 @@ export function TeamFormationStudioView({
                           <span className="text-[11px] text-[#A0A0A0] font-mono">({team.name})</span>
                         </div>
                         <div className="text-[11px] text-[#666] mt-0.5">
-                          Capacity: {team.members.length} / {maxSize} members
+                          Capacity: {(team.members?.length ?? 0)} / {maxSize} members
                         </div>
                       </div>
 
@@ -703,7 +703,7 @@ export function TeamFormationStudioView({
 
                     {/* Member List */}
                     <div className="space-y-1.5">
-                      {team.members.map((member) => (
+                      {(team.members || []).map((member) => (
                         <div
                           key={member.id}
                           className="bg-[#17181F] border border-white/5 rounded px-2.5 py-1.5 flex items-center justify-between text-xs"
@@ -748,7 +748,7 @@ export function TeamFormationStudioView({
                         </div>
                       ))}
 
-                      {team.members.length === 0 && (
+                      {(team.members?.length ?? 0) === 0 && (
                         <p className="text-[11px] text-[#666] italic py-2 text-center">
                           No members assigned to this team
                         </p>
@@ -828,12 +828,12 @@ export function TeamFormationStudioView({
               {/* Generate Preview Action */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[#8A8F98]">
-                  Available candidates: {unassignedStudents.length} unassigned students
+                  Available candidates: {unassignedStudents?.length ?? 0} unassigned students
                 </span>
                 <button
                   type="button"
                   onClick={handleGeneratePreview}
-                  disabled={isPreviewingAutoAssign || unassignedStudents.length === 0}
+                  disabled={isPreviewingAutoAssign || (unassignedStudents?.length ?? 0) === 0}
                   className="px-4 py-2 rounded-lg bg-[#FF9100] text-black text-xs font-semibold hover:bg-[#FF9100]/90 transition flex items-center space-x-1.5 disabled:opacity-50"
                 >
                   <Sparkles className="w-3.5 h-3.5" />

@@ -147,10 +147,10 @@ export const DebuggerPanel: React.FC<DebuggerPanelProps> = ({
             </div>
           </div>
           <div className="bg-[#18191d] border border-[#282a33] rounded p-2.5 space-y-2">
-            {watchExpressions.length === 0 && (
+            {(watchExpressions?.length ?? 0) === 0 && (
               <p className="text-gray-500 text-xs italic">No expressions being watched. Add one below.</p>
             )}
-            {watchExpressions.map((expr) => (
+            {(watchExpressions || []).map((expr) => (
               <div key={expr} className="flex items-center justify-between text-xs">
                 <span className="text-gray-300">{expr}:</span>
                 <div className="flex items-center space-x-2">
@@ -182,7 +182,7 @@ export const DebuggerPanel: React.FC<DebuggerPanelProps> = ({
             <span>Call Stack</span>
           </div>
           <div className="bg-[#18191d] border border-[#282a33] rounded divide-y divide-[#262832]">
-            {callStack.map((frame, idx) => (
+            {(callStack || []).map((frame, idx) => (
               <div key={idx} className="p-2.5 flex items-center justify-between text-xs">
                 <span className="text-gray-200 font-semibold">{frame.name}</span>
                 <span className="text-gray-400 font-mono">{frame.file}:{frame.line}</span>
@@ -195,15 +195,15 @@ export const DebuggerPanel: React.FC<DebuggerPanelProps> = ({
         <div>
           <div className="flex items-center space-x-1.5 text-gray-200 font-heading font-bold mb-1.5 text-xs">
             <CircleDot className="w-3.5 h-3.5 text-rose-500" />
-            <span>Breakpoints ({breakpoints.length})</span>
+            <span>Breakpoints ({(breakpoints?.length ?? 0)})</span>
           </div>
-          {breakpoints.length === 0 ? (
+          {(breakpoints?.length ?? 0) === 0 ? (
             <p className="text-gray-400 text-xs">
               No breakpoints set. Click the editor gutter to toggle.
             </p>
           ) : (
             <div className="bg-[#18191d] border border-[#282a33] rounded divide-y divide-[#262832]">
-              {breakpoints.map((line) => (
+              {(breakpoints || []).map((line) => (
                 <div key={line} className="p-2.5 flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />

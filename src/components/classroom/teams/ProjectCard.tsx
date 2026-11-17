@@ -184,7 +184,7 @@ export function ProjectCard({
         <div className="pt-3 border-t border-white/5 flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <div className="flex -space-x-2 overflow-hidden">
-              {card.members.slice(0, 4).map((member) => (
+              {(card.members || []).slice(0, 4).map((member) => (
                 <div
                   key={member.id}
                   title={`${member.userName || member.userId} (${member.teamRole})`}
@@ -202,14 +202,14 @@ export function ProjectCard({
                   )}
                 </div>
               ))}
-              {card.members.length > 4 && (
+              {(card.members?.length ?? 0) > 4 && (
                 <div className="w-7 h-7 rounded-full bg-[#1C1E26] border border-[#282A36] flex items-center justify-center text-[10px] text-[#8A8F98] font-mono">
-                  +{card.members.length - 4}
+                  +{(card.members?.length ?? 0) - 4}
                 </div>
               )}
             </div>
 
-            {card.members.length === 0 && (
+            {(card.members?.length ?? 0) === 0 && (
               <span className="text-xs text-[#666] italic flex items-center gap-1">
                 <Users className="w-3 h-3" />
                 No members assigned

@@ -216,7 +216,7 @@ export const StructureRenderer: React.FC<StructureRendererProps> = ({
                                       Index: elemIdx,
                                       Type: typeof elem,
                                       Array: struct.data.name,
-                                      Length: struct.data.elements.length,
+                                      Length: struct.data.elements?.length ?? 0,
                                     },
                                   }
                             );
@@ -253,8 +253,8 @@ export const StructureRenderer: React.FC<StructureRendererProps> = ({
                   <span>TOP OF STACK (LIFO)</span>
                 </div>
                 <div className="w-full border-x-2 border-b-2 border-[#FF9100]/40 rounded-b-lg p-2 bg-[#0A0B0E] space-y-1.5">
-                  {struct.data.elements.slice().reverse().map((elem: any, rIdx: number) => {
-                    const actualIdx = struct.data.elements.length - 1 - rIdx;
+                  {(struct.data.elements || []).slice().reverse().map((elem: any, rIdx: number) => {
+                    const actualIdx = (struct.data.elements?.length ?? 0) - 1 - rIdx;
                     const isTop = rIdx === 0;
                     return (
                       <div
@@ -455,7 +455,7 @@ export const StructureRenderer: React.FC<StructureRendererProps> = ({
                           next
                         </div>
                       </div>
-                      {nIdx < struct.data.nodes.length - 1 ? (
+                      {nIdx < (struct.data.nodes?.length ?? 0) - 1 ? (
                         <ArrowRight className="w-4 h-4 text-[#FF9100] flex-shrink-0" />
                       ) : (
                         <div className="flex items-center space-x-1 text-[10px] font-mono text-[#EF4444] font-bold px-2 py-1 bg-[#EF4444]/10 rounded border border-[#EF4444]/30">

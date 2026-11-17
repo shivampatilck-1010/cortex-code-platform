@@ -42,14 +42,15 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
   const [newExpected, setNewExpected] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const passedCount = testCases.filter((tc) => tc.passed).length;
-  const totalCount = testCases.length;
+  const safeTests = Array.isArray(testCases) ? testCases : [];
+  const passedCount = safeTests.filter((tc) => tc.passed).length;
+  const totalCount = safeTests.length;
 
   const handleCreateTest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newExpected.trim()) return;
     onAddTestCase({
-      name: `Test Case ${testCases.length + 1}`,
+      name: `Test Case ${safeTests.length + 1}`,
       stdin: newStdin,
       expectedStdout: newExpected,
       isHidden: false,
@@ -170,13 +171,13 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
               </form>
             )}
 
-            {testCases.length === 0 ? (
+            {safeTests.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <p>No test cases yet.</p>
                 <p className="text-[11px] mt-1">Click + above to add an input and expected output.</p>
               </div>
             ) : (
-              testCases.map((tc, idx) => (
+              safeTests.map((tc, idx) => (
                 <div
                   key={tc.id}
                   className={`p-2.5 rounded border transition ${

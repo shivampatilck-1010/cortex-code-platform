@@ -90,7 +90,8 @@ export async function POST(req: NextRequest) {
         role: user.role,
         cortexId: user.cortex_id,
         professionalEmail: (createdUser as any)?.professional_email || (createdUser as any)?.professionalEmail || (user as any).professional_email,
-      }
+      },
+      sessionId,
     });
     
     response.headers.append('Set-Cookie', 'cortex_session=' + sessionId + '; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=' + new Date(expiresAt).toUTCString());

@@ -56,6 +56,9 @@ export default function LoginPage() {
         try {
           localStorage.setItem('cortex_user', JSON.stringify(data.user));
           localStorage.setItem('cortex_user_profile', JSON.stringify(data.user));
+          if (data.sessionId) {
+            localStorage.setItem('cortex_session_id', data.sessionId);
+          }
         } catch {}
       }
 

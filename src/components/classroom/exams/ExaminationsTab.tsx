@@ -145,13 +145,13 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
     }
   };
 
-  const filteredExams = exams.filter((exam) => {
+  const filteredExams = (exams || []).filter((exam) => {
     if (filter === 'draft' && exam.status !== 'draft') return false;
     if (filter === 'active' && exam.status !== 'active' && exam.status !== 'published') return false;
     if (filter === 'ended' && exam.status !== 'ended' && exam.status !== 'results_published') return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      return exam.title.toLowerCase().includes(q) || exam.description.toLowerCase().includes(q);
+      return (exam.title || '').toLowerCase().includes(q) || (exam.description || '').toLowerCase().includes(q);
     }
     return true;
   });
