@@ -246,8 +246,8 @@ export const AssignmentsModule: React.FC = () => {
 
     try {
       const passedCount = currentTestResults.filter((r) => r.passed).length;
-      const totalCount = currentTestResults.length || selectedAssignment.testCases.length || 1;
-      const computedScore = Math.round((passedCount / totalCount) * selectedAssignment.points);
+      const totalCount = currentTestResults.length || (selectedAssignment?.testCases?.length ?? 0) || 1;
+      const computedScore = Math.round((passedCount / totalCount) * (selectedAssignment?.points || 100));
 
       const existingAttempts = submissions.filter(
         (s) => s.assignmentId === selectedAssignment.id && s.studentId === currentStudentId
@@ -766,7 +766,7 @@ export const AssignmentsModule: React.FC = () => {
             </div>
 
             {/* Rubric Criteria Overview (if present) */}
-            {selectedAssignment.rubricCriteria && selectedAssignment.rubricCriteria.length > 0 && (
+            {(selectedAssignment?.rubricCriteria?.length ?? 0) > 0 && (
               <div className="pt-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#71717A] block mb-2">
                   Grading Rubric

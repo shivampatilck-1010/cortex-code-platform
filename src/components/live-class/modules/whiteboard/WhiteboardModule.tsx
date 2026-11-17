@@ -120,8 +120,67 @@ const INITIAL_DOC: WhiteboardDocument = {
   ],
 };
 
+const DEFAULT_PAGE: WhiteboardPage = {
+  id: 'page-1',
+  title: 'Canvas',
+  background: 'dark-grid',
+  elements: [],
+  history: [],
+  redoStack: [],
+  viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+};
+
+function normalizeWhiteboardPage(raw: any, index: number): WhiteboardPage {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      id: `page-${index + 1}`,
+      title: `Page ${index + 1}`,
+      background: 'dark-grid',
+      elements: [],
+      history: [],
+      redoStack: [],
+      viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+    };
+  }
+
+  let elements: WhiteboardElement[] = [];
+  if (Array.isArray(raw.elements)) {
+    elements = raw.elements;
+  } else if (Array.isArray(raw.strokes)) {
+    elements = raw.strokes.map((s: any, sIdx: number) => ({
+      id: s.id || `stroke-${index}-${sIdx}`,
+      type: s.tool === 'rectangle' ? 'rect' : s.tool === 'circle' ? 'circle' : 'pen',
+      color: s.color || '#06B6D4',
+      strokeWidth: s.width || 2,
+      points: Array.isArray(s.points) ? s.points : [],
+      x: s.points?.[0]?.x || 0,
+      y: s.points?.[0]?.y || 0,
+    }));
+  }
+
+  return {
+    id: raw.id || `page-${index + 1}`,
+    title: raw.title || `Page ${index + 1}`,
+    background: raw.background || 'dark-grid',
+    elements,
+    history: Array.isArray(raw.history) ? raw.history : [],
+    redoStack: Array.isArray(raw.redoStack) ? raw.redoStack : [],
+    viewport:
+      raw.viewport && typeof raw.viewport.zoom === 'number'
+        ? raw.viewport
+        : { zoom: 1, pan: { x: 0, y: 0 } },
+  };
+}
+
+function normalizeWhiteboardPages(rawPages: any[]): WhiteboardPage[] {
+  if (!Array.isArray(rawPages) || rawPages.length === 0) {
+    return [DEFAULT_PAGE];
+  }
+  return rawPages.map((p, idx) => normalizeWhiteboardPage(p, idx));
+}
+
 export const WhiteboardModule: React.FC = () => {
-  const { userRole, showToast, session, signalingClient, activeModule } = useClassroom();
+  const { userRole, showToast, session, signalingClient, activeModule, liveSessionToken } = useClassroom();
   const classroomId = session?.id || '';
   const versionRef = useRef<number>(1);
   const isInitialLoadRef = useRef<boolean>(true);
@@ -130,18 +189,23 @@ export const WhiteboardModule: React.FC = () => {
 
   // Document State
   const [doc, setDoc] = useState<WhiteboardDocument>(INITIAL_DOC);
-  const activePage = doc.pages.find((p) => p.id === doc.activePageId) || doc.pages[0];
+  const activePage = (doc.pages && doc.pages.find((p) => p.id === doc.activePageId)) || doc.pages?.[0] || DEFAULT_PAGE;
 
   // 1. Initial Load from Server Database
   useEffect(() => {
     if (!classroomId || typeof window === 'undefined') return;
     let isMounted = true;
 
-    fetch(`/api/v1/classrooms/${classroomId}/whiteboard?sessionId=${classroomId}`)
+    const headers: Record<string, string> = {};
+    if (liveSessionToken) {
+      headers['Authorization'] = `Bearer ${liveSessionToken}`;
+    }
+
+    fetch(`/api/v1/classrooms/${classroomId}/whiteboard?sessionId=${classroomId}`, { headers })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isMounted || !data?.whiteboard?.pages) return;
-        const sPages = data.whiteboard.pages;
+        const sPages = normalizeWhiteboardPages(data.whiteboard.pages);
         versionRef.current = data.whiteboard.version || 1;
         setDoc((prev) => ({
           ...prev,
@@ -158,14 +222,14 @@ export const WhiteboardModule: React.FC = () => {
           if (local) {
             const parsed = JSON.parse(local);
             if (Array.isArray(parsed.pages)) {
-              setDoc((prev) => ({ ...prev, pages: parsed.pages }));
+              setDoc((prev) => ({ ...prev, pages: normalizeWhiteboardPages(parsed.pages) }));
             }
           }
         } catch (_) {}
       });
 
     return () => { isMounted = false; };
-  }, [classroomId]);
+  }, [classroomId, liveSessionToken]);
 
   // 2. Real-time broadcast sync listener (Delta Streaming & Snapshots)
   useEffect(() => {
@@ -178,11 +242,12 @@ export const WhiteboardModule: React.FC = () => {
 
         if (eventName === 'WHITEBOARD_PAGE_SYNC' || eventName === 'WHITEBOARD_SNAPSHOT') {
           if (syncData?.pages && Array.isArray(syncData.pages)) {
+            const sPages = normalizeWhiteboardPages(syncData.pages);
             versionRef.current = syncData.version || versionRef.current;
             setDoc((prev) => ({
               ...prev,
-              pages: syncData.pages,
-              activePageId: syncData.pages[syncData.activePageIndex || 0]?.id || prev.activePageId,
+              pages: sPages,
+              activePageId: sPages[syncData.activePageIndex || 0]?.id || prev.activePageId,
             }));
           }
         } else if (eventName === 'WHITEBOARD_STROKE_END') {
@@ -191,11 +256,12 @@ export const WhiteboardModule: React.FC = () => {
               const pageIdx = syncData.pageIndex ?? 0;
               const targetPage = prev.pages[pageIdx] || prev.pages[0];
               if (!targetPage) return prev;
-              const exists = targetPage.elements.some((el) => el.id === syncData.element.id);
+              const curElements = Array.isArray(targetPage.elements) ? targetPage.elements : [];
+              const exists = curElements.some((el) => el.id === syncData.element.id);
               if (exists) return prev;
               const updatedPages = prev.pages.map((p, idx) =>
                 idx === pageIdx
-                  ? { ...p, elements: [...p.elements, syncData.element] }
+                  ? { ...p, elements: [...(Array.isArray(p.elements) ? p.elements : []), syncData.element] }
                   : p
               );
               return { ...prev, pages: updatedPages };
@@ -207,7 +273,7 @@ export const WhiteboardModule: React.FC = () => {
               ...prev,
               pages: prev.pages.map((p, idx) =>
                 idx === (syncData.pageIndex ?? 0)
-                  ? { ...p, elements: p.elements.filter((el) => el.id !== syncData.elementId) }
+                  ? { ...p, elements: (Array.isArray(p.elements) ? p.elements : []).filter((el) => el.id !== syncData.elementId) }
                   : p
               ),
             }));
@@ -218,7 +284,7 @@ export const WhiteboardModule: React.FC = () => {
                 idx === (syncData.pageIndex ?? 0)
                   ? {
                       ...p,
-                      elements: p.elements.map((el) =>
+                      elements: (Array.isArray(p.elements) ? p.elements : []).map((el) =>
                         el.id === syncData.elementId ? { ...el, ...syncData.patch } : el
                       ),
                     }
@@ -240,9 +306,14 @@ export const WhiteboardModule: React.FC = () => {
 
     const timer = setTimeout(() => {
       const activeIdx = Math.max(0, doc.pages.findIndex((p) => p.id === doc.activePageId));
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (liveSessionToken) {
+        headers['Authorization'] = `Bearer ${liveSessionToken}`;
+      }
+
       fetch(`/api/v1/classrooms/${classroomId}/whiteboard`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           sessionId: classroomId,
           pages: doc.pages,
@@ -1303,7 +1374,7 @@ export const WhiteboardModule: React.FC = () => {
 
   // UNDO & REDO
   const handleUndo = () => {
-    if (activePage.history.length === 0) return;
+    if ((activePage?.history?.length ?? 0) === 0) return;
     const prev = activePage.history[activePage.history.length - 1];
     elementsRef.current = prev;
 
@@ -1313,9 +1384,9 @@ export const WhiteboardModule: React.FC = () => {
         if (p.id !== d.activePageId) return p;
         return {
           ...p,
-          redoStack: [...p.redoStack, p.elements],
+          redoStack: [...(p.redoStack || []), p.elements || []],
           elements: prev,
-          history: p.history.slice(0, -1),
+          history: (p.history || []).slice(0, -1),
         };
       }),
     }));
@@ -1323,7 +1394,7 @@ export const WhiteboardModule: React.FC = () => {
   };
 
   const handleRedo = () => {
-    if (activePage.redoStack.length === 0) return;
+    if ((activePage?.redoStack?.length ?? 0) === 0) return;
     const next = activePage.redoStack[activePage.redoStack.length - 1];
     elementsRef.current = next;
 
@@ -1333,9 +1404,9 @@ export const WhiteboardModule: React.FC = () => {
         if (p.id !== d.activePageId) return p;
         return {
           ...p,
-          history: [...p.history, p.elements],
+          history: [...(p.history || []), p.elements || []],
           elements: next,
-          redoStack: p.redoStack.slice(0, -1),
+          redoStack: (p.redoStack || []).slice(0, -1),
         };
       }),
     }));
@@ -1344,7 +1415,7 @@ export const WhiteboardModule: React.FC = () => {
 
   // CLEAR PAGE
   const handleClearPage = () => {
-    if (activePage.elements.length === 0) return;
+    if ((activePage?.elements?.length ?? 0) === 0) return;
     commitPageElements([]);
     setSelectedElementIds([]);
     showToast(`Page "${activePage.title}" cleared`);
@@ -1356,7 +1427,7 @@ export const WhiteboardModule: React.FC = () => {
     const newElements: WhiteboardElement[] = [];
     const newSelectedIds: string[] = [];
 
-    activePage.elements.forEach((el) => {
+    (activePage?.elements || []).forEach((el) => {
       newElements.push(el);
       if (selectedElementIds.includes(el.id)) {
         const dup = duplicateElement(el);
@@ -1372,7 +1443,7 @@ export const WhiteboardModule: React.FC = () => {
 
   const handleDeleteSelected = () => {
     if (selectedElementIds.length === 0) return;
-    const remaining = activePage.elements.filter((el) => !selectedElementIds.includes(el.id));
+    const remaining = (activePage?.elements || []).filter((el) => !selectedElementIds.includes(el.id));
     commitPageElements(remaining);
     setSelectedElementIds([]);
     showToast('Selected elements deleted');
@@ -1380,21 +1451,21 @@ export const WhiteboardModule: React.FC = () => {
 
   const handleBringForward = () => {
     if (selectedElementIds.length === 0) return;
-    const selected = activePage.elements.filter((el) => selectedElementIds.includes(el.id));
-    const others = activePage.elements.filter((el) => !selectedElementIds.includes(el.id));
+    const selected = (activePage?.elements || []).filter((el) => selectedElementIds.includes(el.id));
+    const others = (activePage?.elements || []).filter((el) => !selectedElementIds.includes(el.id));
     commitPageElements([...others, ...selected]);
   };
 
   const handleSendBackward = () => {
     if (selectedElementIds.length === 0) return;
-    const selected = activePage.elements.filter((el) => selectedElementIds.includes(el.id));
-    const others = activePage.elements.filter((el) => !selectedElementIds.includes(el.id));
+    const selected = (activePage?.elements || []).filter((el) => selectedElementIds.includes(el.id));
+    const others = (activePage?.elements || []).filter((el) => !selectedElementIds.includes(el.id));
     commitPageElements([...selected, ...others]);
   };
 
   const handleUpdateSelectedProps = (props: Partial<WhiteboardElement>) => {
     if (selectedElementIds.length === 0) return;
-    const updated = activePage.elements.map((el) => {
+    const updated = (activePage?.elements || []).map((el) => {
       if (selectedElementIds.includes(el.id)) {
         return { ...el, ...props };
       }
@@ -1638,10 +1709,10 @@ export const WhiteboardModule: React.FC = () => {
       <WhiteboardToolbar
         document={doc}
         selectedTool={selectedTool}
-        background={activePage.background}
+        background={activePage?.background || 'dark-grid'}
         zoom={zoom}
-        canUndo={activePage.history.length > 0}
-        canRedo={activePage.redoStack.length > 0}
+        canUndo={(activePage?.history?.length ?? 0) > 0}
+        canRedo={(activePage?.redoStack?.length ?? 0) > 0}
         isNavigatorOpen={isNavigatorOpen}
         isSpotlightActive={isSpotlightActive}
         isSnapToGrid={snapToGrid}

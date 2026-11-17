@@ -358,12 +358,80 @@ export class ClassroomAuth {
     }
 
     if (!sessionId) {
-      return null; // No session cookie
+      // Fallback: Check Authorization header Bearer token or URL query token
+      let authHeader = '';
+      if (typeof req.headers?.get === 'function') {
+        authHeader = req.headers.get('authorization') || '';
+      } else if (req.headers?.authorization) {
+        authHeader = req.headers.authorization;
+      }
+
+      let token = '';
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7).trim();
+      } else if (req.url && req.url.includes('token=')) {
+        try {
+          const url = new URL(req.url, 'http://localhost');
+          token = url.searchParams.get('token') || '';
+        } catch (_) {}
+      }
+
+      if (token) {
+        const verified = ClassroomAuth.verifyLiveSessionToken(token);
+        if (verified) {
+          return {
+            id: verified.userId,
+            email: verified.userEmail,
+            name: verified.userName,
+            role: (verified.role as any) || 'student',
+            status: 'active',
+            isGuest: verified.userId.startsWith('guest_'),
+            createdAt: verified.issuedAt,
+            updatedAt: verified.issuedAt,
+          };
+        }
+      }
+
+      return null; // No valid session or token
     }
 
     // Lookup session securely in DB
     const session = await classroomDb.getSession(sessionId);
     if (!session) {
+      // Fallback: Check Authorization header Bearer token or URL query token
+      let authHeader = '';
+      if (typeof req.headers?.get === 'function') {
+        authHeader = req.headers.get('authorization') || '';
+      } else if (req.headers?.authorization) {
+        authHeader = req.headers.authorization;
+      }
+
+      let token = '';
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7).trim();
+      } else if (req.url && req.url.includes('token=')) {
+        try {
+          const url = new URL(req.url, 'http://localhost');
+          token = url.searchParams.get('token') || '';
+        } catch (_) {}
+      }
+
+      if (token) {
+        const verified = ClassroomAuth.verifyLiveSessionToken(token);
+        if (verified) {
+          return {
+            id: verified.userId,
+            email: verified.userEmail,
+            name: verified.userName,
+            role: (verified.role as any) || 'student',
+            status: 'active',
+            isGuest: verified.userId.startsWith('guest_'),
+            createdAt: verified.issuedAt,
+            updatedAt: verified.issuedAt,
+          };
+        }
+      }
+
       return null;
     }
 

@@ -97,7 +97,7 @@ export const WhiteboardPageNavigator: React.FC<WhiteboardPageNavigatorProps> = (
       <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[#282A36] bg-[#15161C]/80">
         <div className="flex items-center space-x-2">
           <FileText className="w-4 h-4 text-[#06B6D4]" />
-          <span className="text-xs font-semibold text-white">Pages ({doc.pages.length})</span>
+          <span className="text-xs font-semibold text-white">Pages ({doc.pages?.length || 0})</span>
         </div>
         <div className="flex items-center space-x-1">
           <button
@@ -122,10 +122,10 @@ export const WhiteboardPageNavigator: React.FC<WhiteboardPageNavigatorProps> = (
 
       {/* Pages List */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-3">
-        {doc.pages.map((page, index) => {
+        {(doc.pages || []).map((page, index) => {
           const isActive = page.id === activePageId;
           const isFirst = index === 0;
-          const isLast = index === doc.pages.length - 1;
+          const isLast = index === (doc.pages?.length ?? 1) - 1;
 
           return (
             <div
@@ -221,9 +221,9 @@ export const WhiteboardPageNavigator: React.FC<WhiteboardPageNavigatorProps> = (
                   </button>
                   <button
                     onClick={() => setDeleteConfirmId(page.id)}
-                    disabled={doc.pages.length <= 1}
+                    disabled={(doc.pages?.length ?? 0) <= 1}
                     className="p-1 text-[#71717A] hover:text-[#EF4444] disabled:opacity-20 transition-colors"
-                    title={doc.pages.length <= 1 ? 'Cannot delete the only page' : 'Delete Page'}
+                    title={(doc.pages?.length ?? 0) <= 1 ? 'Cannot delete the only page' : 'Delete Page'}
                     aria-label={`Delete ${page.title}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />

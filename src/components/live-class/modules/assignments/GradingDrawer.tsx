@@ -239,11 +239,11 @@ export const GradingDrawer: React.FC<GradingDrawerProps> = ({
                       <span>Submitted Code ({selectedSubmission.language})</span>
                     </div>
                     <span className="text-[11px] text-[#71717A] font-mono">
-                      {selectedSubmission.code.split('\n').length} lines
+                      {(selectedSubmission?.code || '').split('\n').length} lines
                     </span>
                   </div>
                   <pre className="p-3.5 rounded-lg bg-[#15161C] border border-[#282A36] font-mono text-xs text-[#E4E4E7] overflow-x-auto max-h-48 leading-relaxed select-text">
-                    {selectedSubmission.code}
+                    {selectedSubmission?.code || ''}
                   </pre>
                 </div>
 
@@ -255,12 +255,12 @@ export const GradingDrawer: React.FC<GradingDrawerProps> = ({
                       <span>Automated Test Evaluation Results</span>
                     </div>
                     <span className="text-[11px] font-mono text-[#10B981]">
-                      {selectedSubmission.testResults.filter((r) => r.passed).length} /{' '}
-                      {selectedSubmission.testResults.length} Passed
+                      {(selectedSubmission?.testResults || []).filter((r) => r.passed).length} /{' '}
+                      {(selectedSubmission?.testResults || []).length} Passed
                     </span>
                   </div>
                   <div className="space-y-2">
-                    {selectedSubmission.testResults.map((tr) => (
+                    {(selectedSubmission?.testResults || []).map((tr) => (
                       <div
                         key={tr.id}
                         className={`p-3 rounded-lg border text-xs font-mono flex items-center justify-between ${
@@ -300,14 +300,14 @@ export const GradingDrawer: React.FC<GradingDrawerProps> = ({
                 </div>
 
                 {/* Rubric Evaluation (if available) */}
-                {assignment.rubricCriteria && assignment.rubricCriteria.length > 0 && (
+                {(assignment?.rubricCriteria?.length ?? 0) > 0 && (
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-[#A1A1AA] flex items-center space-x-2">
                       <Award className="w-3.5 h-3.5 text-[#FF9100]" />
                       <span>Rubric Assessment Criteria</span>
                     </div>
                     <div className="space-y-2">
-                      {assignment.rubricCriteria.map((crit) => (
+                      {(assignment?.rubricCriteria || []).map((crit) => (
                         <div
                           key={crit.id}
                           className="p-3 rounded-lg border border-[#282A36] bg-[#15161C] flex items-center justify-between text-xs"

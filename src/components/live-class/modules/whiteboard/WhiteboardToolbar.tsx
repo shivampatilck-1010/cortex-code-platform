@@ -181,10 +181,10 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
         >
           <Layers className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">
-            Page {currentPageNum}/{doc.pages.length}
+            Page {currentPageNum}/{doc.pages?.length || 1}
           </span>
           <span className="sm:hidden">
-            {currentPageNum}/{doc.pages.length}
+            {currentPageNum}/{doc.pages?.length || 1}
           </span>
         </button>
 

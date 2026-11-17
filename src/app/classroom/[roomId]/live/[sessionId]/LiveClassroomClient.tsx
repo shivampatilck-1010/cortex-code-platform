@@ -16,6 +16,7 @@ import { MeetingStageModule } from '@/components/live-class/modules/meeting/Meet
 import { PresentationModule } from '@/components/live-class/modules/presentation/PresentationModule';
 import { AssignmentsModule } from '@/components/live-class/modules/assignments/AssignmentsModule';
 import { ResourcesModule } from '@/components/live-class/modules/resources/ResourcesModule';
+import { LiveModuleErrorBoundary } from '@/components/live-class/classroom/LiveModuleErrorBoundary';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, LogIn, ArrowLeft, Loader2, VideoOff, Mic, Video } from 'lucide-react';
 
@@ -169,22 +170,34 @@ const ClassroomShell: React.FC<{ roomId: string; sessionId: string }> = ({ roomI
         <main className="flex-1 flex overflow-hidden relative" role="main">
           <div className="flex-1 flex flex-col h-full overflow-hidden relative">
             <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'code' ? 'flex' : 'hidden'}`}>
-              <CodeStudioModule />
+              <LiveModuleErrorBoundary moduleName="Code Studio">
+                <CodeStudioModule />
+              </LiveModuleErrorBoundary>
             </div>
             <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'whiteboard' ? 'flex' : 'hidden'}`}>
-              <WhiteboardModule />
+              <LiveModuleErrorBoundary moduleName="Whiteboard">
+                <WhiteboardModule />
+              </LiveModuleErrorBoundary>
             </div>
             <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'meeting' ? 'flex' : 'hidden'}`}>
-              <MeetingStageModule />
+              <LiveModuleErrorBoundary moduleName="Meeting Stage">
+                <MeetingStageModule />
+              </LiveModuleErrorBoundary>
             </div>
             <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'presentation' ? 'flex' : 'hidden'}`}>
-              <PresentationModule />
+              <LiveModuleErrorBoundary moduleName="Presentation">
+                <PresentationModule />
+              </LiveModuleErrorBoundary>
             </div>
             <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'assignments' ? 'flex' : 'hidden'}`}>
-              <AssignmentsModule />
+              <LiveModuleErrorBoundary moduleName="Assignments">
+                <AssignmentsModule />
+              </LiveModuleErrorBoundary>
             </div>
             <div className={`flex-1 flex-col h-full overflow-hidden ${activeModule === 'resources' ? 'flex' : 'hidden'}`}>
-              <ResourcesModule />
+              <LiveModuleErrorBoundary moduleName="Resources">
+                <ResourcesModule />
+              </LiveModuleErrorBoundary>
             </div>
           </div>
 

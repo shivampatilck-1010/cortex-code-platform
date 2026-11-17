@@ -39,6 +39,16 @@ import {
   Undo2,
 } from 'lucide-react';
 
+const DEFAULT_SLIDE: Slide = {
+  id: 'slide-default',
+  title: 'Overview',
+  subtitle: 'Interactive Course Presentation',
+  bullets: [],
+  annotations: { strokes: [] },
+  createdAt: 0,
+  updatedAt: 0,
+};
+
 export const PresentationModule: React.FC = () => {
   const { userRole, showToast, session, activeModule } = useClassroom();
   const { teacherActivity, followMode, broadcastTeacherActivity } = useFollowTeacher();
@@ -97,11 +107,12 @@ export const PresentationModule: React.FC = () => {
 
   // Derived Active Slide
   const currentSlideIndex = useMemo(() => {
+    if (!deck?.slides || !Array.isArray(deck.slides)) return 0;
     const idx = deck.slides.findIndex((s) => s.id === deck.activeSlideId);
     return idx >= 0 ? idx : 0;
-  }, [deck.slides, deck.activeSlideId]);
+  }, [deck?.slides, deck?.activeSlideId]);
 
-  const currentSlide = deck.slides[currentSlideIndex] || deck.slides[0];
+  const currentSlide = (deck?.slides && deck.slides[currentSlideIndex]) || deck?.slides?.[0] || DEFAULT_SLIDE;
 
   // Laser active flag for backward compatibility and styling
   const isLaserActive = activeTool === 'laser';
@@ -924,19 +935,19 @@ export const PresentationModule: React.FC = () => {
                   CORTEX {deck.courseCode || 'CS 201'} • ALGORITHMS
                 </span>
                 <span className="text-[10px] font-mono text-[#71717A]">
-                  Topic {currentSlideIndex + 1} / {deck.slides.length}
+                  Topic {currentSlideIndex + 1} / {deck?.slides?.length || 1}
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-white mt-1.5 tracking-tight">
-                {currentSlide.title}
+                {currentSlide?.title || 'Slide Title'}
               </h1>
-              <p className="text-xs text-[#A1A1AA] mt-1">{currentSlide.subtitle}</p>
+              <p className="text-xs text-[#A1A1AA] mt-1">{currentSlide?.subtitle || ''}</p>
             </div>
 
             {/* Slide Body */}
             <div className="my-auto space-y-4 py-2">
               <ul className="space-y-2.5">
-                {currentSlide.bullets.map((b, i) => (
+                {(currentSlide?.bullets || []).map((b, i) => (
                   <li key={i} className="flex items-start space-x-3 text-xs sm:text-sm text-[#E4E4E7]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#06B6D4] mt-2 flex-shrink-0" />
                     <span className="leading-relaxed">{b}</span>
@@ -944,14 +955,14 @@ export const PresentationModule: React.FC = () => {
                 ))}
               </ul>
 
-              {currentSlide.diagramTitle && (
+              {currentSlide?.diagramTitle && (
                 <div className="p-3 sm:p-3.5 rounded-lg bg-[#15161C] border border-[#282A36] text-xs font-mono text-[#06B6D4] flex items-center justify-between">
                   <span>{currentSlide.diagramTitle}</span>
                   <span className="text-[10px] text-[#71717A] hidden sm:inline">Mathematical Invariant</span>
                 </div>
               )}
 
-              {currentSlide.codeSnippet && (
+              {currentSlide?.codeSnippet && (
                 <pre className="p-3 rounded-lg bg-[#0B0C0E] border border-[#282A36] text-[11px] sm:text-xs font-mono text-[#10B981] overflow-x-auto">
                   {currentSlide.codeSnippet}
                 </pre>
@@ -961,12 +972,12 @@ export const PresentationModule: React.FC = () => {
             {/* Slide Footer */}
             <div className="flex items-center justify-between pt-3 border-t border-[#282A36] text-[11px] text-[#71717A]">
               <span>Instructor: {deck.author || 'Prof. Shivam Patil'}</span>
-              <span>Slide {currentSlideIndex + 1} / {deck.slides.length}</span>
+              <span>Slide {currentSlideIndex + 1} / {deck?.slides?.length || 1}</span>
             </div>
 
             {/* Slide Annotation Canvas Overlay */}
             <SlideAnnotationCanvas
-              annotations={currentSlide.annotations}
+              annotations={currentSlide?.annotations}
               onUpdateAnnotations={handleUpdateAnnotations}
               activeTool={activeTool}
               penColor={penColor}
@@ -1005,7 +1016,7 @@ export const PresentationModule: React.FC = () => {
         <SlideEditorDrawer
           slide={currentSlide}
           slideIndex={currentSlideIndex}
-          totalSlides={deck.slides.length}
+          totalSlides={deck?.slides?.length || 1}
           onUpdateSlide={handleUpdateActiveSlide}
           isOpen={isDrawerOpen}
           onToggleOpen={() => setIsDrawerOpen((prev) => !prev)}
@@ -1026,7 +1037,7 @@ export const PresentationModule: React.FC = () => {
           </button>
           <button
             onClick={handleNextSlide}
-            disabled={currentSlideIndex === deck.slides.length - 1}
+            disabled={currentSlideIndex === (deck?.slides?.length ?? 1) - 1}
             className="flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-[#282A36] text-xs font-medium text-white hover:bg-[#1D1F27] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
             title="Next Slide (Right Arrow / Space)"
           >

@@ -1829,7 +1829,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   // Step 1: Real-time WebSocket Signaling connection & event handling
   useEffect(() => {
     const isTest = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
-    const allowConnect = !isTest || (typeof window !== 'undefined' && Boolean(window.__ENABLE_TEST_WS__));
+    const allowConnect = (!isTest || (typeof window !== 'undefined' && Boolean(window.__ENABLE_TEST_WS__))) && authStatus === 'authenticated';
 
     let wsUrl: string | undefined = undefined;
     if (typeof window !== 'undefined' && window.location) {
@@ -2138,7 +2138,7 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
       client.disconnect();
       signalingClientRef.current = null;
     };
-  }, [session.id, session.teacher.name, userRole, currentUserId, showToast]);
+  }, [session.id, session.teacher.name, userRole, currentUserId, currentUserName, showToast, authStatus, liveSessionToken]);
 
   // Initial device discovery and listener for device hardware changes
   useEffect(() => {
