@@ -88,7 +88,13 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
     try {
       setIsLoading(true);
       setError(null);
-      const res = await fetch(`/api/v1/classrooms/${classroomId}/exams`);
+      const sessId = typeof window !== 'undefined' ? localStorage.getItem('cortex_session_id') : null;
+      const res = await fetch(`/api/v1/classrooms/${classroomId}/exams`, {
+        credentials: 'include',
+        headers: {
+          ...(sessId ? { 'x-session-id': sessId } : {}),
+        },
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load examinations');
@@ -339,13 +345,159 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
       )}
 
       {/* Examinations Cards List */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         {filteredExams.map((exam) => {
           const now = Date.now();
           const isBeforeStart = now < exam.startTime;
           const isAfterEnd = now > exam.endTime;
           const studentState = (exam as any).studentState;
 
+          if (!isTeacher) {
+            /* Standardized High-Contrast Student Examination Card */
+            return (
+              <div
+                key={exam.id}
+                className="bg-[#101116] border border-[#22242c] hover:border-[#383b4c] rounded-2xl p-5 transition-all shadow-md space-y-4"
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-bold text-white tracking-tight">{exam.title}</h3>
+                      {getStatusBadge(exam.status)}
+                      {getSecurityBadge(exam.securityLevel)}
+                    </div>
+                    {exam.description && (
+                      <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{exam.description}</p>
+                    )}
+                  </div>
+
+                  {/* Student Assessment Primary Action */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {studentState?.isSubmitted ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-950/60 px-3 py-1.5 rounded-xl border border-emerald-800">
+                          <CheckCircle className="w-4 h-4" />
+                          Submitted
+                        </span>
+                        {studentState?.latestScore !== null && (
+                          <span className="text-xs font-bold text-white bg-[#181922] px-3 py-1.5 rounded-xl border border-[#2a2d3c]">
+                            Score: <strong className="text-[#FF9100]">{studentState.latestScore}</strong> / {exam.totalMarks}
+                          </span>
+                        )}
+                      </div>
+                    ) : studentState?.hasActiveSession ? (
+                      <div className="flex items-center gap-2">
+                        {exam.securityLevel === 'seb' && (
+                          <a
+                            href={getSebProtocolUri(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config`)}
+                            className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow"
+                            title="Resume directly in Safe Exam Browser"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            <span>Launch in SEB</span>
+                          </a>
+                        )}
+                        <button
+                          onClick={() => setActiveRunningExamId(exam.id)}
+                          className="h-9 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-extrabold text-xs transition flex items-center gap-2 shadow-lg shadow-emerald-500/20 animate-pulse"
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>Resume Attempt</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {exam.securityLevel === 'seb' && !isBeforeStart && !isAfterEnd && (
+                          <a
+                            href={getSebProtocolUri(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config`)}
+                            className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow"
+                            title="Launch directly in Safe Exam Browser"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            <span>Launch in SEB</span>
+                          </a>
+                        )}
+                        <button
+                          onClick={() => setActiveRunningExamId(exam.id)}
+                          disabled={isBeforeStart || isAfterEnd || (studentState?.attemptsRemaining !== undefined && studentState?.attemptsRemaining <= 0)}
+                          className={`h-9 px-5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
+                            isBeforeStart || isAfterEnd || (studentState?.attemptsRemaining !== undefined && studentState?.attemptsRemaining <= 0)
+                              ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
+                              : 'bg-[#FF9100] hover:bg-[#e08000] text-black shadow-lg shadow-[#FF9100]/20'
+                          }`}
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>
+                            {isBeforeStart
+                              ? 'Starts Later'
+                              : isAfterEnd
+                              ? 'Window Closed'
+                              : studentState?.attemptsRemaining !== undefined && studentState?.attemptsRemaining <= 0
+                              ? 'No Attempts Left'
+                              : exam.securityLevel === 'restricted'
+                              ? 'Take in Lockdown'
+                              : exam.securityLevel === 'seb'
+                              ? 'Open Exam Gate'
+                              : 'Start Examination'}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Standardized Student Metrics Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                  <div className="p-2.5 bg-[#14151b] border border-[#22242e] rounded-xl flex items-center gap-2.5 text-xs">
+                    <Clock className="w-4 h-4 text-[#FF9100] shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase font-semibold">Duration</span>
+                      <span className="text-gray-200 font-semibold">{exam.durationMinutes} Minutes</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-[#14151b] border border-[#22242e] rounded-xl flex items-center gap-2.5 text-xs">
+                    <Award className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase font-semibold">Evaluation</span>
+                      <span className="text-gray-200 font-semibold">{exam.totalMarks} Marks (Pass: {exam.passingMarks})</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-[#14151b] border border-[#22242e] rounded-xl flex items-center gap-2.5 text-xs">
+                    <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase font-semibold">Questions</span>
+                      <span className="text-gray-200 font-semibold">{exam.questionCount || 0} Questions</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-[#14151b] border border-[#22242e] rounded-xl flex items-center gap-2.5 text-xs">
+                    <Users className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-gray-500 block uppercase font-semibold">Attempts</span>
+                      <span className="text-gray-200 font-semibold">
+                        {studentState?.attemptsRemaining !== undefined ? `${studentState.attemptsRemaining} of ${exam.attemptsAllowed} Left` : `${exam.attemptsAllowed} Allowed`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Exam Window Details */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 border-t border-[#1c1d24] pt-2.5">
+                  <span>
+                    Exam Window: <strong className="text-gray-400">{new Date(exam.startTime).toLocaleDateString()} {new Date(exam.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong> to <strong className="text-gray-400">{new Date(exam.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {exam.shuffleQuestions && <span>• Randomized Questions</span>}
+                    {exam.showResultsImmediately && <span className="text-cyan-400/90">• Immediate Scoring</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          /* Teacher Administration Card */
           return (
             <div
               key={exam.id}
@@ -365,194 +517,96 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
 
                 {/* Right Action Buttons */}
                 <div className="flex items-center gap-2 shrink-0">
-                  {isTeacher ? (
-                    <>
-                      <button
-                        onClick={() => {
-                          setSelectedExamForQuestions(exam);
-                          setIsQuestionsOpen(true);
-                        }}
-                        className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
-                        title="Manage Questions"
-                      >
-                        <ListOrdered className="w-3.5 h-3.5 text-[#FF9100]" />
-                        <span>Questions ({exam.questionCount || 0})</span>
-                      </button>
+                  <button
+                    onClick={() => {
+                      setSelectedExamForQuestions(exam);
+                      setIsQuestionsOpen(true);
+                    }}
+                    className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
+                    title="Manage Questions"
+                  >
+                    <ListOrdered className="w-3.5 h-3.5 text-[#FF9100]" />
+                    <span>Questions ({exam.questionCount || 0})</span>
+                  </button>
 
-                      <button
-                        onClick={() => {
-                          setSelectedExamForSections(exam);
-                          setIsSectionsOpen(true);
-                        }}
-                        className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
-                        title="Sections & Conditional Branching"
-                      >
-                        <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Routing</span>
-                      </button>
+                  <button
+                    onClick={() => {
+                      setSelectedExamForSections(exam);
+                      setIsSectionsOpen(true);
+                    }}
+                    className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
+                    title="Sections & Conditional Branching"
+                  >
+                    <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Routing</span>
+                  </button>
 
-                      <button
-                        onClick={() => {
-                          setSelectedLiveDashboardExamId(exam.id);
-                          setIsLiveDashboardOpen(true);
-                        }}
-                        className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
-                        title="Live Proctoring & Session Telemetry"
-                      >
-                        <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Monitor</span>
-                      </button>
+                  <button
+                    onClick={() => {
+                      setSelectedLiveDashboardExamId(exam.id);
+                      setIsLiveDashboardOpen(true);
+                    }}
+                    className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
+                    title="Live Proctoring & Session Telemetry"
+                  >
+                    <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Monitor</span>
+                  </button>
 
-                      <button
-                        onClick={() => {
-                          setPreviewExamId(exam.id);
-                          setIsPreviewOpen(true);
-                        }}
-                        className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
-                        title="Preview as student"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Preview</span>
-                      </button>
+                  <button
+                    onClick={() => {
+                      setPreviewExamId(exam.id);
+                      setIsPreviewOpen(true);
+                    }}
+                    className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
+                    title="Preview as student"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Preview</span>
+                  </button>
 
-                      <button
-                        onClick={() => {
-                          setSubmissionsExamId(exam.id);
-                          setIsSubmissionsOpen(true);
-                        }}
-                        className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
-                        title="View Submissions & Integrity"
-                      >
-                        <Users className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Submissions</span>
-                      </button>
+                  <button
+                    onClick={() => {
+                      setSubmissionsExamId(exam.id);
+                      setIsSubmissionsOpen(true);
+                    }}
+                    className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1"
+                    title="View Submissions & Integrity"
+                  >
+                    <Users className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Submissions</span>
+                  </button>
 
-                      <button
-                        onClick={() => handleTogglePublish(exam)}
-                        className={`h-8 px-2.5 rounded-lg text-xs font-medium border transition ${
-                          exam.status === 'draft'
-                            ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60 hover:bg-emerald-950'
-                            : 'bg-gray-800/60 text-gray-300 border-gray-700 hover:bg-gray-800'
-                        }`}
-                        title={exam.status === 'draft' ? 'Publish examination' : 'Return to draft'}
-                      >
-                        {exam.status === 'draft' ? 'Publish' : 'Unpublish'}
-                      </button>
+                  <button
+                    onClick={() => handleTogglePublish(exam)}
+                    className={`h-8 px-2.5 rounded-lg text-xs font-medium border transition ${
+                      exam.status === 'draft'
+                        ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60 hover:bg-emerald-950'
+                        : 'bg-gray-800/60 text-gray-300 border-gray-700 hover:bg-gray-800'
+                    }`}
+                    title={exam.status === 'draft' ? 'Publish examination' : 'Return to draft'}
+                  >
+                    {exam.status === 'draft' ? 'Publish' : 'Unpublish'}
+                  </button>
 
-                      <button
-                        onClick={() => {
-                          setEditingExam(exam);
-                          setIsBuilderOpen(true);
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-[#22242c] text-gray-400 hover:text-white transition"
-                        title="Edit examination settings"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
+                  <button
+                    onClick={() => {
+                      setEditingExam(exam);
+                      setIsBuilderOpen(true);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-[#22242c] text-gray-400 hover:text-white transition"
+                    title="Edit examination settings"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
 
-                      <button
-                        onClick={() => handleDeleteExam(exam.id)}
-                        className="p-1.5 rounded-lg hover:bg-red-950/50 text-gray-400 hover:text-red-400 transition"
-                        title="Delete examination"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  ) : (
-                    /* Student actions */
-                    <div className="flex items-center gap-2">
-                      {studentState?.isSubmitted ? (
-                        <div className="flex items-center gap-2">
-                          <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-800/60">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Submitted
-                          </span>
-                          {studentState?.latestScore !== null && (
-                            <span className="text-xs font-semibold text-white bg-[#1a1b22] px-2.5 py-1 rounded-lg border border-[#2a2d38]">
-                              Score: {studentState.latestScore} / {exam.totalMarks}
-                            </span>
-                          )}
-                        </div>
-                      ) : studentState?.hasActiveSession ? (
-                        <div className="flex items-center gap-2">
-                          {exam.securityLevel === 'seb' && (
-                            <>
-                              <a
-                                href={getSebProtocolUri(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config`)}
-                                className="h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow"
-                                title="Resume directly in Safe Exam Browser"
-                              >
-                                <Play className="w-3.5 h-3.5 fill-current" />
-                                <span>Launch in SEB</span>
-                              </a>
-                              <a
-                                href={`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config?format=plist`}
-                                download
-                                className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-rose-300 hover:text-white border border-rose-900/50 transition flex items-center gap-1"
-                                title="Download .seb configuration file"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>.seb</span>
-                              </a>
-                            </>
-                          )}
-                          <button
-                            onClick={() => setActiveRunningExamId(exam.id)}
-                            className="h-8 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs transition flex items-center gap-1.5 animate-pulse"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            Resume Exam
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          {exam.securityLevel === 'seb' && !isBeforeStart && !isAfterEnd && (studentState?.attemptsRemaining > 0 || studentState?.attemptsRemaining === undefined) && (
-                            <>
-                              <a
-                                href={getSebProtocolUri(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config`)}
-                                className="h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow"
-                                title="Launch directly in Safe Exam Browser"
-                              >
-                                <Play className="w-3.5 h-3.5 fill-current" />
-                                <span>Launch in SEB</span>
-                              </a>
-                              <a
-                                href={`/api/v1/classrooms/${classroomId}/exams/${exam.id}/seb-config?format=plist`}
-                                download
-                                className="h-8 px-2.5 rounded-lg bg-[#181920] hover:bg-[#22242c] text-xs text-rose-300 hover:text-white border border-rose-900/50 transition flex items-center gap-1"
-                                title="Download .seb configuration file"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>.seb</span>
-                              </a>
-                            </>
-                          )}
-                          <button
-                            onClick={() => setActiveRunningExamId(exam.id)}
-                            disabled={isBeforeStart || isAfterEnd || studentState?.attemptsRemaining <= 0}
-                            className={`h-8 px-4 rounded-lg font-semibold text-xs transition flex items-center gap-1.5 ${
-                              isBeforeStart || isAfterEnd || studentState?.attemptsRemaining <= 0
-                                ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
-                                : 'bg-[#FF9100] hover:bg-[#e08000] text-black shadow-md shadow-[#FF9100]/10'
-                            }`}
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            {isBeforeStart
-                              ? 'Starts Later'
-                              : isAfterEnd
-                              ? 'Window Closed'
-                              : studentState?.attemptsRemaining <= 0
-                              ? 'No Attempts Left'
-                              : exam.securityLevel === 'restricted'
-                              ? 'Take in Lockdown'
-                              : exam.securityLevel === 'seb'
-                              ? 'Open Exam Gate'
-                              : 'Start Exam'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <button
+                    onClick={() => handleDeleteExam(exam.id)}
+                    className="p-1.5 rounded-lg hover:bg-red-950/50 text-gray-400 hover:text-red-400 transition"
+                    title="Delete examination"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 

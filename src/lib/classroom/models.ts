@@ -538,7 +538,10 @@ export type ExamQuestionType =
   | 'true_false'
   | 'numerical'
   | 'short_answer'
-  | 'programming';
+  | 'subjective'
+  | 'essay'
+  | 'programming'
+  | 'coding';
 
 export type ExamSessionStatus = 'in_progress' | 'submitted' | 'timed_out' | 'cancelled';
 

@@ -467,12 +467,14 @@ export function ExamRunnerModal({
         launchToken: effectiveToken,
       });
 
+      const sessId = typeof window !== 'undefined' ? localStorage.getItem('cortex_session_id') : null;
       const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${examId}/start`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...sebHeaders,
+          ...(sessId ? { 'x-session-id': sessId } : {}),
         },
         body: effectiveToken
           ? JSON.stringify({
@@ -1450,7 +1452,7 @@ export function ExamRunnerModal({
             </div>
 
             {/* Question Body: Theory/Standard Questions vs. Split-Screen Coding Workbench */}
-            {currentQ.questionType === 'programming' ? (
+            {(currentQ.questionType === 'programming' || currentQ.questionType === 'coding') ? (
               /* Split-Screen 50/50 Programming Workbench */
               <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
                 {/* Left Split: Problem Specs & Sample Test Cases */}
@@ -1779,19 +1781,29 @@ export function ExamRunnerModal({
                   </div>
                 )}
 
-                {/* 5. Short Answer */}
-                {currentQ.questionType === 'short_answer' && (
-                  <div className="space-y-2 max-w-lg">
+                {/* 5. Short Answer & Subjective / Essay Response */}
+                {(currentQ.questionType === 'short_answer' || currentQ.questionType === 'subjective' || currentQ.questionType === 'essay') && (
+                  <div className="space-y-2 max-w-2xl">
                     <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
-                      Type Your Answer:
+                      {currentQ.questionType === 'short_answer' ? 'Type Your Answer:' : 'Type Your Comprehensive Response / Explanation:'}
                     </label>
-                    <input
-                      type="text"
-                      value={responses[currentQ.id] || ''}
-                      onChange={(e) => handleUpdateAnswer(currentQ.id, e.target.value)}
-                      placeholder="Enter concise response..."
-                      className="w-full px-4 py-3 bg-[#111216] border border-[#262832] rounded-xl text-sm text-white focus:outline-none focus:border-[#FF9100] transition"
-                    />
+                    {currentQ.questionType === 'short_answer' ? (
+                      <input
+                        type="text"
+                        value={responses[currentQ.id] || ''}
+                        onChange={(e) => handleUpdateAnswer(currentQ.id, e.target.value)}
+                        placeholder="Enter concise response..."
+                        className="w-full px-4 py-3 bg-[#111216] border border-[#262832] rounded-xl text-sm text-white focus:outline-none focus:border-[#FF9100] transition"
+                      />
+                    ) : (
+                      <textarea
+                        rows={7}
+                        value={responses[currentQ.id] || ''}
+                        onChange={(e) => handleUpdateAnswer(currentQ.id, e.target.value)}
+                        placeholder="Enter your detailed technical explanation, proof, or mechanism here..."
+                        className="w-full px-4 py-3 bg-[#111216] border border-[#262832] rounded-xl text-sm font-sans text-white focus:outline-none focus:border-[#FF9100] transition resize-y leading-relaxed"
+                      />
+                    )}
                   </div>
                 )}
               </div>
