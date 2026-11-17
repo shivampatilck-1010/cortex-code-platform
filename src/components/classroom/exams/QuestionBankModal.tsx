@@ -363,7 +363,7 @@ export function QuestionBankModal({ onClose, pickerMode = false, onImportToExam 
             <div>
               <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                 {pickerMode ? 'Import from Reusable Question Bank' : 'Cortex Reusable Question Bank'}
-                <span className="text-xs text-gray-400 font-normal">({questions.length} items)</span>
+                <span className="text-xs text-gray-400 font-normal">({(questions?.length ?? 0)} items)</span>
               </h2>
               <p className="text-xs text-gray-400">
                 {pickerMode
@@ -795,11 +795,11 @@ export function QuestionBankModal({ onClose, pickerMode = false, onImportToExam 
           </div>
 
           {/* Question List */}
-          {isLoading && questions.length === 0 && (
+          {isLoading && (questions?.length ?? 0) === 0 && (
             <div className="text-center py-12 text-xs text-gray-500">Loading question bank...</div>
           )}
 
-          {!isLoading && questions.length === 0 && (
+          {!isLoading && (questions?.length ?? 0) === 0 && (
             <div className="text-center py-12 text-xs text-gray-500 border border-dashed border-[#22242c] rounded-xl p-8 space-y-2">
               <BookOpen className="w-8 h-8 text-gray-600 mx-auto" />
               <p>No questions found matching your filter criteria.</p>

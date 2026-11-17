@@ -4,6 +4,7 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { User } from '@/lib/classroom/models';
 import { rateLimiter } from '@/lib/classroom/rate-limiter';
 import { createLogger } from '@/lib/classroom/logger';
+import { verifyTurnstileToken } from '@/lib/auth/turnstile';
 
 export async function POST(req: NextRequest) {
   const logger = createLogger(req.headers.get('x-request-id') || undefined, {
@@ -33,10 +34,22 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { identifier, password } = body;
+    const { identifier, password, cfTurnstileToken } = body;
 
     if (!identifier || !password) {
       return NextResponse.json({ error: 'Identifier and password are required' }, { status: 400 });
+    }
+
+    // Cloudflare Turnstile Human Verification
+    if (cfTurnstileToken) {
+      const turnstileCheck = await verifyTurnstileToken(cfTurnstileToken, clientIp);
+      if (!turnstileCheck.success) {
+        logger.warn('Turnstile verification failed for login', { clientIp, errorCodes: turnstileCheck.errorCodes });
+        return NextResponse.json(
+          { error: turnstileCheck.message || 'Cloudflare human verification failed. Please complete the security check.' },
+          { status: 403 }
+        );
+      }
     }
 
     const normalizedIdentifier = identifier.trim().toLowerCase();

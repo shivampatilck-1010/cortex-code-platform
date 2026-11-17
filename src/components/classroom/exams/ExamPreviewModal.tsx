@@ -64,7 +64,7 @@ export function ExamPreviewModal({ classroomId, examId, onClose }: ExamPreviewMo
           </div>
         )}
 
-        {!isLoading && exam && questions.length === 0 && (
+        {!isLoading && exam && (questions?.length ?? 0) === 0 && (
           <div className="p-12 text-center text-xs text-gray-500">
             No questions have been added to this examination yet.
           </div>
@@ -77,7 +77,7 @@ export function ExamPreviewModal({ classroomId, examId, onClose }: ExamPreviewMo
               <span className="font-semibold text-white">{exam.title}</span>
               <div className="flex items-center gap-4">
                 <span>Duration: {exam.durationMinutes} mins</span>
-                <span>Question {activeQuestionIndex + 1} of {questions.length}</span>
+                <span>Question {activeQuestionIndex + 1} of {(questions?.length ?? 0)}</span>
                 <span className="text-cyan-400 font-medium">{currentQ.points} Point{currentQ.points !== 1 ? 's' : ''}</span>
               </div>
             </div>
@@ -187,8 +187,8 @@ export function ExamPreviewModal({ classroomId, examId, onClose }: ExamPreviewMo
               </div>
 
               <button
-                onClick={() => setActiveQuestionIndex((prev) => Math.min(questions.length - 1, prev + 1))}
-                disabled={activeQuestionIndex === questions.length - 1}
+                onClick={() => setActiveQuestionIndex((prev) => Math.min((questions?.length ?? 1) - 1, prev + 1))}
+                disabled={activeQuestionIndex === (questions?.length ?? 0) - 1}
                 className="px-3 py-1.5 rounded-lg bg-[#16171c] hover:bg-[#20222a] text-xs text-gray-300 disabled:opacity-30 flex items-center gap-1"
               >
                 Next

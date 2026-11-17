@@ -1375,7 +1375,7 @@ export const WhiteboardModule: React.FC = () => {
   // UNDO & REDO
   const handleUndo = () => {
     if ((activePage?.history?.length ?? 0) === 0) return;
-    const prev = activePage.history[activePage.history.length - 1];
+    const prev = activePage.history[(activePage.history?.length ?? 1) - 1];
     elementsRef.current = prev;
 
     setDoc((d) => ({
@@ -1395,7 +1395,7 @@ export const WhiteboardModule: React.FC = () => {
 
   const handleRedo = () => {
     if ((activePage?.redoStack?.length ?? 0) === 0) return;
-    const next = activePage.redoStack[activePage.redoStack.length - 1];
+    const next = activePage.redoStack[(activePage.redoStack?.length ?? 1) - 1];
     elementsRef.current = next;
 
     setDoc((d) => ({

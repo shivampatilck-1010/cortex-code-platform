@@ -23,6 +23,10 @@ config.vars = {
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || 'cortex-staging-github-secret',
   LOCKDOWN_SERVER_PEPPER: process.env.LOCKDOWN_SERVER_PEPPER || 'cortex-prod-lockdown-pepper-2026',
   JWT_SECRET: process.env.JWT_SECRET || 'cortex-prod-jwt-secret-2026-token',
+  TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+  TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || 'cortex-google-client-id-demo',
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || 'cortex-google-client-secret-demo',
 };
 
 if (config.d1_databases && config.d1_databases.length > 0) {

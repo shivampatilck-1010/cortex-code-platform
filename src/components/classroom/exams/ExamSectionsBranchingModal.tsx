@@ -127,7 +127,7 @@ export function ExamSectionsBranchingModal({
         res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/sections`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, sortOrder: sections.length }),
+          body: JSON.stringify({ ...payload, sortOrder: sections?.length ?? 0 }),
         });
       }
 
@@ -178,7 +178,7 @@ export function ExamSectionsBranchingModal({
 
   const handleMoveSection = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= sections.length) return;
+    if (targetIndex < 0 || targetIndex >= (sections?.length ?? 0)) return;
 
     const reordered = [...sections];
     const [moved] = reordered.splice(index, 1);
@@ -214,7 +214,7 @@ export function ExamSectionsBranchingModal({
         destinationId: ruleDestinationId || undefined,
         defaultDestinationType: ruleDefaultDestType,
         defaultDestinationId: ruleDefaultDestId || undefined,
-        priority: branchingRules.length,
+        priority: branchingRules?.length ?? 0,
       };
 
       const res = await fetch(`/api/v1/classrooms/${classroomId}/exams/${exam.id}/branching-rules`, {
@@ -313,7 +313,7 @@ export function ExamSectionsBranchingModal({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            Examination Sections ({sections.length})
+            Examination Sections ({(sections?.length ?? 0)})
           </button>
           <button
             onClick={() => setActiveTab('branching')}
@@ -324,7 +324,7 @@ export function ExamSectionsBranchingModal({
             }`}
           >
             <GitBranch className="w-3.5 h-3.5" />
-            Conditional Routing Rules ({branchingRules.length})
+            Conditional Routing Rules ({(branchingRules?.length ?? 0)})
           </button>
         </div>
 
@@ -440,14 +440,14 @@ export function ExamSectionsBranchingModal({
               )}
 
               {/* Sections List */}
-              {sections.length === 0 ? (
+              {(sections?.length ?? 0) === 0 ? (
                 <div className="py-10 text-center border border-dashed border-[#22242b] rounded-xl space-y-2">
                   <p className="text-xs text-gray-400">No custom sections configured. Examination runs as a single continuous session.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {sections.map((sec, idx) => {
-                    const secQuestions = questions.filter((q) => q.sectionId === sec.id);
+                    const secQuestions = (questions || []).filter((q) => q.sectionId === sec.id);
                     return (
                       <div
                         key={sec.id}
@@ -457,7 +457,7 @@ export function ExamSectionsBranchingModal({
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-white">{sec.title}</span>
                             <span className="text-[10px] px-2 py-0.5 rounded bg-[#1c1d24] text-gray-300 border border-[#2a2d36]">
-                              {secQuestions.length} Questions
+                              {(secQuestions?.length ?? 0)} Questions
                             </span>
                             {sec.isMandatory ? (
                               <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/50">
@@ -485,7 +485,7 @@ export function ExamSectionsBranchingModal({
                           </button>
                           <button
                             onClick={() => handleMoveSection(idx, 'down')}
-                            disabled={idx === sections.length - 1}
+                            disabled={idx === (sections?.length ?? 0) - 1}
                             className="p-1 rounded hover:bg-[#1f212a] text-gray-400 disabled:opacity-30"
                             title="Move Down"
                           >
@@ -534,7 +534,7 @@ export function ExamSectionsBranchingModal({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleValidateBranching}
-                    disabled={isValidating || branchingRules.length === 0}
+                    disabled={isValidating || (branchingRules?.length ?? 0) === 0}
                     className="px-3 py-1.5 rounded-lg bg-[#181920] hover:bg-[#20222a] text-gray-300 hover:text-white border border-[#2a2d36] text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-40"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isValidating ? 'animate-spin' : ''}`} />
@@ -756,7 +756,7 @@ export function ExamSectionsBranchingModal({
               )}
 
               {/* Branching Rules List */}
-              {branchingRules.length === 0 ? (
+              {(branchingRules?.length ?? 0) === 0 ? (
                 <div className="py-10 text-center border border-dashed border-[#22242b] rounded-xl space-y-2">
                   <p className="text-xs text-gray-400">No branching rules defined. Assessment flows linearly by question sort order.</p>
                 </div>

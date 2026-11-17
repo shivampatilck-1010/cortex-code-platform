@@ -390,7 +390,9 @@ export interface Notification {
     | 'feedback_added'
     | 'announcement'
     | 'session_started'
-    | 'enrollment';
+    | 'enrollment'
+    | 'exam_published'
+    | 'system';
   title: string;
   message: string;
   data?: Record<string, any>;

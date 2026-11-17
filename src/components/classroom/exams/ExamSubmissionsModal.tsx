@@ -145,7 +145,7 @@ export function ExamSubmissionsModal({ classroomId, examId, onClose }: ExamSubmi
                 {activeGradingSession ? `Grading: ${activeGradingSession.userName || 'Student'} (Attempt #${activeGradingSession.attemptNumber})` : 'Student Submissions & Integrity Audit'}
               </h2>
               <p className="text-xs text-gray-400">
-                {activeGradingSession ? `Status: ${activeGradingSession.status}` : `Total Attempts Recorded: ${submissions.length}`}
+                {activeGradingSession ? `Status: ${activeGradingSession.status}` : `Total Attempts Recorded: ${(submissions?.length ?? 0)}`}
               </p>
             </div>
           </div>
@@ -326,17 +326,17 @@ export function ExamSubmissionsModal({ classroomId, examId, onClose }: ExamSubmi
           {/* SUBMISSIONS LIST TABLE */}
           {!activeGradingSession && (
             <>
-              {isLoading && submissions.length === 0 && (
+              {isLoading && (submissions?.length ?? 0) === 0 && (
                 <div className="text-center py-12 text-xs text-gray-500">Loading submissions...</div>
               )}
 
-              {!isLoading && submissions.length === 0 && (
+              {!isLoading && (submissions?.length ?? 0) === 0 && (
                 <div className="text-center py-12 text-xs text-gray-500">
                   No students have started or submitted this examination yet.
                 </div>
               )}
 
-              {!isLoading && submissions.length > 0 && (
+              {!isLoading && (submissions?.length ?? 0) > 0 && (
                 <div className="border border-[#22242c] rounded-xl overflow-hidden">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#121318] border-b border-[#22242c] text-gray-400 font-semibold">

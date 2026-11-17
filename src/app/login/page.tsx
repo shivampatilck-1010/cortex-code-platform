@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CortexLogo } from '@/components/brand/CortexLogo';
+import { CloudflareTurnstile, CloudflareTurnstileRef } from '@/components/auth/CloudflareTurnstile';
 
 function MovingDotsBackground() {
   return (
@@ -34,6 +35,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
+  const turnstileRef = useRef<CloudflareTurnstileRef>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,11 +47,18 @@ export default function LoginPage() {
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ 
+          identifier, 
+          password,
+          cfTurnstileToken: turnstileToken || undefined,
+        }),
       });
       const data = await res.json();
       
       if (!res.ok) {
+        // Reset turnstile on auth failure
+        turnstileRef.current?.reset();
+        setTurnstileToken('');
         throw new Error(data.error || 'Failed to login');
       }
 
@@ -83,7 +93,7 @@ export default function LoginPage() {
             e.preventDefault();
             window.location.href = '/';
           }}
-          className="group flex items-center justify-center space-x-6 mb-10 focus:outline-none transition-transform hover:scale-[1.02] cursor-pointer"
+          className="group flex items-center justify-center space-x-6 mb-8 focus:outline-none transition-transform hover:scale-[1.02] cursor-pointer"
           aria-label="Cortex Platform Home"
           title="Return to Cortex Platform Home"
         >
@@ -91,10 +101,10 @@ export default function LoginPage() {
             <CortexLogo variant="icon" size="xl" />
           </div>
           <div className="flex flex-col items-center">
-            <h1 className="text-5xl font-bold text-white tracking-tight transition-colors duration-200 group-hover:text-[#FF9100]">
+            <h1 className="text-4xl font-bold text-white tracking-tight transition-colors duration-200 group-hover:text-[#FF9100]">
               Cortex
             </h1>
-            <p className="text-[15px] text-gray-400 font-medium mt-2">
+            <p className="text-[13px] text-gray-400 font-medium mt-1">
               Secure Access Terminal
             </p>
           </div>
@@ -106,21 +116,58 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-5">
+        {/* Google OAuth Login Button */}
+        <div>
+          <a
+            href="/api/v1/auth/google/login"
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-[#14151c] hover:bg-[#1c1d27] border border-[#2b2e3c] hover:border-[#404456] rounded-xl text-sm font-semibold text-white transition-all shadow-md group cursor-pointer"
+            title="Sign in with your Google account"
+          >
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.02h3.87c2.26-2.09 3.675-5.17 3.675-9.12z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.02c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.12C3.31 21.43 7.37 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.27 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.61H1.26C.46 8.24 0 10.06 0 12s.46 3.76 1.26 5.39l4.01-3.12z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.31 2.57 1.26 6.61l4.01 3.12c.95-2.85 3.6-4.98 6.73-4.98z"
+              />
+            </svg>
+            <span className="tracking-wide">Continue with Google</span>
+          </a>
+        </div>
+
+        {/* Divider */}
+        <div className="relative flex items-center justify-center my-3">
+          <div className="absolute border-b border-[#262832] w-full"></div>
+          <span className="bg-[#0A0A0A] px-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider relative z-10">
+            or continue with credentials
+          </span>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-300">Email or User ID</label>
+            <label className="text-xs font-semibold text-gray-300">Email or User ID</label>
             <input
               type="text"
               required
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              className="w-full bg-[#161616] border border-[#333333] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 transition-colors"
-              placeholder="Enter your email"
+              className="w-full bg-[#161616] border border-[#333333] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#FF9100] transition-colors"
+              placeholder="e.g. alex.student@student.cortex.edu"
             />
           </div>
           
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-300 flex justify-between">
+            <label className="text-xs font-semibold text-gray-300 flex justify-between">
               <span>Password</span>
               <button type="button" onClick={() => router.push('/forgot-password')} className="text-cyan-400 hover:text-cyan-300 text-xs transition-colors">Forgot password?</button>
             </label>
@@ -130,7 +177,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#161616] border border-[#333333] rounded-lg pl-4 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 transition-colors font-mono"
+                className="w-full bg-[#161616] border border-[#333333] rounded-lg pl-4 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-[#FF9100] transition-colors font-mono"
                 placeholder="••••••••"
               />
               <button
@@ -153,32 +200,39 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* Cloudflare Turnstile Human Verification Box */}
+          <CloudflareTurnstile
+            ref={turnstileRef}
+            onSuccess={(token) => setTurnstileToken(token)}
+            onExpire={() => setTurnstileToken('')}
+          />
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-6 py-2.5 bg-[#111111] border border-[#333333] hover:border-cyan-500/50 hover:bg-cyan-950/30 text-cyan-400 hover:text-cyan-300 font-medium rounded-lg transition-all duration-300 disabled:opacity-50"
+            className="w-full mt-4 py-2.5 bg-[#FF9100] hover:bg-[#FFA726] text-black font-bold rounded-xl transition-all duration-200 shadow-md shadow-[#FF9100]/20 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading ? 'Authenticating...' : 'Sign In'}
+            {loading ? 'Authenticating...' : 'Sign In to Cortex'}
           </button>
         </form>
         
-        <div className="text-center text-sm text-gray-400 pt-2">
-          Need an account? <button onClick={() => router.push('/register')} className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors">Register here</button>
+        <div className="text-center text-sm text-gray-400 pt-1">
+          Need an account? <button onClick={() => router.push('/register')} className="text-[#FF9100] hover:underline font-medium transition-colors">Register here</button>
         </div>
 
-        <div className="relative flex items-center justify-center py-4">
-          <div className="absolute border-b border-[#333333] w-full"></div>
-          <span className="bg-[#0A0A0A] px-4 text-xs text-gray-500 relative z-10">OR</span>
+        <div className="relative flex items-center justify-center py-2">
+          <div className="absolute border-b border-[#262832] w-full"></div>
+          <span className="bg-[#0A0A0A] px-3 text-[10px] text-gray-500 font-semibold tracking-wider relative z-10">OR QUICK JOIN</span>
         </div>
 
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-gray-300 block">Join a Classroom</label>
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-gray-300 block">Join a Classroom Directly</label>
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Classroom Code"
+              placeholder="Classroom Code (e.g. CSE276)"
               id="quickJoinCode"
-              className="w-full bg-[#161616] border border-[#333333] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 transition-colors"
+              className="w-full bg-[#161616] border border-[#333333] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#FF9100] transition-colors uppercase font-mono"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   const val = (e.target as HTMLInputElement).value.toUpperCase().trim();
@@ -198,7 +252,7 @@ export default function LoginPage() {
                   router.push('/register');
                 }
               }}
-              className="px-5 py-2.5 bg-[#222] hover:bg-[#333] text-white font-medium rounded-lg border border-[#333] transition-colors text-sm"
+              className="px-5 py-2.5 bg-[#1c1d26] hover:bg-[#252834] text-white font-semibold rounded-lg border border-[#303342] transition-colors text-sm"
             >
               Join
             </button>

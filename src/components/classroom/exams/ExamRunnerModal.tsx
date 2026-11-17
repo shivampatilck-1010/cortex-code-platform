@@ -726,21 +726,21 @@ export function ExamRunnerModal({
   }, [session, classroomId, examId, getSebHeaders, submissionResult]);
 
   // Sections and visible questions calculation
-  const sections: ExamSection[] = useMemo(() => exam?.sections || [], [exam?.sections]);
+  const sections: ExamSection[] = useMemo(() => Array.isArray(exam?.sections) ? exam!.sections : [], [exam?.sections]);
 
   const visibleQuestions: ExamQuestion[] = useMemo(() => {
-    let list = questions;
-    if (selectedSectionId && sections.length > 0) {
-      const secQs = questions.filter((q) => q.sectionId === selectedSectionId);
+    let list = Array.isArray(questions) ? questions : [];
+    if (selectedSectionId && (sections?.length ?? 0) > 0) {
+      const secQs = list.filter((q) => q.sectionId === selectedSectionId);
       if (secQs.length > 0) list = secQs;
     }
-    if (activeBranchQuestionIds && activeBranchQuestionIds.length > 0) {
+    if (activeBranchQuestionIds && (activeBranchQuestionIds?.length ?? 0) > 0) {
       list = list.filter((q) => activeBranchQuestionIds.includes(q.id));
     }
     return list;
-  }, [questions, selectedSectionId, sections.length, activeBranchQuestionIds]);
+  }, [questions, selectedSectionId, sections?.length, activeBranchQuestionIds]);
 
-  const currentQ: ExamQuestion | undefined = visibleQuestions[currentIndex] || visibleQuestions[0];
+  const currentQ: ExamQuestion | undefined = (visibleQuestions || [])[currentIndex] || (visibleQuestions || [])[0];
 
   // Palette filtering
   const filteredPaletteQuestions = useMemo(() => {
@@ -759,15 +759,15 @@ export function ExamRunnerModal({
 
   // Overall Statistics
   const answeredCount = useMemo(() => {
-    return visibleQuestions.filter((q) => responses[q.id] !== undefined && responses[q.id] !== '').length;
+    return (visibleQuestions || []).filter((q) => responses[q.id] !== undefined && responses[q.id] !== '').length;
   }, [visibleQuestions, responses]);
 
   const flaggedCount = useMemo(() => {
-    return visibleQuestions.filter((q) => !!flaggedQuestions[q.id]).length;
+    return (visibleQuestions || []).filter((q) => !!flaggedQuestions[q.id]).length;
   }, [visibleQuestions, flaggedQuestions]);
 
-  const unansweredCount = Math.max(0, visibleQuestions.length - answeredCount);
-  const progressPercent = visibleQuestions.length > 0 ? Math.round((answeredCount / visibleQuestions.length) * 100) : 0;
+  const unansweredCount = Math.max(0, (visibleQuestions?.length ?? 0) - answeredCount);
+  const progressPercent = (visibleQuestions?.length ?? 0) > 0 ? Math.round((answeredCount / (visibleQuestions?.length || 1)) * 100) : 0;
 
   // Keyboard navigation shortcuts
   useEffect(() => {
@@ -779,7 +779,7 @@ export function ExamRunnerModal({
       }
 
       if (e.key === 'ArrowRight') {
-        setCurrentIndex((prev) => Math.min(visibleQuestions.length - 1, prev + 1));
+        setCurrentIndex((prev) => Math.min((visibleQuestions?.length ?? 1) - 1, prev + 1));
       } else if (e.key === 'ArrowLeft') {
         setCurrentIndex((prev) => Math.max(0, prev - 1));
       } else if (['1', '2', '3', '4', 'a', 'b', 'c', 'd', 'A', 'B', 'C', 'D'].includes(e.key)) {
@@ -800,7 +800,7 @@ export function ExamRunnerModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSubmitConfirm, submissionResult, currentQ, visibleQuestions.length]);
+  }, [showSubmitConfirm, submissionResult, currentQ, visibleQuestions?.length]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1053,7 +1053,7 @@ export function ExamRunnerModal({
         </div>
 
         {/* Center: Sections Switcher Pills (If Sections Exist) */}
-        {sections.length > 1 && (
+        {(sections?.length ?? 0) > 1 && (
           <div className="hidden lg:flex items-center gap-1 p-1 bg-[#121318] border border-[#20222a] rounded-lg">
             {sections.map((sec) => (
               <button
@@ -1100,7 +1100,7 @@ export function ExamRunnerModal({
             title={isPaletteCollapsed ? 'Expand Question Palette' : 'Collapse Question Palette'}
           >
             {isPaletteCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-            <span className="hidden sm:inline">{answeredCount}/{visibleQuestions.length}</span>
+            <span className="hidden sm:inline">{answeredCount}/{(visibleQuestions?.length ?? 0)}</span>
           </button>
 
           {!submissionResult && (
@@ -1245,7 +1245,7 @@ export function ExamRunnerModal({
               </div>
               <div className="flex justify-between">
                 <span>Answered Questions:</span>
-                <span className="text-emerald-400 font-bold">{answeredCount} of {visibleQuestions.length}</span>
+                <span className="text-emerald-400 font-bold">{answeredCount} of {(visibleQuestions?.length ?? 0)}</span>
               </div>
             </div>
 
@@ -1287,7 +1287,7 @@ export function ExamRunnerModal({
                     Question Palette
                   </span>
                   <span className="text-[11px] font-mono text-emerald-400 font-semibold">
-                    {answeredCount}/{visibleQuestions.length} Answered
+                    {answeredCount}/{(visibleQuestions?.length ?? 0)} Answered
                   </span>
                 </div>
 
@@ -1299,7 +1299,7 @@ export function ExamRunnerModal({
                       paletteFilter === 'all' ? 'bg-[#FF9100] text-black font-bold' : 'text-gray-400 hover:text-white'
                     }`}
                   >
-                    All ({visibleQuestions.length})
+                    All ({(visibleQuestions?.length ?? 0)})
                   </button>
                   <button
                     onClick={() => setPaletteFilter('answered')}
@@ -1406,7 +1406,7 @@ export function ExamRunnerModal({
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-white text-sm">
                       Question {currentIndex + 1}
-                      <span className="text-gray-500 font-normal ml-1">of {visibleQuestions.length}</span>
+                      <span className="text-gray-500 font-normal ml-1">of {(visibleQuestions?.length ?? 0)}</span>
                     </span>
                     <span className="px-2 py-0.5 rounded bg-[#161720] text-gray-300 text-[10px] font-semibold border border-[#282a36]">
                       {(currentQ.questionType || 'mcq_single').toUpperCase().replace('_', ' ')}
@@ -1826,7 +1826,7 @@ export function ExamRunnerModal({
                     if (currentQ && !flaggedQuestions[currentQ.id]) {
                       toggleFlagReview(currentQ.id);
                     }
-                    setCurrentIndex((prev) => Math.min(visibleQuestions.length - 1, prev + 1));
+                    setCurrentIndex((prev) => Math.min((visibleQuestions?.length ?? 1) - 1, prev + 1));
                   }}
                   className="hidden sm:flex px-3.5 py-2 rounded-xl bg-[#181920] hover:bg-[#20222a] text-xs font-semibold text-amber-300 border border-amber-900/40 transition items-center gap-1"
                 >
@@ -1834,9 +1834,9 @@ export function ExamRunnerModal({
                   <span>Review & Next</span>
                 </button>
 
-                {currentIndex < visibleQuestions.length - 1 ? (
+                {currentIndex < (visibleQuestions?.length ?? 0) - 1 ? (
                   <button
-                    onClick={() => setCurrentIndex((prev) => Math.min(visibleQuestions.length - 1, prev + 1))}
+                    onClick={() => setCurrentIndex((prev) => Math.min((visibleQuestions?.length ?? 1) - 1, prev + 1))}
                     className="px-5 py-2 rounded-xl bg-[#FF9100] hover:bg-[#e08000] text-black font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-[#FF9100]/10"
                   >
                     <span>Save & Next</span>
@@ -1883,7 +1883,7 @@ export function ExamRunnerModal({
             <div className="grid grid-cols-4 gap-2.5 text-center">
               <div className="p-3 bg-[#161720] border border-[#262834] rounded-xl">
                 <span className="text-[10px] text-gray-400 uppercase font-semibold block">Total</span>
-                <span className="text-lg font-bold text-white">{visibleQuestions.length}</span>
+                <span className="text-lg font-bold text-white">{(visibleQuestions?.length ?? 0)}</span>
               </div>
               <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl">
                 <span className="text-[10px] text-emerald-400 uppercase font-semibold block">Answered</span>

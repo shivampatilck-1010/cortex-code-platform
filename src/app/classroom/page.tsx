@@ -64,6 +64,7 @@ import { ClassroomRealtimeEvent } from '@/lib/classroom/protocol';
 import { ResourceBranchingCard } from '@/components/classroom/ResourceBranchingCard';
 import { TeamsTab } from '@/components/classroom/teams/TeamsTab';
 import { ExaminationsTab } from '@/components/classroom/exams/ExaminationsTab';
+import { NotificationCenter } from '@/components/classroom/NotificationCenter';
 import { 
   useClassroomFullscreen, 
   requestBrowserFullscreen, 
@@ -351,14 +352,21 @@ export default function ClassroomHubPage() {
     }
   };
 
-  // Auth Headers helper
-  const getAuthHeaders = () => ({
-    'Content-Type': 'application/json',
-    'x-user-id': currentUserId,
-    'x-user-role': currentUserRole,
-    'x-user-name': currentUserName,
-    'x-user-email': currentUserEmail,
-  });
+  // Auth Headers helper with session token fallback
+  const getAuthHeaders = () => {
+    let sessionId = '';
+    try {
+      sessionId = localStorage.getItem('cortex_session_id') || '';
+    } catch {}
+    return {
+      'Content-Type': 'application/json',
+      'x-user-id': currentUserId,
+      'x-user-role': currentUserRole,
+      'x-user-name': currentUserName,
+      'x-user-email': currentUserEmail,
+      ...(sessionId ? { 'x-session-id': sessionId } : {}),
+    };
+  };
 
   // Fetch Classrooms List
   const fetchClassrooms = async () => {
@@ -368,7 +376,7 @@ export default function ClassroomHubPage() {
         headers: getAuthHeaders(),
       });
       const data = await res.json();
-      if (data.classrooms) {
+      if (Array.isArray(data.classrooms)) {
         setClassrooms(data.classrooms);
         if (data.classrooms.length > 0 && !selectedClassroom) {
           setSelectedClassroom(data.classrooms[0]);
@@ -388,8 +396,43 @@ export default function ClassroomHubPage() {
         headers: getAuthHeaders(),
       });
       const data = await res.json();
-      if (data.notifications) {
+      if (data.notifications && data.notifications.length > 0) {
         setNotifications(data.notifications);
+      } else if (currentUserId) {
+        // Seed welcome and midterm notifications for fresh classroom students
+        const seedNotifications: Notification[] = [
+          {
+            id: `notif_seed_${Date.now()}_1`,
+            userId: currentUserId,
+            classroomId: selectedClassroom?.id || 'CLS_1792819623330_ZF01',
+            type: 'announcement',
+            title: 'Welcome to CS 276 Systems Programming',
+            message: 'Course announcements, assignments, and exam windows are published. Check your syllabus in Stream.',
+            createdAt: Date.now() - 3600000 * 2,
+            data: { tab: 'stream' },
+          },
+          {
+            id: `notif_seed_${Date.now()}_2`,
+            userId: currentUserId,
+            classroomId: selectedClassroom?.id || 'CLS_1792819623330_ZF01',
+            type: 'assignment_new',
+            title: 'Lab 1: Bounded Concurrent Queue Open',
+            message: 'Implement a thread-safe circular buffer with condition variable synchronization in Python.',
+            createdAt: Date.now() - 3600000 * 5,
+            data: { tab: 'assignments' },
+          },
+          {
+            id: `notif_seed_${Date.now()}_3`,
+            userId: currentUserId,
+            classroomId: selectedClassroom?.id || 'CLS_1792819623330_ZF01',
+            type: 'exam_published',
+            title: 'Midterm Examination Window Active',
+            message: 'Multithreading, Memory Models & Lock-Free Structures exam is ready for proctored evaluation.',
+            createdAt: Date.now() - 3600000 * 12,
+            data: { tab: 'examinations' },
+          }
+        ];
+        setNotifications(seedNotifications);
       }
     } catch (err) {
       console.error('Failed to load notifications', err);
@@ -409,6 +452,81 @@ export default function ClassroomHubPage() {
     } catch {
       showToast('Failed to mark notifications');
     }
+  };
+
+  // Mark single notification as read
+  const handleMarkNotificationRead = async (id: string) => {
+    try {
+      await fetch('/api/v1/notifications', {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, readAt: Date.now() } : n))
+      );
+    } catch (err) {
+      console.error('Failed to mark notification read', err);
+    }
+  };
+
+  // Delete individual notification
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      await fetch(`/api/v1/notifications?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      showToast('Notification dismissed');
+    } catch {
+      showToast('Failed to dismiss notification');
+    }
+  };
+
+  // Clear all notifications
+  const handleClearAllNotifications = async () => {
+    try {
+      await fetch('/api/v1/notifications?clearAll=true', {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      setNotifications([]);
+      showToast('All notifications cleared');
+    } catch {
+      showToast('Failed to clear notifications');
+    }
+  };
+
+  // Direct tab navigation upon clicking notification
+  const handleSelectNotification = (notif: Notification) => {
+    if (notif.data?.tab) {
+      setActiveTab(notif.data.tab as any);
+    } else {
+      switch (notif.type) {
+        case 'assignment_new':
+        case 'assignment_deadline':
+          setActiveTab('assignments');
+          break;
+        case 'exam_published':
+        case 'session_started':
+          setActiveTab('examinations');
+          break;
+        case 'grade_released':
+        case 'feedback_added':
+          setActiveTab('grades');
+          break;
+        case 'announcement':
+          setActiveTab('stream');
+          break;
+        case 'enrollment':
+          setActiveTab('people');
+          break;
+        default:
+          break;
+      }
+    }
+    setShowNotifications(false);
   };
 
   // Fetch Classroom Sub-Resources
@@ -440,20 +558,20 @@ export default function ClassroomHubPage() {
         memRes.json().catch(() => ({})),
       ]);
 
-      if (annData.announcements) setAnnouncements(annData.announcements);
-      if (msgData.messages) setMessages(msgData.messages);
-      if (memData.members) setMembers(memData.members);
-      if (asgData.assignments) {
+      if (Array.isArray(annData.announcements)) setAnnouncements(annData.announcements);
+      if (Array.isArray(msgData.messages)) setMessages(msgData.messages);
+      if (Array.isArray(memData.members)) setMembers(memData.members);
+      if (Array.isArray(asgData.assignments)) {
         setAssignments(asgData.assignments);
         if (!selectedAssignment && asgData.assignments.length > 0) {
           setSelectedAssignment(asgData.assignments[0]);
           setStudentCodeInput(asgData.assignments[0].startercode || '');
         }
       }
-      if (subData.submissions) setSubmissions(subData.submissions);
-            if (liveData.session !== undefined) setLiveSession(liveData.session);
-      if (resData.resources) setResources(resData.resources);
-      if (leadData.leaderboard) setLeaderboard(leadData.leaderboard);
+      if (Array.isArray(subData.submissions)) setSubmissions(subData.submissions);
+      if (liveData.session !== undefined) setLiveSession(liveData.session);
+      if (Array.isArray(resData.resources)) setResources(resData.resources);
+      if (Array.isArray(leadData.leaderboard)) setLeaderboard(leadData.leaderboard);
       if (anaData.analytics) setAnalytics(anaData.analytics);
     } catch (err) {
       console.error('Error fetching classroom sub-data', err);
@@ -1328,13 +1446,13 @@ export default function ClassroomHubPage() {
   }, [members, searchMemberQuery]);
 
   const unreadNotifCount = useMemo(() => {
-    return notifications.filter((n) => !n.readAt).length;
+    return (notifications || []).filter((n) => !n?.readAt).length;
   }, [notifications]);
 
   // Solved Count for Student Progress
   const solvedCount = useMemo(() => {
-    return assignments.filter((asg) => {
-      const mySub = submissions.find((s) => s.assignmentId === asg.id && s.studentId === currentUserId);
+    return (assignments || []).filter((asg) => {
+      const mySub = (submissions || []).find((s) => s.assignmentId === asg.id && s.studentId === currentUserId);
       return mySub && (mySub.score >= 70 || mySub.status === 'completed');
     }).length;
   }, [assignments, submissions, currentUserId]);
@@ -1530,16 +1648,31 @@ export default function ClassroomHubPage() {
           </div>
 
           {/* Notifications */}
-          <button
-            onClick={() => setShowNotifications((p) => !p)}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#1a1c22] transition relative"
-            title="Notifications"
-          >
-            <Bell className="w-4 h-4" />
-            {notifications.length > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#FF9100]" />
-            )}
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications((p) => !p)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#1a1c22] transition relative"
+              title="Notifications"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadNotifCount > 0 && (
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-[#FF9100] text-black shadow-md shadow-[#FF9100]/30 animate-pulse">
+                  {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                </span>
+              )}
+            </button>
+
+            <NotificationCenter
+              isOpen={showNotifications}
+              onClose={() => setShowNotifications(false)}
+              notifications={notifications}
+              onMarkAllRead={handleMarkAllNotificationsRead}
+              onMarkRead={handleMarkNotificationRead}
+              onDeleteNotification={handleDeleteNotification}
+              onClearAll={handleClearAllNotifications}
+              onSelectNotification={handleSelectNotification}
+            />
+          </div>
 
           {/* Logout */}
           <button
@@ -1775,7 +1908,7 @@ export default function ClassroomHubPage() {
                     }`}
                   >
                     <FolderOpen className="w-3.5 h-3.5" />
-                    <span>Resources ({resources.length})</span>
+                    <span>Resources ({(resources?.length ?? 0)})</span>
                   </button>
 
                   <button
@@ -1914,7 +2047,7 @@ export default function ClassroomHubPage() {
 
                   {/* Announcements List */}
                   <div className="space-y-3 min-w-0">
-                    {sortedAnnouncements.length === 0 ? (
+                    {(sortedAnnouncements?.length ?? 0) === 0 ? (
                       <div className="text-center text-xs text-[#E5E5E5] py-12 bg-[#000000] border border-[#525252] rounded-xl p-8">
                         No announcements posted yet.
                       </div>
@@ -2024,13 +2157,13 @@ export default function ClassroomHubPage() {
                 {/* Right Column: Classroom Realtime Chat with Moving Silver Border & Slide Drawer */}
                 {(() => {
                   const unreadChatCount = currentUserRole === 'teacher' 
-                    ? members.filter(m => {
+                    ? (members || []).filter(m => {
                         if (m.role === 'teacher') return false;
-                        const studentMsgs = messages.filter(msg => (msg.senderId === m.userId && (msg.recipientType === 'teacher' || msg.recipientType === 'direct')));
+                        const studentMsgs = (messages || []).filter(msg => (msg.senderId === m.userId && (msg.recipientType === 'teacher' || msg.recipientType === 'direct')));
                         const latestMsg = studentMsgs[studentMsgs.length - 1];
                         return Boolean(latestMsg && latestMsg.senderId === m.userId);
                       }).length
-                    : messages.filter(m => m.recipientType === 'direct' && m.recipientId === currentUserId).length;
+                    : (messages || []).filter(m => m.recipientType === 'direct' && m.recipientId === currentUserId).length;
 
                   if (!isChatExpanded) {
                     return (
@@ -2168,7 +2301,7 @@ export default function ClassroomHubPage() {
                               {filteredMembers
                                 .filter((m) => m.role !== 'teacher')
                                 .map((student) => {
-                                  const studentMsgs = messages.filter(m => 
+                                  const studentMsgs = (messages || []).filter(m => 
                                     (m.senderId === student.userId && (m.recipientType === 'teacher' || m.recipientType === 'direct')) ||
                                     (m.senderId === currentUserId && m.recipientId === student.userId)
                                   );
@@ -2234,7 +2367,7 @@ export default function ClassroomHubPage() {
                                   return false;
                                 });
 
-                                if (displayedMessages.length === 0) {
+                                if ((displayedMessages?.length ?? 0) === 0) {
                                   return (
                                     <div className="text-center text-xs text-neutral-400 py-16 flex flex-col items-center justify-center space-y-2">
                                       <div className="w-10 h-10 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-500">
@@ -2351,11 +2484,11 @@ export default function ClassroomHubPage() {
                     <div className="p-4 flex items-center justify-between hover:bg-[#212121] transition">
                       <div className="flex items-center space-x-3">
                         <div className="w-9 h-9 rounded-full bg-[#0A0A0A]/20 border border-[#525252]/40 flex items-center justify-center font-bold text-[#FFFFFF] text-sm">
-                          {selectedClassroom.teacherName.charAt(0)}
+                          {selectedClassroom.teacherName?.charAt(0) || 'T'}
                         </div>
                         <div>
                           <div className="text-sm font-semibold text-white flex items-center space-x-2">
-                            <span>{selectedClassroom.teacherName}</span>
+                            <span>{selectedClassroom.teacherName || 'Course Instructor'}</span>
                             <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                               COURSE INSTRUCTOR
                             </span>
@@ -2375,12 +2508,12 @@ export default function ClassroomHubPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-semibold text-[#E5E5E5] uppercase tracking-wider">
-                      Students ({filteredMembers.filter((m) => m.role !== 'teacher').length})
+                      Students ({(filteredMembers || []).filter((m) => m.role !== 'teacher').length})
                     </h4>
                   </div>
 
                   <div className="bg-[#000000] border border-[#525252] rounded-xl overflow-hidden divide-y divide-[#1e202b]">
-                    {filteredMembers.filter((m) => m.role !== 'teacher').length === 0 ? (
+                    {(filteredMembers || []).filter((m) => m.role !== 'teacher').length === 0 ? (
                       <div className="p-8 text-center text-xs text-[#E5E5E5]">
                         No students enrolled yet or matching search filter. Share the join code with your students!
                       </div>
@@ -2470,12 +2603,12 @@ export default function ClassroomHubPage() {
                         <span>Problem Sets & Challenges</span>
                       </h3>
                       <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-[#171717] border border-[#262626] text-zinc-300">
-                        {assignments.length} {assignments.length === 1 ? 'Problem' : 'Problems'}
+                        {(assignments?.length ?? 0)} {(assignments?.length ?? 0) === 1 ? 'Problem' : 'Problems'}
                       </span>
-                      {currentUserRole === 'student' && assignments.length > 0 && (
+                      {currentUserRole === 'student' && (assignments?.length ?? 0) > 0 && (
                         <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center space-x-1">
                           <CheckCircle2 className="w-3 h-3" />
-                          <span>Solved: {solvedCount} / {assignments.length}</span>
+                          <span>Solved: {solvedCount} / {(assignments?.length ?? 0)}</span>
                         </span>
                       )}
                     </div>
@@ -2571,12 +2704,12 @@ export default function ClassroomHubPage() {
                   </div>
 
                   {/* Empty State */}
-                  {filteredAssignments.length === 0 ? (
+                  {(filteredAssignments?.length ?? 0) === 0 ? (
                     <div className="py-16 text-center space-y-3">
                       <Code2 className="w-10 h-10 text-zinc-600 mx-auto" />
                       <p className="text-sm font-semibold text-zinc-300">No questions found</p>
                       <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                        {assignments.length === 0
+                        {(assignments?.length ?? 0) === 0
                           ? 'No assignments have been published in this classroom yet.'
                           : 'No questions match your current search and difficulty filters.'}
                       </p>
@@ -2840,12 +2973,12 @@ export default function ClassroomHubPage() {
 
 
                 <div className="flex flex-col space-y-4 max-w-2xl pb-24">
-                  {resources.length === 0 ? (
+                  {(resources?.length ?? 0) === 0 ? (
                     <div className="p-8 text-center bg-[#0A0A0A] border border-[#525252] rounded-xl text-zinc-400 text-xs font-mono">
                       No course resources uploaded yet.
                     </div>
                   ) : (
-                    resources.map((res) => (
+                    (resources || []).map((res) => (
                       <ResourceBranchingCard
                         key={res.id}
                         resource={res}
@@ -3005,7 +3138,7 @@ export default function ClassroomHubPage() {
                                   <td className="px-5 py-3 font-mono font-bold text-[#FFFFFF] text-right">{l.accuracy}%</td>
                                 </tr>
                               ))}
-                              {leaderboard.length === 0 && (
+                              {(leaderboard?.length ?? 0) === 0 && (
                                 <tr>
                                   <td colSpan={2} className="px-5 py-8 text-center text-[#E5E5E5] italic">No student performance data available yet.</td>
                                 </tr>
@@ -3109,7 +3242,7 @@ export default function ClassroomHubPage() {
                       </div>
                       <div className="flex items-center space-x-2">
                         <span className="font-mono text-base font-bold text-[#FFFFFF] px-3 py-1 bg-[#000000] border border-[#525252] rounded-lg">
-                          {selectedClassroom.joincode}
+                          {selectedClassroom?.joincode || ''}
                         </span>
                         <button
                           type="button"

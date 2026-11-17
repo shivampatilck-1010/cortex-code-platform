@@ -129,7 +129,7 @@ export function ProjectActivityTimeline({
         </button>
       </div>
 
-      {activity.length === 0 ? (
+      {(activity?.length ?? 0) === 0 ? (
         <div className="py-12 text-center text-[#8A8F98]">
           <Activity className="w-8 h-8 mx-auto text-[#444] mb-2" />
           <p className="text-sm">No project activity recorded yet</p>
@@ -137,7 +137,7 @@ export function ProjectActivityTimeline({
         </div>
       ) : (
         <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-[#282A36]">
-          {activity.map((item) => {
+          {(activity || []).map((item) => {
             const meta = getActionMeta(item.eventType);
             const Icon = meta.icon;
 

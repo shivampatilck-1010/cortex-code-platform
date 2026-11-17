@@ -73,14 +73,17 @@ class D1Wrapper implements DBInstance {
   prepare(sql: string) {
     return {
       run: async (...params: any[]) => {
-        const res = await this.d1.prepare(sql).bind(...params).run();
-        return { changes: res.meta.changes, lastInsertRowid: res.meta.last_row_id };
+        const stmt = params && params.length > 0 ? this.d1.prepare(sql).bind(...params) : this.d1.prepare(sql);
+        const res = await stmt.run();
+        return { changes: res.meta?.changes, lastInsertRowid: res.meta?.last_row_id };
       },
       get: async (...params: any[]) => {
-        return await this.d1.prepare(sql).bind(...params).first();
+        const stmt = params && params.length > 0 ? this.d1.prepare(sql).bind(...params) : this.d1.prepare(sql);
+        return await stmt.first();
       },
       all: async (...params: any[]) => {
-        const res = await this.d1.prepare(sql).bind(...params).all();
+        const stmt = params && params.length > 0 ? this.d1.prepare(sql).bind(...params) : this.d1.prepare(sql);
+        const res = await stmt.all();
         return res.results;
       }
     };
@@ -2213,18 +2216,26 @@ class ClassroomDatabase {
 
   async listNotificationsForUser(userId: string, limit = 50): Promise<Notification[]> {
     if (!(await this.getDb())) return [];
-    const rows = await (await this.getDb()).prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as any[];
-    return rows.map((r) => ({
-      id: r.id,
-      userId: r.user_id,
-      classroomId: r.classroom_id,
-      type: r.type as any,
-      title: r.title,
-      message: r.message,
-      data: r.data_json ? JSON.parse(r.data_json) : undefined,
-      readAt: r.read_at || undefined,
-      createdAt: r.created_at,
-    }));
+    try {
+      const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 100));
+      const rows = (await (await this.getDb())
+        .prepare(`SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ${safeLimit}`)
+        .all(userId)) as any[];
+      return (rows || []).map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        classroomId: r.classroom_id,
+        type: r.type as any,
+        title: r.title,
+        message: r.message,
+        data: r.data_json ? JSON.parse(r.data_json) : undefined,
+        readAt: r.read_at || undefined,
+        createdAt: r.created_at,
+      }));
+    } catch (err) {
+      console.error('[classroomDb] listNotificationsForUser error:', err);
+      return [];
+    }
   }
 
   
@@ -2233,9 +2244,36 @@ class ClassroomDatabase {
     await (await this.getDb()).prepare('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL').run(Date.now(), userId);
   }
 
-  async markNotificationRead(id: string) {
+  async markNotificationRead(id: string, userId?: string) {
     if (!(await this.getDb())) return;
-    await (await this.getDb()).prepare('UPDATE notifications SET read_at = ? WHERE id = ?').run(Date.now(), id);
+    if (userId) {
+      await (await this.getDb()).prepare('UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ?').run(Date.now(), id, userId);
+    } else {
+      await (await this.getDb()).prepare('UPDATE notifications SET read_at = ? WHERE id = ?').run(Date.now(), id);
+    }
+  }
+
+  async deleteNotification(id: string, userId: string): Promise<boolean> {
+    if (!(await this.getDb())) return false;
+    const res = await (await this.getDb()).prepare('DELETE FROM notifications WHERE id = ? AND user_id = ?').run(id, userId);
+    return ((res as any)?.changes || 0) > 0;
+  }
+
+  async clearAllNotifications(userId: string): Promise<void> {
+    if (!(await this.getDb())) return;
+    await (await this.getDb()).prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    if (!(await this.getDb())) return 0;
+    try {
+      const row = (await (await this.getDb())
+        .prepare('SELECT COUNT(*) as unread_count FROM notifications WHERE user_id = ? AND read_at IS NULL')
+        .get(userId)) as any;
+      return Number(row?.unread_count || 0);
+    } catch {
+      return 0;
+    }
   }
 
   // --- REAL-TIME EVENTS & RESYNC ---
