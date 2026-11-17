@@ -72,11 +72,13 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
     onSendMessage(emoji, false);
   };
 
-  const filteredMessages = activeTab === 'announcements'
-    ? messages.filter((m) => m.isAnnouncement)
-    : messages;
+  const safeMessages = Array.isArray(messages) ? messages : [];
 
-  const announcementCount = messages.filter((m) => m.isAnnouncement).length;
+  const filteredMessages = activeTab === 'announcements'
+    ? safeMessages.filter((m) => m && m.isAnnouncement)
+    : safeMessages;
+
+  const announcementCount = safeMessages.filter((m) => m && m.isAnnouncement).length;
 
   return (
     <div className="w-80 sm:w-96 h-full bg-[#0e0f13] border-l border-[#1f2029] flex flex-col z-20 select-none shadow-2xl flex-shrink-0 animate-in slide-in-from-right duration-200">
@@ -90,7 +92,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
             <div className="flex items-center space-x-1.5">
               <span className="font-heading font-bold text-xs text-gray-100">Classroom Chat</span>
               <span className="px-1.5 py-0.2 rounded-full bg-[#1b1d25] text-[10px] font-mono text-[#737373] border border-[#272935]">
-                {messages.length}
+                {safeMessages.length}
               </span>
             </div>
           </div>
@@ -117,7 +119,7 @@ export const ClassroomChatDrawer: React.FC<ClassroomChatDrawerProps> = ({
           }`}
         >
           <span>All Messages</span>
-          <span className="text-[10px] opacity-70">({messages.length})</span>
+          <span className="text-[10px] opacity-70">({safeMessages.length})</span>
         </button>
 
         <button

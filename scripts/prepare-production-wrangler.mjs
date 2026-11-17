@@ -19,6 +19,8 @@ config.vars = {
   CORTEX_SESSION_SECRET: process.env.CORTEX_SESSION_SECRET || 'cortex-prod-session-cryptographic-secret-2026-secure',
   LOCKDOWN_POLICY_SECRET: process.env.LOCKDOWN_POLICY_SECRET || 'cortex-prod-lockdown-policy-secret-2026-sha256',
   LTI_HMAC_SECRET: process.env.LTI_HMAC_SECRET || 'cortex-prod-lti-hmac-secret-2026-secure',
+  GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || 'cortex-staging-github-id',
+  GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || 'cortex-staging-github-secret',
   LOCKDOWN_SERVER_PEPPER: process.env.LOCKDOWN_SERVER_PEPPER || 'cortex-prod-lockdown-pepper-2026',
   JWT_SECRET: process.env.JWT_SECRET || 'cortex-prod-jwt-secret-2026-token',
 };

@@ -30,7 +30,7 @@ export const SlideThumbnailList: React.FC<SlideThumbnailListProps> = ({
         <div className="flex items-center space-x-1.5">
           <span className="text-xs font-semibold text-white">Slides</span>
           <span className="text-[10px] font-mono text-[#A1A1AA] bg-[#15161C] px-1.5 py-0.5 rounded border border-[#282A36]">
-            {slides.length}
+            {slides?.length ?? 0}
           </span>
         </div>
         <button
@@ -47,11 +47,12 @@ export const SlideThumbnailList: React.FC<SlideThumbnailListProps> = ({
 
       {/* Scrollable Thumbnails List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
-        {slides.map((slide, index) => {
+        {(slides || []).map((slide, index) => {
           const isActive = slide.id === activeSlideId;
+          const totalSlides = slides?.length ?? 0;
           const isFirst = index === 0;
-          const isLast = index === slides.length - 1;
-          const isOnlyOne = slides.length <= 1;
+          const isLast = index === totalSlides - 1;
+          const isOnlyOne = totalSlides <= 1;
 
           return (
             <div
@@ -147,7 +148,7 @@ export const SlideThumbnailList: React.FC<SlideThumbnailListProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between text-[7px] text-[#52525B] pt-0.5 border-t border-[#1F212B]">
-                  <span>{slide.bullets.length} points</span>
+                  <span>{slide?.bullets?.length ?? 0} points</span>
                   {slide.presenterNotes && <span className="text-[#06B6D4]">Notes</span>}
                 </div>
               </div>

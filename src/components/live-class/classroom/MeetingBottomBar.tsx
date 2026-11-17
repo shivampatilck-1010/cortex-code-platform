@@ -379,7 +379,7 @@ export const MeetingBottomBar: React.FC = () => {
             aria-label="Classroom Participants"
           >
             <Users className="w-4 h-4" />
-            <span className="font-mono text-xs text-white">{participants.length}</span>
+            <span className="font-mono text-xs text-white">{participants?.length ?? 0}</span>
           </button>
 
           {/* AV Settings Modal Trigger */}

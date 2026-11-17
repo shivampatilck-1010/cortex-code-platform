@@ -1483,7 +1483,8 @@ export const WhiteboardModule: React.FC = () => {
 
   // PAGE MANAGEMENT
   const handleAddPage = () => {
-    const newPageNum = doc.pages.length + 1;
+    const currentPages = doc?.pages || [];
+    const newPageNum = currentPages.length + 1;
     const newPage: WhiteboardPage = {
       id: `page-${Date.now()}`,
       title: `${newPageNum}. Blank Canvas`,
@@ -1496,7 +1497,7 @@ export const WhiteboardModule: React.FC = () => {
 
     setDoc((prev) => ({
       ...prev,
-      pages: [...prev.pages, newPage],
+      pages: [...(prev.pages || []), newPage],
       activePageId: newPage.id,
       updatedAt: Date.now(),
     }));
@@ -1504,20 +1505,21 @@ export const WhiteboardModule: React.FC = () => {
   };
 
   const handleDuplicatePage = (pageId: string) => {
-    const target = doc.pages.find((p) => p.id === pageId);
+    const currentPages = doc?.pages || [];
+    const target = currentPages.find((p) => p.id === pageId);
     if (!target) return;
 
     const duplicated: WhiteboardPage = {
       ...target,
       id: `page-${Date.now()}`,
       title: `${target.title} (Copy)`,
-      elements: target.elements.map((el) => duplicateElement(el, 0)),
+      elements: (target.elements || []).map((el) => duplicateElement(el, 0)),
       history: [],
       redoStack: [],
     };
 
-    const targetIdx = doc.pages.findIndex((p) => p.id === pageId);
-    const updated = [...doc.pages];
+    const targetIdx = currentPages.findIndex((p) => p.id === pageId);
+    const updated = [...currentPages];
     updated.splice(targetIdx + 1, 0, duplicated);
 
     setDoc((prev) => ({
@@ -1530,12 +1532,13 @@ export const WhiteboardModule: React.FC = () => {
   };
 
   const handleDeletePage = (pageId: string) => {
-    if (doc.pages.length <= 1) {
+    const currentPages = doc?.pages || [];
+    if (currentPages.length <= 1) {
       showToast('Cannot delete the only page in document');
       return;
     }
 
-    const remaining = doc.pages.filter((p) => p.id !== pageId);
+    const remaining = currentPages.filter((p) => p.id !== pageId);
     const nextActive = doc.activePageId === pageId ? remaining[0].id : doc.activePageId;
 
     setDoc((prev) => ({
@@ -1550,17 +1553,18 @@ export const WhiteboardModule: React.FC = () => {
   const handleRenamePage = (pageId: string, newTitle: string) => {
     setDoc((prev) => ({
       ...prev,
-      pages: prev.pages.map((p) => (p.id === pageId ? { ...p, title: newTitle } : p)),
+      pages: (prev.pages || []).map((p) => (p.id === pageId ? { ...p, title: newTitle } : p)),
     }));
   };
 
   const handleMovePage = (pageId: string, direction: 'up' | 'down') => {
-    const idx = doc.pages.findIndex((p) => p.id === pageId);
+    const currentPages = doc?.pages || [];
+    const idx = currentPages.findIndex((p) => p.id === pageId);
     if (idx < 0) return;
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= doc.pages.length) return;
+    if (targetIdx < 0 || targetIdx >= currentPages.length) return;
 
-    const pages = [...doc.pages];
+    const pages = [...currentPages];
     const [moved] = pages.splice(idx, 1);
     pages.splice(targetIdx, 0, moved);
 

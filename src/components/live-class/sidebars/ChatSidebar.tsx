@@ -105,7 +105,7 @@ export const ChatSidebar: React.FC = () => {
               : 'text-[#A1A1AA] hover:text-white'
           }`}
         >
-          All Messages ({messages.length})
+          All Messages ({messages?.length ?? 0})
         </button>
         <button
           onClick={() => setFilter('questions')}
@@ -122,7 +122,7 @@ export const ChatSidebar: React.FC = () => {
 
       {/* Message Feed */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {filteredMessages.length === 0 ? (
+        {(filteredMessages?.length ?? 0) === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#71717A]">
             <HelpCircle className="w-8 h-8 text-[#282A36] mb-2" />
             <p className="text-xs font-medium text-[#A1A1AA]">No questions posted yet</p>

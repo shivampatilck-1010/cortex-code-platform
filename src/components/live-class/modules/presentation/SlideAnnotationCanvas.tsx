@@ -71,7 +71,7 @@ export const SlideAnnotationCanvas: React.FC<SlideAnnotationCanvasProps> = ({
     isDrawingRef.current = false;
     (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
 
-    if (currentStroke.points.length > 1) {
+    if ((currentStroke?.points?.length ?? 0) > 1) {
       const nextStrokes = [...(annotations.strokes || []), currentStroke];
       onUpdateAnnotations({ strokes: nextStrokes });
     }

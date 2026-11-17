@@ -51,9 +51,11 @@ export const MeetingStageModule: React.FC = () => {
   const [dismissedError, setDismissedError] = useState<string | null>(null);
 
   // Active speaker selection: prioritize pinned, then context active speaker, then teacher, then local
+  const safeParticipants = Array.isArray(participants) ? participants : [];
+
   const teacher = useMemo(
-    () => participants.find((p) => p.role === 'teacher') || participants[0],
-    [participants]
+    () => safeParticipants.find((p) => p.role === 'teacher') || safeParticipants[0],
+    [safeParticipants]
   );
 
   const activeSpeakerId =
@@ -62,8 +64,8 @@ export const MeetingStageModule: React.FC = () => {
     (deviceState.isScreenSharing ? currentUserId : teacher?.id || currentUserId);
 
   const activeSpeaker = useMemo(
-    () => participants.find((p) => p.id === activeSpeakerId) || teacher,
-    [participants, activeSpeakerId, teacher]
+    () => safeParticipants.find((p) => p.id === activeSpeakerId) || teacher,
+    [safeParticipants, activeSpeakerId, teacher]
   );
 
   const isLocalUserActiveSpeaker = activeSpeakerId === currentUserId;
@@ -87,8 +89,8 @@ export const MeetingStageModule: React.FC = () => {
 
   // All remote participants (excluding local)
   const remoteParticipants = useMemo(
-    () => participants.filter((p) => p.id !== currentUserId),
-    [participants, currentUserId]
+    () => safeParticipants.filter((p) => p.id !== currentUserId),
+    [safeParticipants, currentUserId]
   );
 
   // Combined participant list for Grid view
@@ -103,14 +105,14 @@ export const MeetingStageModule: React.FC = () => {
 
   // Grid columns calculator
   const gridLayoutClass = useMemo(() => {
-    const count = allMeetingParticipants.length + (deviceState.isScreenSharing ? 1 : 0);
+    const count = (allMeetingParticipants?.length ?? 0) + (deviceState.isScreenSharing ? 1 : 0);
     if (count <= 1) return 'grid-cols-1 max-w-4xl';
     if (count === 2) return 'grid-cols-1 md:grid-cols-2 max-w-5xl';
     if (count <= 4) return 'grid-cols-2 max-w-5xl';
     if (count <= 6) return 'grid-cols-2 md:grid-cols-3 max-w-6xl';
     if (count <= 9) return 'grid-cols-3 max-w-6xl';
     return 'grid-cols-3 lg:grid-cols-4 max-w-7xl';
-  }, [allMeetingParticipants.length, deviceState.isScreenSharing]);
+  }, [allMeetingParticipants?.length, deviceState.isScreenSharing]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#0B0C0E] p-4 overflow-hidden select-none">
@@ -198,7 +200,7 @@ export const MeetingStageModule: React.FC = () => {
             title="Grid View: Google Meet-style equal participant tiles"
           >
             <Grid className="w-3.5 h-3.5" />
-            <span>Grid ({allMeetingParticipants.length})</span>
+            <span>Grid ({allMeetingParticipants?.length ?? 0})</span>
           </button>
         </div>
       </div>

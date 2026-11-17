@@ -37,8 +37,9 @@ export const ParticipantsSidebar: React.FC = () => {
 
   if (!isParticipantsOpen) return null;
 
-  const teacher = participants.find((p) => p.role === 'teacher');
-  const students = participants.filter((p) => p.role === 'student');
+  const safeParticipants = Array.isArray(participants) ? participants : [];
+  const teacher = safeParticipants.find((p) => p.role === 'teacher');
+  const students = safeParticipants.filter((p) => p.role === 'student');
 
   return (
     <aside
@@ -50,7 +51,7 @@ export const ParticipantsSidebar: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Users className="w-4 h-4 text-[#A855F7]" />
           <h3 className="text-xs font-semibold text-white uppercase tracking-wider">
-            Participants ({participants.length})
+            Participants ({safeParticipants.length})
           </h3>
         </div>
         <button

@@ -111,7 +111,7 @@ export const ClassroomHeader: React.FC = () => {
               title="Click to view participant roster"
             >
               <Users className="w-3 h-3 text-[#A855F7]" />
-              <span>{participants.length} participant{participants.length !== 1 ? 's' : ''}</span>
+              <span>{participants?.length ?? 0} participant{(participants?.length ?? 0) !== 1 ? 's' : ''}</span>
             </button>
           </div>
         </div>

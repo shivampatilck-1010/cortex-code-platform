@@ -77,7 +77,9 @@ export const PresentationModule: React.FC = () => {
     loadPresentationFromServer(classroomId, classroomId).then((serverData) => {
       if (!isMounted || !serverData) return;
       versionRef.current = serverData.version;
-      setDeck(serverData.deck);
+      if (serverData.deck && Array.isArray(serverData.deck.slides) && serverData.deck.slides.length > 0) {
+        setDeck(serverData.deck);
+      }
     });
     return () => { isMounted = false; };
   }, [classroomId]);
@@ -194,8 +196,9 @@ export const PresentationModule: React.FC = () => {
     if (isStudent && followMode === 'following') {
       if (teacherActivity.module === 'presentation' && teacherActivity.cursorPosition?.slideIndex !== undefined) {
         const targetIndex = teacherActivity.cursorPosition.slideIndex;
-        if (targetIndex >= 0 && targetIndex < deck.slides.length && targetIndex !== currentSlideIndex) {
-          const targetSlide = deck.slides[targetIndex];
+        const totalSlides = deck?.slides?.length ?? 0;
+        if (targetIndex >= 0 && targetIndex < totalSlides && targetIndex !== currentSlideIndex) {
+          const targetSlide = deck?.slides?.[targetIndex];
           if (targetSlide) {
             setDeck((prev) => ({ ...prev, activeSlideId: targetSlide.id }));
           }
@@ -322,27 +325,33 @@ export const PresentationModule: React.FC = () => {
 
   // Slide Navigation Handlers
   const handleNextSlide = () => {
-    if (currentSlideIndex < deck.slides.length - 1) {
+    const totalSlides = deck?.slides?.length ?? 0;
+    if (currentSlideIndex < totalSlides - 1) {
       const nextIndex = currentSlideIndex + 1;
-      const nextSlide = deck.slides[nextIndex];
-      setDeck((prev) => ({ ...prev, activeSlideId: nextSlide.id }));
-      setIsPointerOverSlide(false);
-      broadcastSlideChange(nextIndex);
+      const nextSlide = deck?.slides?.[nextIndex];
+      if (nextSlide) {
+        setDeck((prev) => ({ ...prev, activeSlideId: nextSlide.id }));
+        setIsPointerOverSlide(false);
+        broadcastSlideChange(nextIndex);
+      }
     }
   };
 
   const handlePrevSlide = () => {
     if (currentSlideIndex > 0) {
       const prevIndex = currentSlideIndex - 1;
-      const prevSlide = deck.slides[prevIndex];
-      setDeck((prev) => ({ ...prev, activeSlideId: prevSlide.id }));
-      setIsPointerOverSlide(false);
-      broadcastSlideChange(prevIndex);
+      const prevSlide = deck?.slides?.[prevIndex];
+      if (prevSlide) {
+        setDeck((prev) => ({ ...prev, activeSlideId: prevSlide.id }));
+        setIsPointerOverSlide(false);
+        broadcastSlideChange(prevIndex);
+      }
     }
   };
 
   const handleSelectSlide = (slideId: string) => {
-    const idx = deck.slides.findIndex((s) => s.id === slideId);
+    const currentSlides = deck?.slides || [];
+    const idx = currentSlides.findIndex((s) => s.id === slideId);
     if (idx >= 0 && idx !== currentSlideIndex) {
       setDeck((prev) => ({ ...prev, activeSlideId: slideId }));
       setIsPointerOverSlide(false);
@@ -352,12 +361,13 @@ export const PresentationModule: React.FC = () => {
 
   // Slide Management Handlers
   const handleAddSlide = () => {
-    const newSlide = createNewBlankSlide(deck.slides.length + 1);
+    const currentSlides = deck?.slides || [];
+    const newSlide = createNewBlankSlide(currentSlides.length + 1);
     const insertIndex = currentSlideIndex + 1;
     const nextSlides = [
-      ...deck.slides.slice(0, insertIndex),
+      ...currentSlides.slice(0, insertIndex),
       newSlide,
-      ...deck.slides.slice(insertIndex),
+      ...currentSlides.slice(insertIndex),
     ];
     const newDeck: PresentationDeck = {
       ...deck,
@@ -370,10 +380,11 @@ export const PresentationModule: React.FC = () => {
   };
 
   const handleDuplicateSlide = (slideId: string) => {
-    const idx = deck.slides.findIndex((s) => s.id === slideId);
+    const currentSlides = deck?.slides || [];
+    const idx = currentSlides.findIndex((s) => s.id === slideId);
     if (idx === -1) return;
 
-    const sourceSlide = deck.slides[idx];
+    const sourceSlide = currentSlides[idx];
     const newId = `slide_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
     const duplicatedSlide: Slide = {
       ...sourceSlide,
@@ -394,9 +405,9 @@ export const PresentationModule: React.FC = () => {
     };
 
     const nextSlides = [
-      ...deck.slides.slice(0, idx + 1),
+      ...currentSlides.slice(0, idx + 1),
       duplicatedSlide,
-      ...deck.slides.slice(idx + 1),
+      ...currentSlides.slice(idx + 1),
     ];
     const newDeck: PresentationDeck = {
       ...deck,
@@ -409,16 +420,17 @@ export const PresentationModule: React.FC = () => {
   };
 
   const handleDeleteSlide = (slideId: string) => {
-    if (deck.slides.length <= 1) {
+    const currentSlides = deck?.slides || [];
+    if (currentSlides.length <= 1) {
       showToast('Cannot delete the only slide in the presentation deck');
       return;
     }
 
-    const idx = deck.slides.findIndex((s) => s.id === slideId);
+    const idx = currentSlides.findIndex((s) => s.id === slideId);
     if (idx === -1) return;
 
-    const deletedTitle = deck.slides[idx].title;
-    const nextSlides = deck.slides.filter((s) => s.id !== slideId);
+    const deletedTitle = currentSlides[idx].title;
+    const nextSlides = currentSlides.filter((s) => s.id !== slideId);
 
     // Determine new active slide
     const nextActiveIndex = Math.min(idx, nextSlides.length - 1);
@@ -435,13 +447,14 @@ export const PresentationModule: React.FC = () => {
   };
 
   const handleMoveSlide = (slideId: string, direction: 'up' | 'down') => {
-    const idx = deck.slides.findIndex((s) => s.id === slideId);
+    const currentSlides = deck?.slides || [];
+    const idx = currentSlides.findIndex((s) => s.id === slideId);
     if (idx === -1) return;
 
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= deck.slides.length) return;
+    if (targetIdx < 0 || targetIdx >= currentSlides.length) return;
 
-    const nextSlides = [...deck.slides];
+    const nextSlides = [...currentSlides];
     const [moved] = nextSlides.splice(idx, 1);
     nextSlides.splice(targetIdx, 0, moved);
 
@@ -670,7 +683,7 @@ export const PresentationModule: React.FC = () => {
     isFullscreenFallback,
     isTeacher,
     activeTool,
-    deck.slides.length,
+    deck?.slides?.length ?? 0,
     activeModule,
   ]);
 
@@ -735,7 +748,7 @@ export const PresentationModule: React.FC = () => {
 
           {/* Slide Indicator */}
           <span className="text-xs text-[#A1A1AA]">
-            Slide {currentSlideIndex + 1} of {deck.slides.length}
+            Slide {currentSlideIndex + 1} of {deck?.slides?.length || 1}
           </span>
 
           {/* Persistence Save Indicator */}

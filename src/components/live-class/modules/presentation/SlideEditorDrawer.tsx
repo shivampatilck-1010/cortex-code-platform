@@ -172,7 +172,7 @@ export const SlideEditorDrawer: React.FC<SlideEditorDrawerProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[11px] font-medium text-[#A1A1AA]">
-                      Bullet Points ({slide.bullets.length})
+                      Bullet Points ({slide?.bullets?.length ?? 0})
                     </label>
                     <button
                       onClick={handleAddBullet}

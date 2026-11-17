@@ -515,7 +515,7 @@ export default function ClassroomHubPage() {
             subject: 'Assessment',
             academicYear: '2026',
             description: '',
-            joinCode: '',
+            joincode: '',
             joinEnabled: true,
             status: 'active',
             createdAt: Date.now(),

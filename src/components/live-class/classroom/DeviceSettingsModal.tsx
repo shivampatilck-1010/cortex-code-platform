@@ -225,7 +225,7 @@ export const DeviceSettingsModal: React.FC = () => {
                     Microphone Input Device
                   </label>
                   <span className="text-[10px] text-[#71717A]">
-                    {availableAudioInputs.length} detected
+                    {availableAudioInputs?.length ?? 0} detected
                   </span>
                 </div>
                 <select
@@ -303,7 +303,7 @@ export const DeviceSettingsModal: React.FC = () => {
                     Audio Output Device (Speakers / Headphones)
                   </label>
                   <span className="text-[10px] text-[#71717A]">
-                    {availableAudioOutputs.length} detected
+                    {availableAudioOutputs?.length ?? 0} detected
                   </span>
                 </div>
                 <div className="flex space-x-2">
@@ -374,7 +374,7 @@ export const DeviceSettingsModal: React.FC = () => {
                     Camera Hardware Device
                   </label>
                   <span className="text-[10px] text-[#71717A]">
-                    {availableVideoInputs.length} detected
+                    {availableVideoInputs?.length ?? 0} detected
                   </span>
                 </div>
                 <select
@@ -560,7 +560,7 @@ export const DeviceSettingsModal: React.FC = () => {
           <div className="flex items-center space-x-1.5 text-[11px] text-[#71717A]">
             <span>Hardware state synced</span>
             <span>•</span>
-            <span>{availableAudioInputs.length + availableVideoInputs.length} total media devices</span>
+            <span>{(availableAudioInputs?.length ?? 0) + (availableVideoInputs?.length ?? 0)} total media devices</span>
           </div>
           <button
             onClick={() => {

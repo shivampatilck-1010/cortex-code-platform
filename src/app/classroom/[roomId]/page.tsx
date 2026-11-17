@@ -311,12 +311,12 @@ export default function ClassroomLivePage() {
     }
 
     // Participants: compare count and all active properties
-    const prevP = Object.values(prev.participants || {});
-    const nextP = Object.values(next.participants || {});
+    const prevP = Object.values(prev?.participants || {});
+    const nextP = Object.values(next?.participants || {});
     if (prevP.length !== nextP.length) return true;
 
     for (const np of nextP) {
-      const pp = prev.participants[np.id];
+      const pp = prev?.participants?.[np.id];
       if (!pp) return true;
       if (pp.online !== np.online) return true;
       if (pp.status !== np.status) return true;
@@ -364,8 +364,10 @@ export default function ClassroomLivePage() {
       if (prev?.participants) {
         for (const [pid, serverP] of Object.entries(protectedParticipants)) {
           const localP = prev.participants[pid];
-          if (localP && localP.activeCode && (!serverP.activeCode || serverP.activeCode.length < localP.activeCode.length)) {
-            protectedParticipants[pid] = { ...serverP, activeCode: localP.activeCode };
+          const localCode = typeof localP?.activeCode === 'string' ? localP.activeCode : '';
+          const serverCode = typeof serverP?.activeCode === 'string' ? serverP.activeCode : '';
+          if (localCode && (!serverCode || serverCode.length < localCode.length)) {
+            protectedParticipants[pid] = { ...serverP, activeCode: localCode };
           }
         }
       }
@@ -699,8 +701,8 @@ export default function ClassroomLivePage() {
 
   // 4. Update last read chat count when chat drawer is opened
   useEffect(() => {
-    if (isChatOpen && room?.chatMessages) {
-      setLastReadChatCount(room.chatMessages.length);
+    if (isChatOpen) {
+      setLastReadChatCount(room?.chatMessages?.length || 0);
     }
   }, [isChatOpen, room?.chatMessages?.length]);
 
@@ -1508,10 +1510,10 @@ export default function ClassroomLivePage() {
   const userA = room && slotAUserId ? room.participants[slotAUserId] : null;
   const userB = room && slotBUserId ? room.participants[slotBUserId] : null;
 
-  const validParticipants = room
+  const validParticipants = room?.participants
     ? Object.values(room.participants).filter((p) => p && p.id && p.name && p.name !== 'Classroom Host')
     : [];
-  const currentParticipant = room?.participants[participantId];
+  const currentParticipant = room?.participants ? room.participants[participantId] : undefined;
   const onlineParticipantsCount = validParticipants.filter((p) => p.online).length;
   const totalParticipantsCount = validParticipants.length;
 

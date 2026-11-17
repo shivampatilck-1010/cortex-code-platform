@@ -890,7 +890,6 @@ export function ExamRunnerModal({ classroomId, examId, currentUser, onClose, ini
     '--exam-primary-color': accentColor,
     '--exam-accent-color': accentColor,
     '--exam-bg-color': safeBg,
-    '--exam-card-bg': safeCardBg,
     '--exam-border-color': safeBorder,
     '--exam-accent': accentColor,
     '--exam-bg': safeBg,

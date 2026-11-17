@@ -148,7 +148,8 @@ export default {
     const isWebSocket = request.headers.get('Upgrade') === 'websocket';
     const isEnterpriseClassroomWs =
       url.pathname.endsWith('/ws') ||
-      (url.pathname.includes('/classrooms/') && !url.pathname.includes('/events'));
+      url.pathname.includes('/classrooms/') ||
+      url.pathname.includes('/classroom/');
 
     if (isWebSocket && isEnterpriseClassroomWs && env.CLASSROOM_ROOM_DO) {
       // 1. Defend against spoofed internal headers from the browser
@@ -157,12 +158,12 @@ export default {
 
       // 2. Extract classroom ID
       const parts = url.pathname.split('/').filter(Boolean);
-      const crIdx = parts.indexOf('classrooms');
+      const crIdx = parts.findIndex((p) => p === 'classrooms' || p === 'classroom');
       let classroomId: string | null = null;
-      if (crIdx >= 0 && parts[crIdx + 1]) {
+      if (crIdx >= 0 && parts[crIdx + 1] && parts[crIdx + 1] !== 'events') {
         classroomId = parts[crIdx + 1];
-      } else if (url.searchParams.get('classroomId')) {
-        classroomId = url.searchParams.get('classroomId')!;
+      } else if (url.searchParams.get('classroomId') || url.searchParams.get('roomId')) {
+        classroomId = url.searchParams.get('classroomId') || url.searchParams.get('roomId');
       } else {
         const wsIdx = parts.indexOf('ws');
         if (wsIdx > 0 && parts[wsIdx - 1] !== 'live') {

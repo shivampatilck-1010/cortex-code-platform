@@ -965,7 +965,8 @@ export const CodeStudioModule: React.FC = () => {
   };
 
   // Filter students for Observe Student roster
-  const studentParticipants = participants.filter((p) => p.role === 'student');
+  const safeParticipants = Array.isArray(participants) ? participants : [];
+  const studentParticipants = safeParticipants.filter((p) => p.role === 'student');
   const observedStudentObj = studentParticipants.find((p) => p.id === observedStudentId);
 
   return (
@@ -1012,7 +1013,7 @@ export const CodeStudioModule: React.FC = () => {
               <button
                 onClick={() => {
                   setTeacherMode('observe');
-                  if (!observedStudentId && studentParticipants.length > 0) {
+                  if (!observedStudentId && (studentParticipants?.length ?? 0) > 0) {
                     handleSelectStudentForObservation(studentParticipants[0].id);
                   }
                 }}
@@ -1030,7 +1031,7 @@ export const CodeStudioModule: React.FC = () => {
               <button
                 onClick={() => {
                   setIsSplitView((prev) => !prev);
-                  if (!isSplitView && !observedStudentId && studentParticipants.length > 0) {
+                  if (!isSplitView && !observedStudentId && (studentParticipants?.length ?? 0) > 0) {
                     handleSelectStudentForObservation(studentParticipants[0].id);
                   }
                 }}
@@ -1314,7 +1315,7 @@ export const CodeStudioModule: React.FC = () => {
                 <span>Observe Student:</span>
               </span>
 
-              {studentParticipants.length === 0 ? (
+              {(studentParticipants?.length ?? 0) === 0 ? (
                 <span className="text-xs text-[#71717A] italic">No students currently in classroom</span>
               ) : (
                 <select
@@ -1380,7 +1381,7 @@ export const CodeStudioModule: React.FC = () => {
           </div>
 
           {/* Copy to My Workspace Action */}
-          {broadcastTeachingFiles.length > 0 && (
+          {(broadcastTeachingFiles?.length ?? 0) > 0 && (
             <button
               onClick={() => setCopyModalOpen(true)}
               className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-[#FF9100] hover:bg-[#E08000] text-black font-semibold text-xs shadow-sm transition"
@@ -1469,7 +1470,7 @@ export const CodeStudioModule: React.FC = () => {
                     <span>Student: {observedStudentObj?.name || 'Observing Student'} (Read-Only)</span>
                   </span>
 
-                  {observedStudentFiles.length === 0 ? (
+                  {(observedStudentFiles?.length ?? 0) === 0 ? (
                     <span className="text-xs text-[#71717A] italic px-2">No files shared yet</span>
                   ) : (
                     observedStudentFiles.map((file) => (
@@ -1498,7 +1499,7 @@ export const CodeStudioModule: React.FC = () => {
               </div>
 
               <div className="flex-1 overflow-hidden relative">
-                {observedStudentFiles.length === 0 ? (
+                {(observedStudentFiles?.length ?? 0) === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#71717A]">
                     <Eye className="w-10 h-10 mb-3 text-[#06B6D4]/40" />
                     <p className="text-sm font-semibold text-white">Awaiting Student Code Activity</p>
@@ -1568,7 +1569,7 @@ export const CodeStudioModule: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-hidden relative">
-              {observedStudentFiles.length === 0 ? (
+              {(observedStudentFiles?.length ?? 0) === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#71717A]">
                   <Eye className="w-12 h-12 mb-3 text-[#06B6D4]/40" />
                   <p className="text-sm font-semibold text-white">Awaiting Student Code Activity</p>
@@ -1631,7 +1632,7 @@ export const CodeStudioModule: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-hidden relative">
-              {broadcastTeachingFiles.length === 0 || broadcastState === 'stopped' ? (
+              {(broadcastTeachingFiles?.length ?? 0) === 0 || broadcastState === 'stopped' ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#71717A]">
                   <Radio className="w-12 h-12 mb-3 text-[#71717A]/40" />
                   <p className="text-sm font-semibold text-white">Broadcast Inactive</p>
@@ -1748,7 +1749,7 @@ export const CodeStudioModule: React.FC = () => {
                         </button>
                       )}
 
-                      {!isRenaming && (isTeacher ? teachingFiles : studentFiles).length > 1 && (
+                      {!isRenaming && ((isTeacher ? teachingFiles : studentFiles) || []).length > 1 && (
                         <button
                           onClick={(e) => handleDeleteFile(file.id, e)}
                           className="opacity-0 group-hover:opacity-100 hover:text-[#EF4444] p-0.5 transition"

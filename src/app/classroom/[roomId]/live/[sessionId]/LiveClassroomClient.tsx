@@ -158,10 +158,14 @@ const ClassroomShell: React.FC<{ roomId: string; sessionId: string }> = ({ roomI
     >
       <div className="cortex-classroom-immersive-container flex flex-col h-screen w-screen overflow-hidden bg-[#0B0C0E] text-[#F5F5F5] font-sans antialiased">
         {/* Header */}
-        <ClassroomHeader />
+        <LiveModuleErrorBoundary moduleName="Header Navigation">
+          <ClassroomHeader />
+        </LiveModuleErrorBoundary>
 
         {/* Persistent Module Navigation Bar */}
-        <ModuleNavigation />
+        <LiveModuleErrorBoundary moduleName="Module Navigation">
+          <ModuleNavigation />
+        </LiveModuleErrorBoundary>
 
         {/* Follow Teacher / Independent Mode Status Banner */}
         <FollowTeacherBanner />
@@ -202,15 +206,23 @@ const ClassroomShell: React.FC<{ roomId: string; sessionId: string }> = ({ roomI
           </div>
 
           {/* Integrated Sidebars */}
-          <ChatSidebar />
-          <ParticipantsSidebar />
+          <LiveModuleErrorBoundary moduleName="Chat Sidebar">
+            <ChatSidebar />
+          </LiveModuleErrorBoundary>
+          <LiveModuleErrorBoundary moduleName="Participants Roster">
+            <ParticipantsSidebar />
+          </LiveModuleErrorBoundary>
         </main>
 
         {/* Persistent Meeting Controls Bar */}
-        <MeetingBottomBar />
+        <LiveModuleErrorBoundary moduleName="Bottom Meeting Controls">
+          <MeetingBottomBar />
+        </LiveModuleErrorBoundary>
 
         {/* Hardware Devices & Audio/Video Modal */}
-        <DeviceSettingsModal />
+        <LiveModuleErrorBoundary moduleName="Device Settings">
+          <DeviceSettingsModal />
+        </LiveModuleErrorBoundary>
 
         {/* Explicit Student AV Consent Dialog */}
         {pendingMediaRequest && (
