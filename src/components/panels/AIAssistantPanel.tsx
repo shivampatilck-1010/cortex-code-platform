@@ -443,7 +443,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                     )}
 
                     {/* Optimizations */}
-                    {analysisResult.optimizations.length > 0 && (
+                    {(analysisResult.optimizations?.length ?? 0) > 0 && (
                       <div>
                         <span className="text-xs text-[#ff9100] font-heading font-bold block mb-1">
                           {analysisMode === 'optimize' ? 'Optimizations:' : analysisMode === 'refactor' ? 'Improvements:' : 'Notes:'}

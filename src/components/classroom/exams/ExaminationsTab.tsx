@@ -254,7 +254,7 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
               filter === 'all' ? 'bg-[#FF9100]/20 text-[#FF9100] font-semibold' : 'text-gray-400 hover:text-white'
             }`}
           >
-            All ({exams.length})
+            All ({exams?.length ?? 0})
           </button>
           {isTeacher && (
             <button
@@ -263,7 +263,7 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
                 filter === 'draft' ? 'bg-[#FF9100]/20 text-[#FF9100] font-semibold' : 'text-gray-400 hover:text-white'
               }`}
             >
-              Drafts ({exams.filter((e) => e.status === 'draft').length})
+              Drafts ({(exams ?? []).filter((e) => e.status === 'draft').length})
             </button>
           )}
           <button
@@ -305,7 +305,7 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
       )}
 
       {/* Loading Skeleton */}
-      {isLoading && exams.length === 0 && (
+      {isLoading && (exams?.length ?? 0) === 0 && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-28 bg-[#121316] border border-[#22242a] rounded-xl animate-pulse" />
@@ -314,7 +314,7 @@ export function ExaminationsTab({ classroomId, isTeacher, currentUser, initialLa
       )}
 
       {/* Empty State */}
-      {!isLoading && filteredExams.length === 0 && (
+      {!isLoading && (filteredExams?.length ?? 0) === 0 && (
         <div className="flex flex-col items-center justify-center py-16 border border-dashed border-[#262626] rounded-xl text-center space-y-3">
           <FileText className="w-10 h-10 text-gray-600" />
           <h3 className="text-sm font-semibold text-gray-300">No examinations found</h3>

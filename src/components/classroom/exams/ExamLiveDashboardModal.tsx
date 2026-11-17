@@ -143,7 +143,7 @@ export function ExamLiveDashboardModal({
   const handleGrantTimeExtension = async () => {
     if (!extendingUserId) return;
     setIsSubmittingExtension(true);
-    const candidateName = data?.candidates.find((c) => c.userId === extendingUserId)?.name || extendingUserId;
+    const candidateName = data?.candidates?.find((c) => c.userId === extendingUserId)?.name || extendingUserId;
 
     try {
       const res = await fetch(
@@ -212,7 +212,7 @@ export function ExamLiveDashboardModal({
         submitted: data.metrics.submitted,
         attentionNeeded: data.metrics.requiresAttention,
       },
-      candidates: data.candidates.map((c) => ({
+      candidates: (data.candidates ?? []).map((c) => ({
         userId: c.userId,
         name: c.name,
         email: c.email,
@@ -254,7 +254,7 @@ export function ExamLiveDashboardModal({
       }
       return s;
     };
-    const rows = data.candidates.map((c) => [
+    const rows = (data.candidates ?? []).map((c) => [
       escapeCsv(c.userId),
       escapeCsv(c.name),
       escapeCsv(c.email),
@@ -348,7 +348,7 @@ export function ExamLiveDashboardModal({
             </button>
             <button
               onClick={handleExportReport}
-              disabled={!data || data.candidates.length === 0}
+              disabled={!data || (data.candidates?.length ?? 0) === 0}
               className="px-3 py-1.5 rounded-lg bg-[#16171c] hover:bg-[#20222a] text-xs font-semibold text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1.5 disabled:opacity-50"
               title="Export Full Audit Report (JSON)"
             >
@@ -357,7 +357,7 @@ export function ExamLiveDashboardModal({
             </button>
             <button
               onClick={handleExportReportCsv}
-              disabled={!data || data.candidates.length === 0}
+              disabled={!data || (data.candidates?.length ?? 0) === 0}
               className="px-3 py-1.5 rounded-lg bg-[#16171c] hover:bg-[#20222a] text-xs font-semibold text-gray-300 hover:text-white border border-[#2a2d36] transition flex items-center gap-1.5 disabled:opacity-50"
               title="Export Cohort Data (CSV)"
             >
@@ -409,19 +409,19 @@ export function ExamLiveDashboardModal({
                 <div className="text-right">
                   <span className="text-gray-400 block text-[10px] uppercase font-mono">Verified Active</span>
                   <span className="text-emerald-400 font-bold font-mono">
-                    {data.candidates.filter((c) => c.status === 'in_progress' && c.connectionState === 'active').length}
+                    {(data.candidates ?? []).filter((c) => c.status === 'in_progress' && c.connectionState === 'active').length}
                   </span>
                 </div>
                 <div className="text-right">
                   <span className="text-gray-400 block text-[10px] uppercase font-mono">Stale / Attention</span>
                   <span className="text-amber-400 font-bold font-mono">
-                    {data.candidates.filter((c) => c.connectionState === 'stale' || c.integrityEventCount > 0).length}
+                    {(data.candidates ?? []).filter((c) => c.connectionState === 'stale' || c.integrityEventCount > 0).length}
                   </span>
                 </div>
                 <div className="text-right">
                   <span className="text-gray-400 block text-[10px] uppercase font-mono">Pending Launch</span>
                   <span className="text-gray-300 font-bold font-mono">
-                    {data.candidates.filter((c) => c.status === 'not_started').length}
+                    {(data.candidates ?? []).filter((c) => c.status === 'not_started').length}
                   </span>
                 </div>
               </div>
@@ -504,7 +504,7 @@ export function ExamLiveDashboardModal({
                 filter === 'all' ? 'bg-[#FF9100]/20 text-[#FF9100] font-semibold' : 'text-gray-400 hover:text-white'
               }`}
             >
-              All ({data?.candidates.length || 0})
+              All ({data?.candidates?.length ?? 0})
             </button>
             <button
               onClick={() => setFilter('in_progress')}
@@ -553,7 +553,7 @@ export function ExamLiveDashboardModal({
             </div>
           )}
 
-          {filteredCandidates.length === 0 ? (
+          {(filteredCandidates?.length ?? 0) === 0 ? (
             <div className="py-16 text-center border border-dashed border-[#22242b] rounded-xl text-gray-400 text-xs">
               No candidates match the specified filter criteria.
             </div>
