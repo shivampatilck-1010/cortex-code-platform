@@ -21,16 +21,20 @@ export default function ExamDirectLaunchPage({
     if (routeParams?.examId) setExamId(routeParams.examId as string);
 
     if (params) {
-      if (typeof (params as any)?.then === 'function') {
-        (params as Promise<{ roomId: string; examId: string }>).then((p) => {
+      try {
+        if (typeof (params as any)?.then === 'function') {
+          Promise.resolve(params)
+            .then((p: any) => {
+              if (p?.roomId) setRoomId(p.roomId);
+              if (p?.examId) setExamId(p.examId);
+            })
+            .catch(() => {});
+        } else {
+          const p = params as any;
           if (p?.roomId) setRoomId(p.roomId);
           if (p?.examId) setExamId(p.examId);
-        }).catch(() => {});
-      } else {
-        const p = params as any;
-        if (p?.roomId) setRoomId(p.roomId);
-        if (p?.examId) setExamId(p.examId);
-      }
+        }
+      } catch (_) {}
     }
 
     if (typeof window !== 'undefined') {

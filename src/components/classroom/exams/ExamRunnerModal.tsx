@@ -562,8 +562,11 @@ export function ExamRunnerModal({
       setRemainingSeconds(rem);
 
       try {
-        if (document.documentElement.requestFullscreen) {
-          document.documentElement.requestFullscreen().catch(() => {});
+        if (typeof document !== 'undefined' && document.documentElement?.requestFullscreen) {
+          const promise = document.documentElement.requestFullscreen();
+          if (promise && typeof promise.catch === 'function') {
+            promise.catch(() => {});
+          }
         }
       } catch (_) {}
     } catch (err: any) {
