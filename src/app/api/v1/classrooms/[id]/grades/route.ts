@@ -45,6 +45,7 @@ export async function GET(
       
       // Hide drafts
       submissions = submissions.map(s => {
+        s = JSON.parse(JSON.stringify(s));
         if (s.grade && !s.grade.releasedAt) {
           s.grade = undefined;
         }

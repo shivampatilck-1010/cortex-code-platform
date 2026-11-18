@@ -461,6 +461,17 @@ export default function ClassroomHubPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('cortex_user', JSON.stringify({
+        id: currentUserId,
+        name: currentUserName,
+        email: currentUserEmail,
+        role: currentUserRole,
+      }));
+    }
+  }, [currentUserId, currentUserName, currentUserEmail, currentUserRole]);
+
+  useEffect(() => {
     fetchClassrooms();
     fetchNotifications();
   }, [currentUserRole, currentUserId]);
@@ -639,7 +650,7 @@ export default function ClassroomHubPage() {
                 payload.assignment,
                 ...prev.filter((a) => a.id !== payload.assignment.id),
               ]);
-              if (payload.type === 'assignment.created') {
+              if (event.type === 'assignment.created') {
                 showToast(`New Assignment: ${payload.assignment.title}`);
               } else {
                 showToast(`Assignment Updated: ${payload.assignment.title}`);

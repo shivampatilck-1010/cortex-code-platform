@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Download, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function GradebookPage() {
   const params = useParams();
@@ -16,7 +17,7 @@ export default function GradebookPage() {
   useEffect(() => {
     const fetchGrades = async () => {
       try {
-        const res = await fetch(`/api/v1/classrooms/${roomId}/grades`);
+        const res = await fetch(`/api/v1/classrooms/${roomId}/grades`, { headers: getClassroomAuthHeaders() });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Failed to fetch gradebook');
         setData(json);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { realtimeCoordinator } from '@/lib/classroom/realtime';
+import { ensureNodeWsServer } from '@/lib/classroom/node-ws-server';
 import { LiveClassSession } from '@/lib/classroom/models';
 
 export async function GET(

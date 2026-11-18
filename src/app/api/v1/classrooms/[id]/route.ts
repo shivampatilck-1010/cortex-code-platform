@@ -50,6 +50,21 @@ export async function PATCH(
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }
 
+    if (body.action === 'restore') {
+      const restored = classroomDb.restoreClassroom(id);
+      if (!restored) {
+        return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+      }
+      const user = auth.context?.user || ClassroomAuth.getCurrentUser(req);
+      realtimeCoordinator.broadcast(
+        id,
+        'classroom.restored',
+        { classroomId: id, classroom: restored },
+        { id: user.id, name: user.name }
+      );
+      return NextResponse.json({ success: true, classroom: restored });
+    }
+
     const updates: any = {};
     if (body.name !== undefined) updates.name = body.name.trim();
     if (body.subject !== undefined) updates.subject = body.subject.trim();

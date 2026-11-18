@@ -7,6 +7,7 @@ import {
   Upload, Download, Sparkles, BookOpen, FileText, CheckCircle2, Copy, AlertCircle, Eye, EyeOff, X
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 // Pre-built DSA Templates for Instant 1-Click Setup
 const DSA_TEMPLATES = [
@@ -491,7 +492,7 @@ export default function AssignmentBuilderPage({
       
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getClassroomAuthHeaders(),
         body: JSON.stringify(payload)
       });
       

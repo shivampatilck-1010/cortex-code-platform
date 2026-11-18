@@ -164,7 +164,7 @@ export default function SolveAssignmentPage({
       const ext = assignment.language === 'python' ? 'py' : assignment.language === 'cpp' ? 'cpp' : 'ts';
       const res = await fetch('/api/v1/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getClassroomAuthHeaders(),
         body: JSON.stringify({
           language: assignment.language,
           code: currentCode,
@@ -205,7 +205,7 @@ export default function SolveAssignmentPage({
       for (const tc of publicTests) {
         const res = await fetch('/api/v1/execute', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getClassroomAuthHeaders(),
           body: JSON.stringify({
             language: assignment.language,
             code: codeToRun,

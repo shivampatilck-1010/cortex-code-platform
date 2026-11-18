@@ -42,6 +42,9 @@ export async function POST(
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }
+    if (classroom.status === 'archived') {
+      return NextResponse.json({ error: 'Archived classrooms are read-only.' }, { status: 409 });
+    }
 
     const user = auth.context?.user || (await ClassroomAuth.getCurrentUser(req));
     const isTeacher = Boolean(auth.context?.isTeacher);
