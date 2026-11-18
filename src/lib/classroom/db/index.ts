@@ -706,7 +706,6 @@ class ClassroomDatabase {
       );
       CREATE INDEX IF NOT EXISTS idx_seb_consumed_tokens_expires ON seb_consumed_tokens(expires_at);
       CREATE INDEX IF NOT EXISTS idx_seb_consumed_tokens_lookup ON seb_consumed_tokens(assessment_id, user_id);
-      CREATE INDEX IF NOT EXISTS idx_assignments_security ON assignments(classroom_id, security_level);
 
       CREATE TABLE IF NOT EXISTS lockdown_emergency_authorizations (
         id TEXT PRIMARY KEY,

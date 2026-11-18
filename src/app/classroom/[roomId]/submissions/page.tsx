@@ -24,6 +24,10 @@ export default function SubmissionsDashboard() {
     const fetchSubmissions = async () => {
       try {
         const res = await fetch(`/api/v1/classrooms/${roomId}/submissions`, { headers: getClassroomAuthHeaders() });
+        if (res.status === 401) {
+          router.replace(`/login?redirect=/classroom/${roomId}/submissions`);
+          return;
+        }
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to fetch submissions');
         setSubmissions(data.submissions || []);
@@ -34,7 +38,7 @@ export default function SubmissionsDashboard() {
       }
     };
     fetchSubmissions();
-  }, [roomId]);
+  }, [roomId, router]);
 
   const filteredSubmissions = submissions.filter(sub => {
     const matchesSearch = sub.studentName.toLowerCase().includes(searchTerm.toLowerCase()) || 

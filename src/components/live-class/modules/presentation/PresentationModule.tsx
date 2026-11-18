@@ -984,7 +984,7 @@ export const PresentationModule: React.FC = () => {
 
             {/* Slide Footer */}
             <div className="flex items-center justify-between pt-3 border-t border-[#282A36] text-[11px] text-[#71717A]">
-              <span>Instructor: {deck.author || 'Prof. Shivam Patil'}</span>
+              <span>Instructor: {deck.author || 'Instructor'}</span>
               <span>Slide {currentSlideIndex + 1} / {deck?.slides?.length || 1}</span>
             </div>
 

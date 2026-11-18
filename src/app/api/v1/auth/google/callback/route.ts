@@ -8,7 +8,6 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
     const state = searchParams.get('state');
-    const isSimulated = searchParams.get('simulated') === 'true';
 
     if (!code || !state) {
       return NextResponse.json({ error: 'Missing code or state parameter' }, { status: 400 });
@@ -26,65 +25,55 @@ export async function GET(req: NextRequest) {
     const clientId = env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
     const clientSecret = env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
 
-    let googleProfile: {
-      id: string;
-      email: string;
-      name: string;
-      picture?: string;
-    };
-
-    if (!isSimulated && clientId && clientSecret && clientId !== 'mock_google_client_id') {
-      const redirectUri = `${req.nextUrl.origin}/api/v1/auth/google/callback`;
-
-      // 1. Exchange authorization code for tokens
-      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          code,
-          client_id: clientId,
-          client_secret: clientSecret,
-          redirect_uri: redirectUri,
-          grant_type: 'authorization_code',
-        }),
-      });
-
-      const tokenData = (await tokenRes.json()) as any;
-      if (!tokenRes.ok || tokenData.error) {
-        return NextResponse.json(
-          { error: tokenData.error_description || tokenData.error || 'Google token exchange failed' },
-          { status: 400 }
-        );
-      }
-
-      // 2. Fetch user profile from Google UserInfo endpoint
-      const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: {
-          Authorization: `Bearer ${tokenData.access_token}`,
-          Accept: 'application/json',
-        },
-      });
-
-      const userData = (await userRes.json()) as any;
-      if (!userRes.ok || !userData.email) {
-        return NextResponse.json({ error: 'Failed to retrieve Google user profile' }, { status: 400 });
-      }
-
-      googleProfile = {
-        id: userData.sub,
-        email: userData.email.toLowerCase(),
-        name: userData.name || userData.email.split('@')[0],
-        picture: userData.picture,
-      };
-    } else {
-      // Offline / Developer sandbox simulation profile
-      googleProfile = {
-        id: 'google_usr_demo_1092',
-        email: 'alex.student@student.cortex.edu',
-        name: 'Alex Student',
-        picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&h=128&fit=crop&crop=faces',
-      };
+    if (!clientId || !clientSecret || clientId === 'mock_google_client_id' || clientId.includes('demo')) {
+      return NextResponse.json(
+        { error: 'Google OAuth is not configured on this server.' },
+        { status: 503 }
+      );
     }
+
+    const redirectUri = `${req.nextUrl.origin}/api/v1/auth/google/callback`;
+
+    // 1. Exchange authorization code for tokens
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    const tokenData = (await tokenRes.json()) as any;
+    if (!tokenRes.ok || tokenData.error) {
+      return NextResponse.json(
+        { error: tokenData.error_description || tokenData.error || 'Google token exchange failed' },
+        { status: 400 }
+      );
+    }
+
+    // 2. Fetch user profile from Google UserInfo endpoint
+    const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        Accept: 'application/json',
+      },
+    });
+
+    const userData = (await userRes.json()) as any;
+    if (!userRes.ok || !userData.email) {
+      return NextResponse.json({ error: 'Failed to retrieve Google user profile' }, { status: 400 });
+    }
+
+    const googleProfile = {
+      id: userData.sub,
+      email: userData.email.toLowerCase(),
+      name: userData.name || userData.email.split('@')[0],
+      picture: userData.picture,
+    };
 
     // 3. User lookup or auto-provisioning in D1
     let user: User | null = await classroomDb.getUserByEmail(googleProfile.email);

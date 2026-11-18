@@ -3,44 +3,10 @@ import { useClassroom, formatInitials } from '@/context/ClassroomContext';
 import { ChatMessage } from '@/types/realtime';
 import { X, Send, HelpCircle, MessageSquare } from 'lucide-react';
 
-const initialChatMessages: ChatMessage[] = [
-  {
-    id: 'msg-1',
-    senderId: 'usr_prof_shivam',
-    senderName: 'Prof. Shivam Patil',
-    senderRole: 'teacher',
-    text: 'Welcome everyone to CS 201. Today we are diving into AVL tree rotations and balance factor preservation.',
-    timestamp: Date.now() - 20 * 60 * 1000,
-    isAnnouncement: true,
-  },
-  {
-    id: 'msg-2',
-    senderId: 'usr_student_alex',
-    senderName: 'Alex Chen',
-    senderRole: 'student',
-    text: 'Is the height difference check strict (|h_L - h_R| <= 1) at every node or only at the root?',
-    timestamp: Date.now() - 14 * 60 * 1000,
-  },
-  {
-    id: 'msg-3',
-    senderId: 'usr_prof_shivam',
-    senderName: 'Prof. Shivam Patil',
-    senderRole: 'teacher',
-    text: 'Good question Alex. The AVL invariant must strictly hold at every internal node in the entire tree, which is why we recompute height on unwind.',
-    timestamp: Date.now() - 12 * 60 * 1000,
-  },
-  {
-    id: 'msg-4',
-    senderId: 'usr_student_sophia',
-    senderName: 'Sophia Patel',
-    senderRole: 'student',
-    text: 'Can we inspect the rotateRight() helper in Workspace B?',
-    timestamp: Date.now() - 6 * 60 * 1000,
-  },
-];
+const initialChatMessages: ChatMessage[] = [];
 
 export const ChatSidebar: React.FC = () => {
-  const { isChatOpen, setIsChatOpen, userRole } = useClassroom();
+  const { isChatOpen, setIsChatOpen, userRole, currentUserId, currentUserName } = useClassroom();
   const [messages, setMessages] = useState<ChatMessage[]>(initialChatMessages);
   const [inputText, setInputText] = useState('');
   const [filter, setFilter] = useState<'all' | 'questions'>('all');
@@ -54,8 +20,8 @@ export const ChatSidebar: React.FC = () => {
 
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
-      senderId: userRole === 'teacher' ? 'usr_prof_shivam' : 'usr_student_alex',
-      senderName: userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen',
+      senderId: currentUserId || `usr_${Date.now()}`,
+      senderName: currentUserName || (userRole === 'teacher' ? 'Instructor' : 'Student'),
       senderRole: userRole,
       text: isQuestionMode ? `[QUESTION] ${inputText}` : inputText,
       timestamp: Date.now(),

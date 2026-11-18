@@ -123,16 +123,15 @@ export default function ClassroomHubPage() {
   };
 
   // Active Role & User Persona
-  const [currentUserRole, setCurrentUserRole] = useState<'teacher' | 'student' | 'admin'>('teacher');
-  const [currentUserId, setCurrentUserId] = useState<string>('usr_prof_elena');
-  const [currentUserName, setCurrentUserName] = useState<string>('Prof. Elena Rostova');
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>('elena.rostova@cortex.edu');
+  const [currentUserRole, setCurrentUserRole] = useState<'teacher' | 'student' | 'admin'>('student');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUserName, setCurrentUserName] = useState<string>('');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: '', email: '', role: 'student' as 'teacher' | 'student' });
   const [profileLoaded, setProfileLoaded] = useState(false);
 
-  
   useEffect(() => {
     fetch('/api/v1/auth/me')
       .then(res => {
@@ -140,11 +139,23 @@ export default function ClassroomHubPage() {
         return res.json();
       })
       .then(data => {
-        setCurrentUserId(data.user.id);
-        setCurrentUserName(data.user.name);
-        setCurrentUserEmail(data.user.email);
-        setCurrentUserRole(data.user.role);
-        setProfileLoaded(true);
+        if (data?.user) {
+          setCurrentUserId(data.user.id);
+          setCurrentUserName(data.user.name);
+          setCurrentUserEmail(data.user.email);
+          setCurrentUserRole(data.user.role);
+          setProfileLoaded(true);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('cortex_user', JSON.stringify({
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              role: data.user.role,
+            }));
+          }
+        } else {
+          throw new Error('Invalid user payload');
+        }
       })
       .catch(() => {
         router.replace('/login?redirect=/classroom');
@@ -335,22 +346,7 @@ export default function ClassroomHubPage() {
     setTimeout(() => setToastMessage((c) => (c === msg ? null : c)), 4000);
   };
 
-  // Switch Role
-  const handleSwitchPersona = (role: 'teacher' | 'student') => {
-    setCurrentUserRole(role);
-    if (role === 'teacher') {
-      setCurrentUserId('usr_prof_elena');
-      setCurrentUserName('Prof. Elena Rostova');
-      setCurrentUserEmail('elena.rostova@cortex.edu');
-    } else {
-      setCurrentUserId('usr_alex_chen');
-      setCurrentUserName('Alex Chen');
-      setCurrentUserEmail('alex.chen@student.cortex.edu');
-      if (activeTab === 'settings') {
-        setActiveTab('stream');
-      }
-    }
-  };
+
 
   // Auth Headers helper with session token fallback
   const getAuthHeaders = () => {
@@ -579,20 +575,11 @@ export default function ClassroomHubPage() {
   };
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('cortex_user', JSON.stringify({
-        id: currentUserId,
-        name: currentUserName,
-        email: currentUserEmail,
-        role: currentUserRole,
-      }));
+    if (profileLoaded && currentUserId) {
+      fetchClassrooms();
+      fetchNotifications();
     }
-  }, [currentUserId, currentUserName, currentUserEmail, currentUserRole]);
-
-  useEffect(() => {
-    fetchClassrooms();
-    fetchNotifications();
-  }, [currentUserRole, currentUserId]);
+  }, [profileLoaded, currentUserRole, currentUserId]);
 
   useEffect(() => {
     const pendingCode = sessionStorage.getItem('pendingJoinCode');
@@ -1490,6 +1477,20 @@ export default function ClassroomHubPage() {
   };
 
   const isArchived = selectedClassroom?.status === 'archived';
+
+  if (!profileLoaded) {
+    return (
+      <div className="h-screen w-screen bg-[#000000] bg-monochrome-dotted text-[#FFFFFF] flex flex-col items-center justify-center font-sans select-none overflow-hidden relative">
+        <div className="flex flex-col items-center gap-4 z-10">
+          <CortexLogo size="lg" />
+          <div className="flex items-center gap-2 text-sm text-neutral-400">
+            <RefreshCw className="w-4 h-4 animate-spin text-[#FF9100]" />
+            <span>Connecting to Cortex Classroom...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`h-screen w-screen bg-[#000000] bg-monochrome-dotted text-[#FFFFFF] flex flex-col font-sans select-none overflow-hidden relative ${isImmersive ? 'cortex-classroom-immersive-container' : ''}`}>

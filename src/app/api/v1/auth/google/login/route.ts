@@ -39,22 +39,10 @@ export async function GET(req: NextRequest) {
       return response;
     }
 
-    // Interactive Demo / Sandbox Fallback
-    // Allows immediate testing of Google authentication in environments where GOOGLE_CLIENT_ID is pending setup
-    const demoGoogleUrl = new URL(`${origin}/api/v1/auth/google/callback`);
-    demoGoogleUrl.searchParams.set('code', 'mock_google_auth_code');
-    demoGoogleUrl.searchParams.set('state', state);
-    demoGoogleUrl.searchParams.set('simulated', 'true');
-
-    const response = NextResponse.redirect(demoGoogleUrl.toString());
-    response.cookies.set('google_oauth_state', state, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 10,
-      path: '/',
-    });
-    return response;
+    return NextResponse.json(
+      { error: 'Google OAuth is not configured on this server. Please use email and password authentication.' },
+      { status: 503 }
+    );
   } catch (err: any) {
     console.error('[Google OAuth] Login initiation error:', err);
     return NextResponse.json({ error: 'Failed to initiate Google authentication' }, { status: 500 });

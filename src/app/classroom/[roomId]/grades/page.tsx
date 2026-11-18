@@ -18,6 +18,10 @@ export default function GradebookPage() {
     const fetchGrades = async () => {
       try {
         const res = await fetch(`/api/v1/classrooms/${roomId}/grades`, { headers: getClassroomAuthHeaders() });
+        if (res.status === 401) {
+          router.replace(`/login?redirect=/classroom/${roomId}/grades`);
+          return;
+        }
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Failed to fetch gradebook');
         setData(json);
@@ -28,7 +32,7 @@ export default function GradebookPage() {
       }
     };
     fetchGrades();
-  }, [roomId]);
+  }, [roomId, router]);
 
   const handleExportCSV = () => {
     if (!data) return;

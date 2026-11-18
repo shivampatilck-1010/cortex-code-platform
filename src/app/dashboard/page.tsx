@@ -27,8 +27,15 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     fetch('/api/v1/auth/me/dashboard')
-      .then(r => r.json())
+      .then(res => {
+        if (res.status === 401 || !res.ok) {
+          window.location.href = '/login?redirect=/dashboard';
+          return null;
+        }
+        return res.json();
+      })
       .then(d => {
+        if (!d) return;
         setDashboardData(d);
         setLoading(false);
       })

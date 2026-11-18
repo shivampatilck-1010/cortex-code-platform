@@ -127,13 +127,13 @@ interface ClassroomContextValue {
 }
 
 const defaultSession: ClassroomSession = {
-  id: 'CLS_CS201_LIVE',
-  title: 'CS 201: Data Structures and Algorithmic Analysis',
-  courseCode: 'CS-201',
+  id: 'CLS_LIVE',
+  title: 'Classroom Live Session',
+  courseCode: 'CORTEX',
   teacher: {
-    id: 'usr_prof_shivam',
-    name: 'Prof. Shivam Patil',
-    email: 'shivam.patil@cortex.edu',
+    id: '',
+    name: '',
+    email: '',
   },
   startedAt: Date.now() - 25 * 60 * 1000,
   permissions: {
@@ -145,67 +145,7 @@ const defaultSession: ClassroomSession = {
   },
 };
 
-const initialParticipants: Participant[] = [
-  {
-    id: 'usr_prof_shivam',
-    name: 'Prof. Shivam Patil',
-    email: 'shivam.patil@cortex.edu',
-    role: 'teacher',
-    isMuted: false,
-    isVideoOff: false,
-    isScreenSharing: false,
-    isHandRaised: false,
-    currentModule: 'code',
-  },
-  {
-    id: 'usr_student_alex',
-    name: 'Alex Chen',
-    email: 'alex.chen@student.cortex.edu',
-    role: 'student',
-    isMuted: true,
-    isVideoOff: false,
-    isScreenSharing: false,
-    isHandRaised: false,
-    currentModule: 'code',
-    isSimulated: true,
-  },
-  {
-    id: 'usr_student_sophia',
-    name: 'Sophia Patel',
-    email: 'sophia.patel@student.cortex.edu',
-    role: 'student',
-    isMuted: true,
-    isVideoOff: false,
-    isScreenSharing: false,
-    isHandRaised: true,
-    currentModule: 'code',
-    isSimulated: true,
-  },
-  {
-    id: 'usr_student_marcus',
-    name: 'Marcus Vance',
-    email: 'marcus.vance@student.cortex.edu',
-    role: 'student',
-    isMuted: true,
-    isVideoOff: true,
-    isScreenSharing: false,
-    isHandRaised: false,
-    currentModule: 'code',
-    isSimulated: true,
-  },
-  {
-    id: 'usr_student_elena',
-    name: 'Elena Rostova',
-    email: 'elena.rostova@student.cortex.edu',
-    role: 'student',
-    isMuted: false,
-    isVideoOff: false,
-    isScreenSharing: false,
-    isHandRaised: false,
-    currentModule: 'code',
-    isSimulated: true,
-  },
-];
+const initialParticipants: Participant[] = [];
 
 const ClassroomContext = createContext<ClassroomContextValue | null>(null);
 
@@ -315,9 +255,9 @@ export const ClassroomProvider: React.FC<ClassroomProviderProps> = ({
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
 
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
-  const currentUserId = currentUserIdState || (userRole === 'teacher' ? 'usr_prof_shivam' : 'usr_student_alex');
-  const currentUserName = currentUserNameState || (userRole === 'teacher' ? session.teacher.name : 'Alex Chen');
-  const currentUserEmail = currentUserEmailState || (userRole === 'teacher' ? session.teacher.email : 'alex.chen@student.cortex.edu');
+  const currentUserId = currentUserIdState || '';
+  const currentUserName = currentUserNameState || (userRole === 'teacher' ? (session.teacher.name || '') : '');
+  const currentUserEmail = currentUserEmailState || (userRole === 'teacher' ? (session.teacher.email || '') : '');
 
   // WebRTC ICE Configuration (STUN / TURN)
   const defaultIceServers: RTCIceServer[] = [

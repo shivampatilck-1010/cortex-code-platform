@@ -126,6 +126,31 @@ export default {
       return Response.redirect(target.toString(), 307);
     }
 
+    // Edge Route Guard: Protect /classroom, /dashboard, and /admin routes from unauthenticated access
+    const PROTECTED_PREFIXES = ['/classroom', '/dashboard', '/admin'];
+    const isProtectedPath = PROTECTED_PREFIXES.some(
+      (prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)
+    );
+    if (request.method === 'GET' && isProtectedPath) {
+      const hasToken =
+        url.searchParams.has('token') ||
+        url.searchParams.has('launchToken') ||
+        url.searchParams.has('sebToken');
+      const isLiveGuestRoom = url.pathname.includes('/live/');
+
+      if (!hasToken && !isLiveGuestRoom) {
+        const cookieHeader = request.headers.get('cookie') || '';
+        const match = /(?:^|;\s*)cortex_session=([^;]+)/.exec(cookieHeader);
+        const sessionToken = match ? match[1].trim() : '';
+
+        if (!sessionToken) {
+          const redirectUrl = new URL('/login', url.origin);
+          redirectUrl.searchParams.set('redirect', url.pathname + url.search);
+          return Response.redirect(redirectUrl.toString(), 307);
+        }
+      }
+    }
+
     // Direct high-performance Cloudflare Edge streaming for video assets with native HTTP 206 Range support
     if (url.pathname.startsWith('/videos/') && env.ASSETS) {
       const assetRes = await env.ASSETS.fetch(request);

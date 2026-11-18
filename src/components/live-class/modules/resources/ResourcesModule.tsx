@@ -135,6 +135,8 @@ export const ResourcesModule: React.FC<{ classroomId?: string }> = ({ classroomI
             url: r.url,
           }));
           setResources(mapped);
+        } else {
+          setResources([]);
         }
       })
       .catch((err) => {

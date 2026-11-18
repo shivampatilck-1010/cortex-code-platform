@@ -144,76 +144,7 @@ export function validateRedBlack(root: RBNode | null): { valid: boolean; blackHe
   },
 ];
 
-export const DEFAULT_SUBMISSIONS: AssignmentSubmission[] = [
-  {
-    id: 'sub_alex_lab04_1',
-    assignmentId: 'lab-04',
-    studentId: 'usr_student_alex',
-    studentName: 'Alex Chen',
-    studentEmail: 'alex.chen@student.cortex.edu',
-    attemptNumber: 1,
-    code: `Node* rotateLeftRight(Node* z) {\n    z->left = rotateLeft(z->left);\n    return rotateRight(z);\n}`,
-    language: 'C++17',
-    testResults: [
-      { id: 1, passed: true, input: 'insert([10, 5, 8])', expectedOutput: 'Root key 8, BF 0', actualOutput: 'Root key 8, BF 0', runtimeMs: 4 },
-      { id: 2, passed: true, input: 'insert([30, 10, 20])', expectedOutput: 'Root key 20, BF 0', actualOutput: 'Root key 20, BF 0', runtimeMs: 6 },
-      { id: 3, passed: true, input: 'deepSubtreeTest([50, 20, 60, 10, 30, 25])', expectedOutput: 'Subtree 25 balanced, Height 3', actualOutput: 'Subtree 25 balanced, Height 3', runtimeMs: 9 },
-    ],
-    status: 'submitted',
-    score: 100,
-    maxScore: 100,
-    submittedAt: Date.now() - 7200000,
-  },
-  {
-    id: 'sub_sophia_lab04_1',
-    assignmentId: 'lab-04',
-    studentId: 'usr_student_sophia',
-    studentName: 'Sophia Patel',
-    studentEmail: 'sophia.patel@student.cortex.edu',
-    attemptNumber: 1,
-    code: `Node* rotateLeftRight(Node* z) {\n    z->left = rotateLeft(z->left);\n    return rotateRight(z);\n}`,
-    language: 'C++17',
-    testResults: [
-      { id: 1, passed: true, input: 'insert([10, 5, 8])', expectedOutput: 'Root key 8, BF 0', actualOutput: 'Root key 8, BF 0', runtimeMs: 4 },
-      { id: 2, passed: true, input: 'insert([30, 10, 20])', expectedOutput: 'Root key 20, BF 0', actualOutput: 'Root key 20, BF 0', runtimeMs: 5 },
-      { id: 3, passed: true, input: 'deepSubtreeTest([50, 20, 60, 10, 30, 25])', expectedOutput: 'Subtree 25 balanced, Height 3', actualOutput: 'Subtree 25 balanced, Height 3', runtimeMs: 8 },
-    ],
-    status: 'graded',
-    score: 95,
-    maxScore: 100,
-    submittedAt: Date.now() - 14400000,
-    gradedAt: Date.now() - 3600000,
-    teacherFeedback: 'Flawless rotation logic. Minor point deduction for missing height null-check assertion in edge cases.',
-    rubricScores: {
-      'crit-1': 40,
-      'crit-2': 25,
-      'crit-3': 30,
-    },
-  },
-  {
-    id: 'sub_marcus_lab03_1',
-    assignmentId: 'lab-03',
-    studentId: 'usr_student_marcus',
-    studentName: 'Marcus Vance',
-    studentEmail: 'marcus.vance@student.cortex.edu',
-    attemptNumber: 1,
-    code: `def probeSequence(key: int, m: int, c1: int = 1, c2: int = 3):\n    return [(key % m + c1 * i + c2 * i**2) % m for i in range(4)]`,
-    language: 'Python 3.11',
-    testResults: [
-      { id: 1, passed: true, input: 'probeSequence(key=42, m=17)', expectedOutput: 'Indices [8, 10, 14, 3]', actualOutput: 'Indices [8, 10, 14, 3]', runtimeMs: 3 },
-    ],
-    status: 'graded',
-    score: 100,
-    maxScore: 100,
-    submittedAt: Date.now() - 86400000,
-    gradedAt: Date.now() - 82800000,
-    teacherFeedback: 'Clean Pythonic list comprehension. Meets all probing criteria.',
-    rubricScores: {
-      'crit-1': 60,
-      'crit-2': 40,
-    },
-  },
-];
+export const DEFAULT_SUBMISSIONS: AssignmentSubmission[] = [];
 
 export const createBlankAssignment = (customId?: string): Assignment => {
   const now = Date.now();

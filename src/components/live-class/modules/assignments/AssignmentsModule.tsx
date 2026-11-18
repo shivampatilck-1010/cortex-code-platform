@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 
 export const AssignmentsModule: React.FC = () => {
-  const { setActiveModule, showToast, userRole, session } = useClassroom();
+  const { setActiveModule, showToast, userRole, session, currentUserId, currentUserName, currentUserEmail } = useClassroom();
   const classroomId = session?.id || '';
   const [isLoadingServerAssignments, setIsLoadingServerAssignments] = useState(false);
 
@@ -50,7 +50,7 @@ export const AssignmentsModule: React.FC = () => {
 
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>(() => {
     const loaded = loadSubmissions();
-    return loaded && loaded.length > 0 ? loaded : DEFAULT_SUBMISSIONS;
+    return loaded && loaded.length > 0 ? loaded : [];
   });
 
   // Selected assignment
@@ -136,11 +136,10 @@ export const AssignmentsModule: React.FC = () => {
   // Mobile responsive tab
   const [mobileTab, setMobileTab] = useState<'list' | 'workspace'>('list');
 
-  // Active student identity for demo/test runner
-  const currentStudentId = userRole === 'teacher' ? 'usr_prof_shivam' : 'usr_student_alex';
-  const currentStudentName = userRole === 'teacher' ? 'Prof. Shivam Patil' : 'Alex Chen';
-  const currentStudentEmail =
-    userRole === 'teacher' ? 'shivam.patil@cortex.edu' : 'alex.chen@student.cortex.edu';
+  // Active student identity from authenticated classroom context
+  const currentStudentId = currentUserId || '';
+  const currentStudentName = currentUserName || 'Student';
+  const currentStudentEmail = currentUserEmail || '';
 
   // Synchronize localStorage on assignments changes
   useEffect(() => {

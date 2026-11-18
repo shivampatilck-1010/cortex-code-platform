@@ -41,6 +41,7 @@ export const MeetingStageModule: React.FC = () => {
     requestStudentUnmute,
     requestStudentCamera,
     currentUserName,
+    currentUserEmail,
     remoteStreams,
     remoteAudioLevels,
     activeSpeakerId: contextActiveSpeakerId,
@@ -74,8 +75,8 @@ export const MeetingStageModule: React.FC = () => {
   const selfParticipant: Participant = useMemo(
     () => ({
       id: currentUserId,
-      name: currentUserName || (userRole === 'teacher' ? 'Prof. Shivam Patil' : 'You'),
-      email: userRole === 'teacher' ? 'teacher@cortex.edu' : 'student@cortex.edu',
+      name: currentUserName || (userRole === 'teacher' ? 'Instructor' : 'You'),
+      email: currentUserEmail || (userRole === 'teacher' ? 'teacher@cortex.edu' : 'student@cortex.edu'),
       role: userRole,
       isMuted: deviceState.isMuted,
       isVideoOff: deviceState.isVideoOff,
@@ -84,7 +85,7 @@ export const MeetingStageModule: React.FC = () => {
       currentModule: 'meeting',
       connectionStatus: 'connected',
     }),
-    [currentUserId, currentUserName, userRole, deviceState]
+    [currentUserId, currentUserName, currentUserEmail, userRole, deviceState]
   );
 
   // All remote participants (excluding local)

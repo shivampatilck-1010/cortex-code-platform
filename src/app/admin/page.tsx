@@ -18,15 +18,45 @@ import { SUPPORTED_LANGUAGES } from '@/config/languages';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 
 export default function AdminPage() {
+  const [authorized, setAuthorized] = useState(false);
   const [languages, setLanguages] = useState(
     SUPPORTED_LANGUAGES.map((l) => ({ ...l, enabled: true }))
   );
+
+  React.useEffect(() => {
+    fetch('/api/v1/auth/me')
+      .then(res => {
+        if (!res.ok) throw new Error('Unauthenticated');
+        return res.json();
+      })
+      .then(data => {
+        if (!data.success || !data.user) {
+          window.location.href = '/login?redirect=/admin';
+          return;
+        }
+        setAuthorized(true);
+      })
+      .catch(() => {
+        window.location.href = '/login?redirect=/admin';
+      });
+  }, []);
 
   const toggleLanguage = (id: string) => {
     setLanguages((prev) =>
       prev.map((l) => (l.id === id ? { ...l, enabled: !l.enabled } : l))
     );
   };
+
+  if (!authorized) {
+    return (
+      <div className="min-h-screen bg-[#121316] text-gray-100 flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-4">
+          <CortexLogo variant="header" size="sm" />
+          <div className="text-sm text-neutral-400">Verifying administrator privileges...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#121316] text-gray-100 flex flex-col font-sans select-none">

@@ -165,7 +165,7 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
           </div>
 
           <span className="text-[10px] text-gray-500 font-mono">
-            {status === 'verified' ? '✓ Protected' : 'Secure'}
+            {status === 'verified' ? 'Protected' : 'Secure'}
           </span>
         </div>
 

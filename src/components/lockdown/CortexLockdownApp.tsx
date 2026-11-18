@@ -110,9 +110,22 @@ export function CortexLockdownApp() {
   });
 
   // Student State
-  const [studentName] = useState('Shivam Patil (Demonstration Candidate)');
-  const [studentEmail] = useState('shivampatilc@gmail.com');
-  const [studentId] = useState('usr_cand_synth_demo_patil');
+  const [studentName, setStudentName] = useState('Candidate');
+  const [studentEmail, setStudentEmail] = useState('');
+  const [studentId, setStudentId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/v1/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          if (data.user.name) setStudentName(data.user.name);
+          if (data.user.email) setStudentEmail(data.user.email);
+          if (data.user.id) setStudentId(data.user.id);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Gamification & Readiness
   const [hardwareVerified, setHardwareVerified] = useState(false);

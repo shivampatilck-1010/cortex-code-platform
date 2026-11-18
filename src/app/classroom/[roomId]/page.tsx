@@ -221,46 +221,16 @@ export default function ClassroomLivePage() {
         console.warn('Could not verify auth session', err);
       }
 
-      // Step C: Fallback to stored user profile from localStorage
-      try {
-        const rawUser = localStorage.getItem('cortex_user') || localStorage.getItem('cortex_user_profile');
-        if (rawUser) {
-          const u = JSON.parse(rawUser);
-          if (u && (u.name || u.id)) {
-            const uId = u.id || `usr_${Date.now()}`;
-            const uName = u.name || 'User';
-            const uRole: ClassroomRole = (u.role === 'teacher' || u.role === 'admin') ? 'admin' : 'user';
+      // Check for token-based assessment launches or live guest tokens
+      const searchParams = new URLSearchParams(window.location.search);
+      const hasToken = searchParams.has('token') || searchParams.has('launchToken') || searchParams.has('sebToken');
 
-            try {
-              await fetch('/api/v1/classroom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'join',
-                  roomId,
-                  name: uName,
-                  role: uRole,
-                  existingId: uId,
-                }),
-              });
-            } catch {}
+      if (!hasToken) {
+        window.location.href = `/login?redirect=/classroom/${roomId}`;
+        return;
+      }
 
-            setTabSession('participant', uId);
-            setTabSession('name', uName);
-            setTabSession('role', uRole);
-
-            setParticipantId(uId);
-            setParticipantName(uName);
-            setParticipantRole(uRole);
-            setIsJoinNeeded(false);
-
-            fetchRoomState(uId, uName, uRole);
-            return;
-          }
-        }
-      } catch {}
-
-      // Step D: Truly unauthenticated guest without any login or profile
+      // Token-based launch access without prior session
       setIsJoinNeeded(true);
       setIsLoading(false);
       fetchRoomState();
