@@ -2,7 +2,7 @@
   "name": "cortex-code-platform",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "bun@1.4.2",
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "node ./scripts/run-dev.mjs",
     "build": "node --max-old-space-size=4096 ./node_modules/next/dist/bin/next build",
@@ -11,7 +11,7 @@
     "test": "node --max-old-space-size=4096 ./node_modules/tsx/dist/cli.mjs tests/run-e2e.ts",
     "test:e2e": "node --max-old-space-size=4096 ./node_modules/tsx/dist/cli.mjs tests/run-e2e.ts",
     "dev:vinext": "vinext dev --port 3001",
-    "build:vinext": "vinext build",
+    "build:vinext": "vinext build && node scripts/prepare-production-wrangler.mjs",
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "deploy:staging": "node scripts/deploy-staging.mjs",
