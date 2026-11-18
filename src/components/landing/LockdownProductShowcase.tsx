@@ -440,10 +440,10 @@ export const LockdownProductShowcase: React.FC = () => {
               </Link>
             </div>
             <div className="flex items-center gap-4">
-              <Link href="/ide" className="hover:text-white transition-colors">
+              <Link href="/ide" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
                 Return to IDE
               </Link>
-              <Link href="/classroom" className="hover:text-white transition-colors">
+              <Link href="/classroom" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
                 Classroom Suite
               </Link>
             </div>

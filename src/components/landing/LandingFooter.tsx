@@ -106,11 +106,13 @@ export const LandingFooter: React.FC = () => {
               Launch the zero-install cloud IDE with 16 runtimes, or deploy virtual labs for your classroom in seconds.
             </p>
             <div className="pt-4 flex flex-wrap items-center justify-center gap-4">
-              <GlowCtaButton href="/ide" className="px-8 py-3.5 text-sm font-mono font-bold">
+              <GlowCtaButton href="/ide" target="_blank" rel="noopener noreferrer" className="px-8 py-3.5 text-sm font-mono font-bold">
                 LAUNCH IDE NOW
               </GlowCtaButton>
               <Link
                 href="/classroom"
+                target="_blank"
+                rel="noopener noreferrer"
                 className={`px-6 py-3 rounded-full text-xs font-mono font-semibold tracking-wide border transition-all ${
                   isDark ? 'bg-white/5 border-white/10 text-zinc-300 hover:text-white hover:bg-white/10' : 'bg-white border-slate-300 text-zinc-700 hover:text-zinc-900 shadow-sm'
                 }`}
@@ -166,13 +168,13 @@ export const LandingFooter: React.FC = () => {
             </div>
             <ul className="space-y-2">
               <li>
-                <Link href="/ide" className={`transition-colors flex items-center gap-1.5 ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
+                <Link href="/ide" target="_blank" rel="noopener noreferrer" className={`transition-colors flex items-center gap-1.5 ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
                   <Terminal className="w-3 h-3 text-[#FF9100]" />
                   <span>Cortex IDE</span>
                 </Link>
               </li>
               <li>
-                <Link href="/classroom" className={`transition-colors flex items-center gap-1.5 ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
+                <Link href="/classroom" target="_blank" rel="noopener noreferrer" className={`transition-colors flex items-center gap-1.5 ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
                   <BookOpen className="w-3 h-3 text-cyan-500" />
                   <span>Cortex Classroom</span>
                 </Link>
@@ -184,12 +186,12 @@ export const LandingFooter: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link href="/cpp" className={`transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-500 hover:text-zinc-800'}`}>
+                <Link href="/cpp" target="_blank" rel="noopener noreferrer" className={`transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-500 hover:text-zinc-800'}`}>
                   C++ Cloud Compiler
                 </Link>
               </li>
               <li>
-                <Link href="/python" className={`transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-500 hover:text-zinc-800'}`}>
+                <Link href="/python" target="_blank" rel="noopener noreferrer" className={`transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-500 hover:text-zinc-800'}`}>
                   Python Cloud Compiler
                 </Link>
               </li>
@@ -229,12 +231,12 @@ export const LandingFooter: React.FC = () => {
                 </a>
               </li>
               <li>
-                <Link href="/ide" className={`transition-colors ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
+                <Link href="/ide" target="_blank" rel="noopener noreferrer" className={`transition-colors ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
                   Web IDE Studio
                 </Link>
               </li>
               <li>
-                <Link href="/classroom" className={`transition-colors ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
+                <Link href="/classroom" target="_blank" rel="noopener noreferrer" className={`transition-colors ${isDark ? 'hover:text-white' : 'hover:text-zinc-900'}`}>
                   Classroom Collaboration
                 </Link>
               </li>

@@ -1748,7 +1748,7 @@ export function ExamRunnerModal({
                                 : 'bg-[#111216] border-[#22242c] text-gray-300 hover:border-[#333644]'
                             }`}
                           >
-                            <div className="text-lg mb-1">{val ? '✓' : '✕'}</div>
+                            <div className="flex justify-center mb-1">{val ? <Check className="w-5 h-5" /> : <X className="w-5 h-5" />}</div>
                             <span>{val ? 'TRUE' : 'FALSE'}</span>
                           </div>
                         );

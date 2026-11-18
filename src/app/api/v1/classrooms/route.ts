@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const newClassroom: Classroom = {
       id: classroomId,
       name: name.trim(),
-      coursecode: body.coursecode || code || 'CS-NEW',
+      coursecode: body.coursecode || body.code || 'CS-NEW',
       academicYear: body.academicYear || '2024-2025',
       section: body.section || 'Sec 01',
       subject: subject || 'Computer Science',

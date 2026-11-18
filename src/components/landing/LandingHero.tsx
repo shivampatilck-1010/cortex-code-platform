@@ -145,6 +145,8 @@ export const LandingHero: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
           <GlowCtaButton
             href="/ide"
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full sm:w-auto px-8 py-3.5 text-sm font-mono font-bold"
           >
             LAUNCH IDE
@@ -189,6 +191,8 @@ export const LandingHero: React.FC = () => {
 
               <Link
                 href="/ide"
+                target="_blank"
+                rel="noopener noreferrer"
                 className={`relative z-10 p-6 flex flex-col justify-between h-full border rounded-2xl transition-colors ${
                   isDark 
                     ? 'border-[#1F2024] hover:border-[#FF9100]/60 shadow-black/40 hover:shadow-[0_10px_30px_rgba(255,145,0,0.15)]' 
@@ -236,6 +240,8 @@ export const LandingHero: React.FC = () => {
 
               <Link
                 href="/classroom"
+                target="_blank"
+                rel="noopener noreferrer"
                 className={`relative z-10 p-6 flex flex-col justify-between h-full border rounded-2xl transition-colors ${
                   isDark 
                     ? 'border-[#1F2024] hover:border-cyan-500/60 shadow-black/40 hover:shadow-[0_10px_30px_rgba(6,182,212,0.15)]' 

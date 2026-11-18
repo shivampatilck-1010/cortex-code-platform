@@ -232,7 +232,7 @@ function LandingHeaderNav({
             <span>{isDark ? 'DARK // OBSIDIAN' : 'LIGHT // ALABASTER'}</span>
           </button>
 
-          <GlowCtaButton href="/ide" variant="primary">
+          <GlowCtaButton href="/ide" target="_blank" rel="noopener noreferrer" variant="primary">
             Launch IDE
           </GlowCtaButton>
         </div>
@@ -299,10 +299,10 @@ function LandingHero({ isDark }: { isDark: boolean }) {
           </p>
 
           <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <GlowCtaButton href="/ide" variant="primary">
+            <GlowCtaButton href="/ide" target="_blank" rel="noopener noreferrer" variant="primary">
               Launch Standalone IDE
             </GlowCtaButton>
-            <GlowCtaButton href="/classroom" variant="book-call">
+            <GlowCtaButton href="/classroom" target="_blank" rel="noopener noreferrer" variant="book-call">
               Book a Call // Live Lab Tour
             </GlowCtaButton>
           </div>
@@ -362,7 +362,13 @@ function LandingHero({ isDark }: { isDark: boolean }) {
                     <span className="font-mono text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
                       CLICK TO RANDOMIZE 3D TUBES
                     </span>
-                    <GlowCtaButton href={card.href} variant="primary" className="px-4 py-1.5">
+                    <GlowCtaButton
+                      href={card.href}
+                      target={card.href === '/lockdown' ? undefined : '_blank'}
+                      rel={card.href === '/lockdown' ? undefined : 'noopener noreferrer'}
+                      variant="primary"
+                      className="px-4 py-1.5"
+                    >
                       {card.cta}
                     </GlowCtaButton>
                   </div>
@@ -507,11 +513,13 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
             </p>
 
             <div className="pt-2 flex flex-wrap items-center gap-4">
-              <GlowCtaButton href="/ide" variant="primary">
+              <GlowCtaButton href="/ide" target="_blank" rel="noopener noreferrer" variant="primary">
                 Launch Standalone IDE
               </GlowCtaButton>
               <Link
                 href="/classroom"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-mono font-bold tracking-wider border border-zinc-300 dark:border-white/15 bg-white/90 dark:bg-white/5 text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors shadow-sm"
               >
                 <span>Enter Classroom</span>
@@ -529,12 +537,12 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
               </div>
               <ul className="space-y-2.5 text-xs">
                 <li>
-                  <Link href="/ide" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                  <Link href="/ide" target="_blank" rel="noopener noreferrer" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
                     Cortex IDE
                   </Link>
                 </li>
                 <li>
-                  <Link href="/classroom" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                  <Link href="/classroom" target="_blank" rel="noopener noreferrer" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
                     Cortex Classroom
                   </Link>
                 </li>
@@ -544,17 +552,17 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/cpp" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                  <Link href="/cpp" target="_blank" rel="noopener noreferrer" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
                     C++ 20 Sandbox
                   </Link>
                 </li>
                 <li>
-                  <Link href="/python" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                  <Link href="/python" target="_blank" rel="noopener noreferrer" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
                     Python 3.12 Engine
                   </Link>
                 </li>
                 <li>
-                  <Link href="/rust" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                  <Link href="/rust" target="_blank" rel="noopener noreferrer" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
                     Rust Toolchain
                   </Link>
                 </li>
@@ -729,8 +737,8 @@ class LandingErrorBoundary extends React.Component<
             <h1 className="text-2xl font-bold tracking-tight text-[#FF9100]">CORTEX PLATFORM</h1>
             <p className="text-sm text-zinc-400">High-performance universal code platform and examination kiosk.</p>
             <div className="flex flex-wrap gap-3 justify-center pt-4">
-              <a href="/ide" className="px-5 py-2.5 rounded-full bg-[#FF9100] text-black font-semibold text-xs hover:bg-[#ffaa33]">Launch Cloud IDE</a>
-              <a href="/classroom" className="px-5 py-2.5 rounded-full border border-zinc-700 text-white text-xs hover:border-[#FF9100]">Classroom Hub</a>
+              <a href="/ide" target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 rounded-full bg-[#FF9100] text-black font-semibold text-xs hover:bg-[#ffaa33]">Launch Cloud IDE</a>
+              <a href="/classroom" target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 rounded-full border border-zinc-700 text-white text-xs hover:border-[#FF9100]">Classroom Hub</a>
               <a href="/arena" className="px-5 py-2.5 rounded-full border border-zinc-700 text-white text-xs hover:border-[#FF9100]">Competitive Arena</a>
             </div>
           </div>
@@ -897,10 +905,10 @@ function CortexLandingPageInner() {
                 </div>
 
                 <div className="mt-8 flex flex-wrap gap-4">
-                  <GlowCtaButton href="/ide" variant="primary">
+                  <GlowCtaButton href="/ide" target="_blank" rel="noopener noreferrer" variant="primary">
                     Launch Standalone IDE
                   </GlowCtaButton>
-                  <GlowCtaButton href={currentRt.route} variant="secondary">
+                  <GlowCtaButton href={currentRt.route} target="_blank" rel="noopener noreferrer" variant="secondary">
                     Open {currentRt.route} Compiler
                   </GlowCtaButton>
                 </div>
@@ -1019,10 +1027,10 @@ function CortexLandingPageInner() {
                   and team grading in real time.
                 </p>
                 <div className="mt-8 flex flex-wrap gap-4">
-                  <GlowCtaButton href="/classroom" variant="primary">
+                  <GlowCtaButton href="/classroom" target="_blank" rel="noopener noreferrer" variant="primary">
                     Enter Classroom Suite
                   </GlowCtaButton>
-                  <GlowCtaButton href="/classroom/teams" variant="secondary">
+                  <GlowCtaButton href="/classroom/teams" target="_blank" rel="noopener noreferrer" variant="secondary">
                     Project Teams Studio
                   </GlowCtaButton>
                 </div>

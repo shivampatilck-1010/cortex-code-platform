@@ -16,6 +16,7 @@ import {
   buildSebHeaders,
   getSebProtocolUri,
 } from '@/lib/classroom/seb-client';
+import { getClassroomAuthHeaders } from '@/lib/classroom/client-auth';
 
 export default function SolveAssignmentPage({
   params

@@ -46,6 +46,8 @@ export interface GlowCtaButtonProps {
   glowColor?: string;
   showArrow?: boolean;
   showUnderline?: boolean;
+  target?: string;
+  rel?: string;
 }
 
 export function GlowCtaButton({
@@ -57,6 +59,8 @@ export function GlowCtaButton({
   glowColor = 'rgba(255, 145, 0, 0.42)',
   showArrow = true,
   showUnderline = true,
+  target,
+  rel,
 }: GlowCtaButtonProps) {
   const ref = useRef<HTMLElement | null>(null);
 
@@ -135,9 +139,12 @@ export function GlowCtaButton({
   );
 
   if (href) {
+    const computedRel = rel ?? (target === '_blank' ? 'noopener noreferrer' : undefined);
     return (
       <Link
         href={href}
+        target={target}
+        rel={computedRel}
         ref={ref as React.RefObject<HTMLAnchorElement>}
         onPointerMove={handlePointerMove}
         className={sharedClasses}

@@ -68,7 +68,7 @@ export async function POST(
     if (!auth.authorized) {
       return NextResponse.json({ error: auth.error || 'Teacher authorization required to create assignments.' }, { status: 403 });
     }
-    const classroom = classroomDb.getClassroom(id);
+    const classroom = await classroomDb.getClassroom(id);
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }

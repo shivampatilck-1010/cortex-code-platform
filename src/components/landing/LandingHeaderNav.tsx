@@ -103,6 +103,8 @@ export const LandingHeaderNav: React.FC = () => {
 
           <Link
             href="/classroom"
+            target="_blank"
+            rel="noopener noreferrer"
             className={`px-3 py-1.5 text-xs font-mono tracking-wider rounded-md transition-colors ${
               isDark 
                 ? 'text-zinc-400 hover:text-white hover:bg-white/5' 
@@ -141,7 +143,7 @@ export const LandingHeaderNav: React.FC = () => {
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          <GlowCtaButton href="/ide">
+          <GlowCtaButton href="/ide" target="_blank" rel="noopener noreferrer">
             LAUNCH IDE
           </GlowCtaButton>
         </div>
@@ -162,6 +164,8 @@ export const LandingHeaderNav: React.FC = () => {
 
           <Link
             href="/ide"
+            target="_blank"
+            rel="noopener noreferrer"
             className="px-3 py-1.5 rounded text-xs font-mono font-semibold bg-[#FF9100] text-black"
           >
             IDE
@@ -223,6 +227,8 @@ export const LandingHeaderNav: React.FC = () => {
             </div>
             <Link
               href="/ide"
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
               className={`flex items-center justify-between px-3 py-2 text-sm font-mono rounded-md ${
                 isDark ? 'text-zinc-300 hover:text-white hover:bg-white/5' : 'text-zinc-700 hover:text-zinc-900 hover:bg-slate-100'
@@ -233,6 +239,8 @@ export const LandingHeaderNav: React.FC = () => {
             </Link>
             <Link
               href="/classroom"
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
               className={`flex items-center justify-between px-3 py-2 text-sm font-mono rounded-md ${
                 isDark ? 'text-zinc-300 hover:text-white hover:bg-white/5' : 'text-zinc-700 hover:text-zinc-900 hover:bg-slate-100'

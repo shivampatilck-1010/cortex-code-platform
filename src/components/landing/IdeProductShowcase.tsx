@@ -204,7 +204,7 @@ export const IdeProductShowcase: React.FC = () => {
             interactive step-debugging, and sub-50ms cloud sandbox latency.
           </p>
           <div>
-            <GlowCtaButton href="/ide">
+            <GlowCtaButton href="/ide" target="_blank" rel="noopener noreferrer">
               LAUNCH STANDALONE IDE
             </GlowCtaButton>
           </div>

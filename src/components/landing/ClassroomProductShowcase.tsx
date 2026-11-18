@@ -66,7 +66,7 @@ export const ClassroomProductShowcase: React.FC = () => {
             mathematical whiteboard workspaces, and instant automated grading rubrics.
           </p>
           <div>
-            <GlowCtaButton href="/classroom">
+            <GlowCtaButton href="/classroom" target="_blank" rel="noopener noreferrer">
               ENTER CLASSROOM SUITE
             </GlowCtaButton>
           </div>
