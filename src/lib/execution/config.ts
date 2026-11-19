@@ -32,6 +32,9 @@ export const ALLOWED_LANGUAGES = new Set([
   'r',
   'dart',
   'sql',
+  'bash',
+  'lua',
+  'perl',
 ]);
 
 /**

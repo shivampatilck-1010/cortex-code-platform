@@ -4,6 +4,7 @@ import { runTier1FeatureCoverage } from './tier1-feature-coverage';
 import { runTier2BoundaryCorner } from './tier2-boundary-corner';
 import { runTier3CrossFeature } from './tier3-cross-feature';
 import { runTier4GovernanceWorkload } from './tier4-governance-workload';
+import { runTier5AdversarialHardening } from './tier5-adversarial-hardening';
 import { TierExecutionResult } from './test-utils';
 
 interface RunnerOptions {
@@ -36,6 +37,7 @@ export async function runAllE2ETests(
     { tierNumber: 2, name: 'Tier 2 - Boundary and Corner Cases', fn: runTier2BoundaryCorner },
     { tierNumber: 3, name: 'Tier 3 - Cross-Feature Combinations', fn: runTier3CrossFeature },
     { tierNumber: 4, name: 'Tier 4 - Governance and Workload Simulation', fn: runTier4GovernanceWorkload },
+    { tierNumber: 5, name: 'Tier 5 - Adversarial Hardening', fn: runTier5AdversarialHardening },
   ];
 
   for (const runner of tierRunners) {
@@ -149,26 +151,31 @@ export async function runAllE2ETests(
 
   if (options.jsonOutput) {
     const jsonReportPath = path.join(projectRoot, 'test-e2e-report.json');
-    fs.writeFileSync(
-      jsonReportPath,
-      JSON.stringify(
-        {
-          timestamp,
-          allPassed,
-          totalDuration,
-          totalTests,
-          totalPassedTests,
-          totalFailedTests,
-          totalAssertions,
-          totalPassedAssertions,
-          totalFailedAssertions,
-          summaries,
-        },
-        null,
-        2
-      )
-    );
-    console.log(`[INFO] Machine-readable JSON report written to: ${jsonReportPath}`);
+    try {
+      fs.writeFileSync(
+        jsonReportPath,
+        JSON.stringify(
+          {
+            timestamp,
+            allPassed,
+            totalDuration,
+            totalTests,
+            totalPassedTests,
+            totalFailedTests,
+            totalAssertions,
+            totalPassedAssertions,
+            totalFailedAssertions,
+            summaries,
+          },
+          null,
+          2
+        )
+      );
+      console.log(`[INFO] Machine-readable JSON report written to: ${jsonReportPath}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[WARN] Could not write machine-readable JSON report to ${jsonReportPath}: ${msg}`);
+    }
   }
 
   return { success: allPassed, summaries };

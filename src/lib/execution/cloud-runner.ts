@@ -20,6 +20,9 @@ export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
   r: 99,            // R (4.4.1)
   dart: 90,         // Dart (2.19.2)
   sql: 82,          // SQL (SQLite 3.27.2)
+  bash: 46,         // Bash 5.0.0
+  lua: 64,          // Lua 5.3.5
+  perl: 85,         // Perl 5.28.1
 };
 
 import { zipSync, strToU8 } from 'fflate';
@@ -83,6 +86,21 @@ function getMultiFilePayload(req: ExecutionRequest): { source_code: string; addi
 export async function executeInCloudRunner(req: ExecutionRequest): Promise<ExecutionResult> {
   const startTime = Date.now();
   const langConfig = getLanguageConfig(req.language);
+
+  if (langConfig.executable === false) {
+    return {
+      status: 'system_error',
+      exitCode: 0,
+      stdout: '',
+      stderr: `This file format (${langConfig.name}) is for data/documentation and cannot be executed as a standalone program.`,
+      executionTimeMs: 0,
+      memoryUsageMb: 0,
+      diagnostics: [],
+      timestamp: new Date().toISOString(),
+      provider: 'cloud_sandbox',
+    };
+  }
+
   const languageId = JUDGE0_LANGUAGE_IDS[langConfig.id] || JUDGE0_LANGUAGE_IDS['python'];
 
   const payload = getMultiFilePayload(req);
@@ -106,7 +124,7 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
         stdin: req.stdin || '',
         cpu_time_limit: cpuTimeLimit,
         wall_time_limit: wallTimeLimit,
-        memory_limit: (req.memoryLimitMb || EXECUTION_LIMITS.maxMemoryMb) * 1024, // in KB
+        memory_limit: Math.min(EXECUTION_LIMITS.maxMemoryMb, req.memoryLimitMb || EXECUTION_LIMITS.maxMemoryMb) * 1024, // in KB
         max_processes_and_or_threads: EXECUTION_LIMITS.maxProcesses,
         enable_network: false, // Strict network isolation
       }),

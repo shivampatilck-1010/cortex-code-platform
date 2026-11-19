@@ -102,14 +102,20 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedLang = language.toLowerCase().trim();
+    const langConfig = getLanguageConfig(normalizedLang);
+    if (langConfig.executable === false) {
+      return NextResponse.json(
+        { error: `Language "${langConfig.name}" is a documentation or data format and cannot be executed as a standalone program.` },
+        { status: 400 }
+      );
+    }
+
     if (!ALLOWED_LANGUAGES.has(normalizedLang)) {
       return NextResponse.json(
         { error: `Language "${language}" is not supported or prohibited for execution.` },
         { status: 400 }
       );
     }
-
-    const langConfig = getLanguageConfig(normalizedLang);
     
     if (rawFiles.length === 0) {
       return NextResponse.json({ error: 'Project has no files' }, { status: 400 });

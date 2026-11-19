@@ -1,38 +1,99 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { classroomDb } from '@/lib/classroom/db';
 import { User } from '@/lib/classroom/models';
 
+function createErrorRedirect(origin: string, error: string, message: string): NextResponse {
+  const redirectUrl = `${origin}/login?error=${encodeURIComponent(error)}&message=${encodeURIComponent(message)}`;
+  const response = NextResponse.redirect(redirectUrl, 307);
+  response.cookies.delete('google_oauth_state');
+  response.cookies.set('google_oauth_state', '', {
+    path: '/',
+    maxAge: 0,
+    expires: new Date(0),
+  });
+  return response;
+}
+
 export async function GET(req: NextRequest) {
+  const origin = req.nextUrl.origin;
+
   try {
+    // Priority 1: Check credentials configuration
+    const env = (typeof globalThis !== 'undefined' ? (globalThis as any).env : null) || process.env || {};
+    const clientId = (env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
+    const clientSecret = (env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+
+    const isLiveClientId =
+      clientId.length > 20 &&
+      !clientId.toLowerCase().includes('mock_') &&
+      !clientId.toLowerCase().includes('demo') &&
+      !clientId.toLowerCase().includes('placeholder');
+
+    const isLiveClientSecret =
+      clientSecret.length > 20 &&
+      !clientSecret.toLowerCase().includes('mock_') &&
+      !clientSecret.toLowerCase().includes('demo') &&
+      !clientSecret.toLowerCase().includes('placeholder');
+
+    if (!isLiveClientId || !isLiveClientSecret) {
+      return createErrorRedirect(
+        origin,
+        'google_not_configured',
+        'Google OAuth is not configured on this instance.'
+      );
+    }
+
     const { searchParams } = new URL(req.url);
+
+    // Priority 2: Check query params for error (e.g. user cancelled on consent screen)
+    const oauthError = searchParams.get('error');
+    if (oauthError) {
+      const errorDescription =
+        searchParams.get('error_description') || 'Google authentication was cancelled or access denied.';
+      return createErrorRedirect(
+        origin,
+        'google_auth_cancelled',
+        errorDescription
+      );
+    }
+
+    // Priority 3: Check for missing code or state
     const code = searchParams.get('code');
     const state = searchParams.get('state');
 
     if (!code || !state) {
-      return NextResponse.json({ error: 'Missing code or state parameter' }, { status: 400 });
+      return createErrorRedirect(
+        origin,
+        'google_missing_parameters',
+        'Missing authorization code or state parameter.'
+      );
     }
 
+    // Priority 4: Timing-safe CSRF state validation
     const expectedState = req.cookies.get('google_oauth_state')?.value;
-    if (!expectedState || state !== expectedState) {
-      return NextResponse.json(
-        { error: 'Invalid Google OAuth state (CSRF / Replay protection trigger)' },
-        { status: 400 }
+    if (!expectedState) {
+      return createErrorRedirect(
+        origin,
+        'google_invalid_state',
+        'Invalid or expired OAuth state.'
       );
     }
 
-    const env = (typeof globalThis !== 'undefined' ? (globalThis as any).env : null) || process.env || {};
-    const clientId = env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+    const stateHash = crypto.createHash('sha256').update(state).digest();
+    const expectedHash = crypto.createHash('sha256').update(expectedState).digest();
+    const isStateValid = crypto.timingSafeEqual(stateHash, expectedHash);
 
-    if (!clientId || !clientSecret || clientId === 'mock_google_client_id' || clientId.includes('demo')) {
-      return NextResponse.json(
-        { error: 'Google OAuth is not configured on this server.' },
-        { status: 503 }
+    if (!isStateValid) {
+      return createErrorRedirect(
+        origin,
+        'google_invalid_state',
+        'Invalid or expired OAuth state.'
       );
     }
 
-    const redirectUri = `${req.nextUrl.origin}/api/v1/auth/google/callback`;
+    const redirectUri = `${origin}/api/v1/auth/google/callback`;
 
     // 1. Exchange authorization code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -49,9 +110,10 @@ export async function GET(req: NextRequest) {
 
     const tokenData = (await tokenRes.json()) as any;
     if (!tokenRes.ok || tokenData.error) {
-      return NextResponse.json(
-        { error: tokenData.error_description || tokenData.error || 'Google token exchange failed' },
-        { status: 400 }
+      return createErrorRedirect(
+        origin,
+        'google_auth_failed',
+        tokenData.error_description || tokenData.error || 'Google token exchange failed'
       );
     }
 
@@ -65,7 +127,20 @@ export async function GET(req: NextRequest) {
 
     const userData = (await userRes.json()) as any;
     if (!userRes.ok || !userData.email) {
-      return NextResponse.json({ error: 'Failed to retrieve Google user profile' }, { status: 400 });
+      return createErrorRedirect(
+        origin,
+        'google_auth_failed',
+        'Failed to retrieve Google user profile.'
+      );
+    }
+
+    // Priority 6: Safe account linking & status check
+    if (userData.email_verified !== true && userData.email_verified !== 'true') {
+      return createErrorRedirect(
+        origin,
+        'email_not_verified',
+        'Google account email is not verified.'
+      );
     }
 
     const googleProfile = {
@@ -75,9 +150,23 @@ export async function GET(req: NextRequest) {
       picture: userData.picture,
     };
 
-    // 3. User lookup or auto-provisioning in D1
+    // 3. User lookup or safe account linking / auto-provisioning
     let user: User | null = await classroomDb.getUserByEmail(googleProfile.email);
-    if (!user) {
+
+    if (user) {
+      if (user.status === 'suspended') {
+        return createErrorRedirect(
+          origin,
+          'account_suspended',
+          'This account has been suspended.'
+        );
+      }
+
+      // Safely link existing user account: preserve password hash and role
+      if (!user.avatar && googleProfile.picture) {
+        user.avatar = googleProfile.picture;
+      }
+    } else {
       // Auto-provision new student account
       const newUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const randomCortexId = `CX-G${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -106,7 +195,7 @@ export async function GET(req: NextRequest) {
       name: user.name,
       email: user.email,
       role: user.role,
-      cortexId: user.cortex_id,
+      cortexId: user.cortex_id || user.cortexId,
       avatar: user.avatar,
     });
 
@@ -149,12 +238,23 @@ export async function GET(req: NextRequest) {
       expires: new Date(expiresAt),
     });
 
-    // Clear state cookie
+    // Priority 5: Deterministic cookie cleanup on success
     response.cookies.delete('google_oauth_state');
+    response.cookies.set('google_oauth_state', '', {
+      path: '/',
+      maxAge: 0,
+      expires: new Date(0),
+    });
 
     return response;
   } catch (err: any) {
+    // Priority 7: Robust error handling - NEVER raw 500 or 503 JSON
     console.error('[Google OAuth] Callback error:', err);
-    return NextResponse.json({ error: 'Google authentication processing failed' }, { status: 500 });
+    return createErrorRedirect(
+      origin,
+      'google_auth_failed',
+      err?.message || 'Authentication failed'
+    );
   }
 }
+

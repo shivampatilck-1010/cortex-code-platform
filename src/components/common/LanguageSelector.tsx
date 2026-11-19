@@ -31,6 +31,11 @@ const GROUP_DEFINITIONS: Array<{ id: string; name: string; matchIds: string[] }>
     matchIds: ['c', 'go', 'rust', 'swift'],
   },
   {
+    id: 'scripting',
+    name: 'Scripting',
+    matchIds: ['bash', 'lua', 'perl'],
+  },
+  {
     id: 'web',
     name: 'Web',
     matchIds: ['php', 'dart'],
@@ -44,6 +49,11 @@ const GROUP_DEFINITIONS: Array<{ id: string; name: string; matchIds: string[] }>
     id: 'data',
     name: 'Data & Query',
     matchIds: ['sql', 'r'],
+  },
+  {
+    id: 'markup',
+    name: 'Data & Markup',
+    matchIds: ['json', 'yaml', 'xml', 'markdown'],
   },
 ];
 

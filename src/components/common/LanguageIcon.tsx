@@ -372,6 +372,152 @@ export const LanguageIcon: React.FC<LanguageIconProps> = ({
         </svg>
       );
 
+    // 17. Bash / Shell (Terminal Prompt)
+    case 'bash':
+    case 'sh':
+    case 'shell':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 128 128"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={`flex-shrink-0 ${className}`}
+        >
+          <rect width="128" height="128" rx="16" fill="#293138" />
+          <path
+            d="M32 44L56 64L32 84M64 84H96"
+            stroke="#4EAA25"
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+
+    // 18. Lua (Official Blue Orbiting Moon)
+    case 'lua':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 128 128"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={`flex-shrink-0 ${className}`}
+        >
+          <circle cx="64" cy="64" r="48" fill="#000080" />
+          <circle cx="76" cy="52" r="16" fill="#FFFFFF" />
+          <circle cx="98" cy="30" r="8" fill="#000080" />
+        </svg>
+      );
+
+    // 19. Perl (Blue Badge with P)
+    case 'perl':
+    case 'pl':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 128 128"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={`flex-shrink-0 ${className}`}
+        >
+          <rect width="128" height="128" rx="16" fill="#39457E" />
+          <path
+            d="M40 36H72C84 36 92 44 92 56C92 68 84 76 72 76H56V96H40V36ZM56 50V62H70C76 62 78 58 78 56C78 54 76 50 70 50H56Z"
+            fill="#FFFFFF"
+          />
+        </svg>
+      );
+
+    // 20. JSON (Curly Brackets)
+    case 'json':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 128 128"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={`flex-shrink-0 ${className}`}
+        >
+          <rect width="128" height="128" rx="16" fill="#02569B" />
+          <path
+            d="M48 38C40 38 36 42 36 50V56C36 60 32 64 28 64C32 64 36 68 36 72V78C36 86 40 90 48 90M80 38C88 38 92 42 92 50V56C92 60 96 64 100 64C96 64 92 68 92 72V78C92 86 88 90 80 90"
+            stroke="#F59E0B"
+            strokeWidth="8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+
+    // 21. YAML (Red Document/Structure)
+    case 'yaml':
+    case 'yml':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 128 128"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={`flex-shrink-0 ${className}`}
+        >
+          <rect width="128" height="128" rx="16" fill="#CB171E" />
+          <path
+            d="M34 40L54 70V92H64V70L84 40H72L59 62L46 40H34Z"
+            fill="#FFFFFF"
+          />
+        </svg>
+      );
+
+    // 22. XML / SVG (Markup Tags)
+    case 'xml':
+    case 'svg':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 128 128"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={`flex-shrink-0 ${className}`}
+        >
+          <rect width="128" height="128" rx="16" fill="#0060A0" />
+          <path
+            d="M44 44L28 64L44 84M84 44L100 64L84 84M72 38L56 90"
+            stroke="#FFFFFF"
+            strokeWidth="8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+
+    // 23. Markdown (Official M with Arrow)
+    case 'markdown':
+    case 'md':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 128 128"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={`flex-shrink-0 ${className}`}
+        >
+          <rect width="128" height="128" rx="16" fill="#083FA1" />
+          <path
+            d="M26 84V44H38L50 60L62 44H74V84H62V60L50 76L38 60V84H26ZM86 64H96V44H106V64H116L101 84L86 64Z"
+            fill="#FFFFFF"
+          />
+        </svg>
+      );
+
     default:
       return (
         <svg

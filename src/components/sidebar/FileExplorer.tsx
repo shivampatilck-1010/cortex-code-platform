@@ -20,6 +20,7 @@ import {
 import { ProjectFile } from '@/lib/execution/types';
 import { LanguageIcon } from '@/components/common/LanguageIcon';
 import { LanguageConfig } from '@/config/languages';
+import { detectLanguageFromFilename } from '@/lib/editor/language-detector';
 
 interface FileExplorerProps {
   files: ProjectFile[];
@@ -30,6 +31,8 @@ interface FileExplorerProps {
   onRenameFile: (id: string, newName: string) => void;
   onExportProject: () => void;
   onImportProject?: (file: File) => void;
+  onUploadFiles?: (files: FileList | File[]) => void;
+  onDownloadFile?: (file: ProjectFile) => void;
   isDarkMode?: boolean;
   width?: number;
   currentLanguage?: LanguageConfig;
@@ -46,6 +49,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onRenameFile,
   onExportProject,
   onImportProject,
+  onUploadFiles,
+  onDownloadFile,
   isDarkMode = true,
   width,
   currentLanguage,
@@ -53,6 +58,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   hasActiveError = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [isCreating, setIsCreating] = useState<{
@@ -156,12 +162,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   };
 
   const renderFileIcon = (fileName: string, isActive: boolean) => {
-    const parts = fileName.split('.');
-    const ext = parts.length > 1 ? parts.pop()?.toLowerCase() : '';
-    const knownExts = ['py', 'cpp', 'c', 'h', 'hpp', 'java', 'js', 'jsx', 'ts', 'tsx', 'rs', 'go', 'rb', 'php', 'swift', 'kt', 'cs', 'r', 'sql', 'sh', 'bash'];
-    if (ext && knownExts.includes(ext)) {
-      const langKey = ext === 'jsx' ? 'js' : ext === 'tsx' ? 'ts' : ext === 'hpp' || ext === 'h' ? 'cpp' : ext;
-      return <LanguageIcon languageId={langKey} size={14} className="flex-shrink-0" />;
+    const detected = detectLanguageFromFilename(fileName);
+    if (detected) {
+      return <LanguageIcon languageId={detected} size={14} className="flex-shrink-0" />;
     }
     return <FileCode className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-[#ff9100]' : 'text-gray-400'}`} />;
   };
@@ -286,6 +289,18 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   <FolderPlus className="w-3 h-3" />
                 </button>
               </>
+            )}
+            {!isFolder && onDownloadFile && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownloadFile(file);
+                }}
+                className="p-1 hover:bg-[#252830] rounded text-gray-400 hover:text-emerald-400 transition"
+                title={`Download ${file.name}`}
+              >
+                <Download className="w-3 h-3" />
+              </button>
             )}
             <button
               onClick={(e) => {
@@ -425,16 +440,20 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             className={`p-1 rounded transition cursor-pointer ${
               isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900'
             }`}
-            title="Import Project (ZIP)"
+            title="Upload Files or ZIP"
           >
             <Upload className="w-3.5 h-3.5" />
             <input 
               type="file" 
-              accept=".zip" 
+              multiple
               className="hidden" 
               onChange={(e) => {
-                if (e.target.files?.[0] && onImportProject) {
-                  onImportProject(e.target.files[0]);
+                if (e.target.files && e.target.files.length > 0) {
+                  if (onUploadFiles) {
+                    onUploadFiles(e.target.files);
+                  } else if (onImportProject && e.target.files[0].name.endsWith('.zip')) {
+                    onImportProject(e.target.files[0]);
+                  }
                 }
                 e.target.value = ''; // Reset
               }} 
@@ -474,13 +493,50 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
       {/* File Tree List */}
       <div 
-        className="flex-1 overflow-y-auto p-1.5 space-y-0.5 scrollbar-thin scrollbar-thumb-[#252830] scrollbar-track-transparent"
+        className={`flex-1 overflow-y-auto p-1.5 space-y-0.5 scrollbar-thin scrollbar-thumb-[#252830] scrollbar-track-transparent relative transition-colors ${
+          isDraggingOver ? (isDarkMode ? 'bg-[#181920] ring-2 ring-inset ring-[#ff9100]/60' : 'bg-amber-50/50 ring-2 ring-inset ring-[#ff9100]/60') : ''
+        }`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingOver(true);
+        }}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setIsDraggingOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingOver(false);
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            if (onUploadFiles) {
+              onUploadFiles(e.dataTransfer.files);
+            } else if (onImportProject && e.dataTransfer.files[0].name.endsWith('.zip')) {
+              onImportProject(e.dataTransfer.files[0]);
+            }
+          }
+        }}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
             setSelectedFolderId(null);
           }
         }}
       >
+        {isDraggingOver && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/75 backdrop-blur-[2px] pointer-events-none p-4 text-center">
+            <Upload className="w-6 h-6 text-[#ff9100] animate-bounce mb-2" />
+            <span className="text-xs font-semibold text-white font-mono">Drop files or ZIP to upload</span>
+            <span className="text-[10px] text-gray-400 mt-1">Preserves directory structure</span>
+          </div>
+        )}
         {/* Creating new file at root level */}
         {isCreating && !isCreating.parentFolderId && (
           <div className={`flex items-center space-x-1.5 px-2 py-1.5 rounded border border-[#ff9100]/60 ${

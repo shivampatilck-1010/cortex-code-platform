@@ -143,6 +143,31 @@ class ProjectDatabase {
           updated_at INTEGER NOT NULL,
           FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS project_file_versions (
+        id TEXT PRIMARY KEY,
+        file_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        version_number INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (file_id) REFERENCES project_files(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_file_versions ON project_file_versions(file_id, version_number DESC);
+
+      CREATE TABLE IF NOT EXISTS sql_query_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        query TEXT NOT NULL,
+        dialect TEXT NOT NULL DEFAULT 'sqlite',
+        row_count INTEGER NOT NULL DEFAULT 0,
+        execution_time_ms INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sql_query_history ON sql_query_history(project_id, created_at DESC);
     `);
   }
 
@@ -310,6 +335,117 @@ class ProjectDatabase {
   async deleteProjectGitHubLink(projectId: string) {
     if (!(await this.getDb())) return;
     await (await this.getDb()).prepare('DELETE FROM project_github_links WHERE project_id = ?').run(projectId);
+  }
+
+  // --- File Versions ---
+  async createFileVersion(fileId: string, projectId: string, content: string): Promise<any> {
+    if (!(await this.getDb())) return null;
+    const now = Date.now();
+    const maxRow = await (await this.getDb()).prepare(
+      'SELECT MAX(version_number) as max_v FROM project_file_versions WHERE file_id = ?'
+    ).get(fileId) as { max_v: number | null } | null;
+    const nextVersion = (maxRow?.max_v || 0) + 1;
+    const versionId = `ver_${fileId}_${nextVersion}_${now}`;
+
+    await (await this.getDb()).prepare(`
+      INSERT INTO project_file_versions (id, file_id, project_id, version_number, content, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(versionId, fileId, projectId, nextVersion, content, now);
+
+    try {
+      const allVers = await (await this.getDb()).prepare(
+        'SELECT id FROM project_file_versions WHERE file_id = ? ORDER BY version_number DESC'
+      ).all(fileId) as Array<{ id: string }>;
+      if (allVers.length > 20) {
+        const toDelete = allVers.slice(20);
+        for (const v of toDelete) {
+          await (await this.getDb()).prepare('DELETE FROM project_file_versions WHERE id = ?').run(v.id);
+        }
+      }
+    } catch (e) {
+      console.warn('[ProjectDb] Version pruning warning:', e);
+    }
+
+    return {
+      id: versionId,
+      fileId,
+      projectId,
+      versionNumber: nextVersion,
+      content,
+      createdAt: now,
+    };
+  }
+
+  async listFileVersions(fileId: string): Promise<any[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare(
+      'SELECT id, file_id, project_id, version_number, created_at, LENGTH(content) as content_length FROM project_file_versions WHERE file_id = ? ORDER BY version_number DESC'
+    ).all(fileId) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      fileId: r.file_id,
+      projectId: r.project_id,
+      versionNumber: r.version_number,
+      createdAt: r.created_at,
+      contentLength: r.content_length,
+    }));
+  }
+
+  async getFileVersion(versionId: string): Promise<any | null> {
+    if (!(await this.getDb())) return null;
+    const row = await (await this.getDb()).prepare(
+      'SELECT * FROM project_file_versions WHERE id = ?'
+    ).get(versionId) as any;
+    if (!row) return null;
+    return {
+      id: row.id,
+      fileId: row.file_id,
+      projectId: row.project_id,
+      versionNumber: row.version_number,
+      content: row.content,
+      createdAt: row.created_at,
+    };
+  }
+
+  async restoreFileVersion(fileId: string, versionId: string): Promise<ProjectFile | null> {
+    if (!(await this.getDb())) return null;
+    const ver = await this.getFileVersion(versionId);
+    if (!ver || ver.fileId !== fileId) return null;
+
+    const existing = await this.getFile(fileId);
+    if (existing && existing.content !== ver.content) {
+      await this.createFileVersion(fileId, existing.projectId, existing.content);
+    }
+
+    return await this.updateFile(fileId, { content: ver.content });
+  }
+
+  // --- SQL History ---
+  async logSqlQuery(userId: string, projectId: string, query: string, dialect: string, rowCount: number, executionTimeMs: number): Promise<void> {
+    if (!(await this.getDb())) return;
+    const now = Date.now();
+    const id = `sqlh_${now}_${Math.random().toString(36).substring(2, 7)}`;
+    await (await this.getDb()).prepare(`
+      INSERT INTO sql_query_history (id, user_id, project_id, query, dialect, row_count, execution_time_ms, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, projectId, query, dialect, rowCount, executionTimeMs, now);
+  }
+
+  async listSqlQueryHistory(projectId: string, limit: number = 50): Promise<any[]> {
+    if (!(await this.getDb())) return [];
+    const rows = await (await this.getDb()).prepare(
+      'SELECT * FROM sql_query_history WHERE project_id = ? ORDER BY created_at DESC LIMIT ?'
+    ).all(projectId, limit) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      projectId: r.project_id,
+      query: r.query,
+      dialect: r.dialect,
+      rowCount: r.row_count,
+      executionTimeMs: r.execution_time_ms,
+      createdAt: r.created_at,
+    }));
   }
 
 

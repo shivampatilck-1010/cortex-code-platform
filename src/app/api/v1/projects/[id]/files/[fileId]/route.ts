@@ -32,6 +32,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const body = await req.json();
+
+    // Conflict detection
+    if (body.expectedUpdatedAt && typeof body.expectedUpdatedAt === 'number' && file.updatedAt > body.expectedUpdatedAt) {
+      return NextResponse.json(
+        {
+          error: 'CONFLICT',
+          message: 'File has been modified on the server since your last fetch.',
+          serverUpdatedAt: file.updatedAt,
+        },
+        { status: 409 }
+      );
+    }
     
     // Disallow path traversal on updates too
     if (body.path) {
@@ -39,6 +51,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         body.path = sanitizePath(body.path);
       } catch (e) {
         return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+      }
+    }
+
+    // Automatically snapshot version if content has changed
+    if (typeof body.content === 'string' && body.content !== file.content) {
+      try {
+        await projectDb.createFileVersion(fileId, projectId, file.content);
+      } catch (vErr) {
+        console.warn('[FileVersion] Snapshot error:', vErr);
       }
     }
 

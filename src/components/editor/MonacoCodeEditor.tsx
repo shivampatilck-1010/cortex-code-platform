@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import Editor, { OnMount, Monaco } from '@monaco-editor/react';
-import { X, Plus, FileCode, Sun, Moon, Maximize2, Minimize2, Sparkles } from 'lucide-react';
+import { X, Plus, FileCode, Sun, Moon, Maximize2, Minimize2, Sparkles, Check, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
 import { ProjectFile, DiagnosticError } from '@/lib/execution/types';
 import { AIFixResult, fetchInlineSuggestion } from '@/lib/ai/assistant';
 import { registerMonacoSnippets } from '@/lib/editor/snippets';
@@ -42,6 +42,8 @@ interface MonacoCodeEditorProps {
   enableInlineSuggestions?: boolean;
   onToggleInlineSuggestions?: () => void;
   onEditorMount?: (editor: any, monaco: any) => void;
+  saveStatus?: 'saved' | 'saving' | 'error' | 'conflict';
+  onForceSave?: () => void;
 }
 
 export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
@@ -77,6 +79,8 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   enableInlineSuggestions = false,
   onToggleInlineSuggestions,
   onEditorMount,
+  saveStatus = 'saved',
+  onForceSave,
 }) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -458,7 +462,51 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         </div>
 
         {/* Action Controls for Just this Editor Part */}
-        <div className="flex items-center space-x-1 pr-2.5">
+        <div className="flex items-center space-x-1.5 pr-2.5">
+          {/* Cloud Auto-Save Status Badge */}
+          <div
+            onClick={onForceSave}
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono transition cursor-pointer select-none border ${
+              saveStatus === 'saving'
+                ? 'bg-amber-950/20 text-amber-300 border-amber-800/30'
+                : saveStatus === 'conflict'
+                ? 'bg-red-950/30 text-rose-300 border-rose-800/40 hover:bg-red-950/50'
+                : saveStatus === 'error'
+                ? 'bg-red-950/30 text-rose-400 border-rose-800/40 hover:bg-red-950/50'
+                : 'bg-emerald-950/15 text-emerald-400/90 border-emerald-900/20'
+            }`}
+            title={
+              saveStatus === 'saving'
+                ? 'Saving changes to cloud...'
+                : saveStatus === 'conflict'
+                ? 'Conflict detected: Server has newer changes. Click to retry/force save.'
+                : saveStatus === 'error'
+                ? 'Save failed. Click or press Ctrl+S to retry.'
+                : 'All changes saved to cloud (Ctrl+S to save immediately)'
+            }
+          >
+            {saveStatus === 'saving' ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                <span className="hidden sm:inline">Saving...</span>
+              </>
+            ) : saveStatus === 'conflict' ? (
+              <>
+                <AlertTriangle className="w-3 h-3 text-rose-400" />
+                <span className="hidden sm:inline">Conflict</span>
+              </>
+            ) : saveStatus === 'error' ? (
+              <>
+                <AlertCircle className="w-3 h-3 text-rose-400" />
+                <span className="hidden sm:inline">Save Failed</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span className="hidden sm:inline">Saved</span>
+              </>
+            )}
+          </div>
           {/* Inline Suggestions Toggle Indicator */}
           {onToggleInlineSuggestions && (
             <button

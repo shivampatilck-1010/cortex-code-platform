@@ -45,6 +45,32 @@ import {
   AIAnalysisResult 
 } from '@/lib/ai/assistant';
 import { CollaborationBroker, Collaborator } from '@/lib/collaboration/broker';
+import { detectLanguage, detectLanguageFromFilename, getMonacoLanguage } from '@/lib/editor/language-detector';
+
+function formatSqlResultsToAsciiTable(columns: string[], rows: any[][]): string {
+  if (!columns || columns.length === 0) return 'Query executed successfully with 0 columns returned.\n';
+  
+  const colWidths = columns.map((col, idx) => {
+    let max = col.length;
+    for (const r of rows) {
+      const valStr = r[idx] === null || r[idx] === undefined ? 'NULL' : String(r[idx]);
+      if (valStr.length > max) max = valStr.length;
+    }
+    return Math.min(Math.max(max, 3), 40);
+  });
+
+  const sepLine = '+' + colWidths.map(w => '-'.repeat(w + 2)).join('+') + '+';
+  const headerLine = '| ' + columns.map((col, idx) => col.padEnd(colWidths[idx])).join(' | ') + ' |';
+
+  const rowLines = rows.map(r => {
+    return '| ' + r.map((cell, idx) => {
+      const valStr = cell === null || cell === undefined ? 'NULL' : String(cell);
+      return valStr.slice(0, 40).padEnd(colWidths[idx]);
+    }).join(' | ') + ' |';
+  });
+
+  return [sepLine, headerLine, sepLine, ...rowLines, sepLine].join('\n') + `\n\n(${rows.length} ${rows.length === 1 ? 'row' : 'rows'} in set)\n`;
+}
 
 const getStarterContentForFile = (filename: string, langConfig: LanguageConfig): string => {
   const ext = filename.split('.').pop()?.toLowerCase();
@@ -92,52 +118,28 @@ const getStarterContentForFile = (filename: string, langConfig: LanguageConfig):
       return `-- SQL Query\n\n`;
     case 'md':
       return `# ${baseName}\n\n`;
+    case 'sh':
+    case 'bash':
+      return `#!/bin/bash\n# Bash script\n\n`;
+    case 'lua':
+      return `-- Lua module\n\n`;
+    case 'pl':
+    case 'pm':
+      return `#!/usr/bin/perl\n# Perl script\nuse strict;\nuse warnings;\n\n`;
+    case 'yaml':
+    case 'yml':
+      return `# YAML configuration\n`;
+    case 'xml':
+    case 'svg':
+      return `<?xml version="1.0" encoding="UTF-8"?>\n`;
     default:
-      return '';
+      return langConfig.starterCode || '';
   }
 };
 
 const getMonacoLangForFile = (filename: string, defaultMonacoLang: string): string => {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const map: Record<string, string> = {
-    py: 'python',
-    cpp: 'cpp',
-    cc: 'cpp',
-    cxx: 'cpp',
-    hpp: 'cpp',
-    h: 'cpp',
-    c: 'c',
-    java: 'java',
-    js: 'javascript',
-    jsx: 'javascript',
-    mjs: 'javascript',
-    ts: 'typescript',
-    tsx: 'typescript',
-    rs: 'rust',
-    go: 'go',
-    cs: 'csharp',
-    php: 'php',
-    rb: 'ruby',
-    kt: 'kotlin',
-    kts: 'kotlin',
-    swift: 'swift',
-    r: 'r',
-    dart: 'dart',
-    sql: 'sql',
-    html: 'html',
-    htm: 'html',
-    css: 'css',
-    scss: 'scss',
-    json: 'json',
-    md: 'markdown',
-    markdown: 'markdown',
-    sh: 'shell',
-    bash: 'shell',
-    xml: 'xml',
-    yaml: 'yaml',
-    yml: 'yaml',
-  };
-  return (ext && map[ext]) ? map[ext] : defaultMonacoLang;
+  const detected = getMonacoLanguage(filename);
+  return (detected && detected !== 'plaintext') ? detected : (getMonacoLanguage(defaultMonacoLang) || defaultMonacoLang);
 };
 
 class IdeErrorBoundary extends React.Component<
@@ -213,8 +215,16 @@ function CloudIDEPageInner() {
               setProjectId(data.project.id);
               if (Array.isArray(data.files) && data.files.length > 0) {
                  setFiles(data.files);
+                 data.files.forEach((f: any) => {
+                   if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
+                 });
                  const main = data.files.find((f: any) => !f.isFolder) || data.files[0];
-                 if (main) setActiveFileId(main.id);
+                 if (main) {
+                   setActiveFileId(main.id);
+                   const detected = detectLanguage(main.name, main.content, undefined, data.project?.language);
+                   const conf = getLanguageConfig(detected);
+                   if (conf) setCurrentLang(conf);
+                 }
               }
               const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
               if (targetLang) setCurrentLang(targetLang);
@@ -273,6 +283,20 @@ function CloudIDEPageInner() {
     },
   ]);
   const [activeFileId, setActiveFileId] = useState('main');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'conflict'>('saved');
+  const [fileLanguageOverrides, setFileLanguageOverrides] = useState<Record<string, string>>({});
+  const lastFetchTimestampRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cortex_file_language_overrides');
+        if (stored) {
+          setFileLanguageOverrides(JSON.parse(stored));
+        }
+      } catch {}
+    }
+  }, []);
 
   // 2. Execution & Diagnostics State
   const [isRunning, setIsRunning] = useState(false);
@@ -480,6 +504,64 @@ function CloudIDEPageInner() {
   // Auto-Save / Content Update
   const saveFileRef = useRef<NodeJS.Timeout | null>(null);
 
+  const handleForceSave = useCallback(async () => {
+    if (!projectId || !activeFileId) return;
+    if (saveFileRef.current) clearTimeout(saveFileRef.current);
+    setSaveStatus('saving');
+    try {
+      const curFile = files.find(f => f.id === activeFileId);
+      const res = await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: curFile?.content || '',
+          expectedUpdatedAt: lastFetchTimestampRef.current[activeFileId],
+        }),
+      });
+      if (res.status === 409) {
+        setSaveStatus('conflict');
+      } else if (res.ok) {
+        const data = await res.json();
+        if (data.file?.updatedAt) {
+          lastFetchTimestampRef.current[activeFileId] = data.file.updatedAt;
+        }
+        setSaveStatus('saved');
+      } else {
+        setSaveStatus('error');
+      }
+    } catch {
+      setSaveStatus('error');
+    }
+  }, [projectId, activeFileId, files]);
+
+  useEffect(() => {
+    const handleSaveShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleForceSave();
+      }
+    };
+    window.addEventListener('keydown', handleSaveShortcut);
+    return () => window.removeEventListener('keydown', handleSaveShortcut);
+  }, [handleForceSave]);
+
+  const handleSelectFile = (fileId: string) => {
+    setActiveFileId(fileId);
+    const selected = files.find(f => f.id === fileId);
+    if (selected && !selected.isFolder) {
+      const detected = detectLanguage(
+        selected.name,
+        selected.content,
+        fileLanguageOverrides[selected.id],
+        currentLang.id
+      );
+      const conf = getLanguageConfig(detected);
+      if (conf) {
+        setCurrentLang(conf);
+      }
+    }
+  };
+
   const handleContentChange = (newContent: string) => {
     setFiles((prev) =>
       prev.map((f) => (f.id === activeFileId ? { ...f, content: newContent } : f))
@@ -490,73 +572,51 @@ function CloudIDEPageInner() {
     
     // Auto-save
     if (projectId && activeFileId) {
+       setSaveStatus('saving');
        if (saveFileRef.current) clearTimeout(saveFileRef.current);
-       saveFileRef.current = setTimeout(() => {
-          fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
-             method: 'PATCH',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ content: newContent })
-          }).catch(console.error);
+       saveFileRef.current = setTimeout(async () => {
+          try {
+            const res = await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
+               method: 'PATCH',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({
+                 content: newContent,
+                 expectedUpdatedAt: lastFetchTimestampRef.current[activeFileId],
+               })
+            });
+            if (res.status === 409) {
+              setSaveStatus('conflict');
+            } else if (res.ok) {
+              const data = await res.json();
+              if (data.file?.updatedAt) {
+                lastFetchTimestampRef.current[activeFileId] = data.file.updatedAt;
+              }
+              setSaveStatus('saved');
+            } else {
+              setSaveStatus('error');
+            }
+          } catch {
+            setSaveStatus('error');
+          }
        }, 800);
     }
   };
 
-  // Language Change Handler: Preserves user code without silent incompatible renaming
+  // Language Change Handler: Preserves user code and saves manual override in local state
   const handleLanguageChange = (newLang: LanguageConfig) => {
-    const oldLang = currentLang;
-    if (newLang.id === oldLang.id) return;
+    if (newLang.id === currentLang.id) return;
+
+    if (activeFileId) {
+      setFileLanguageOverrides((prev) => {
+        const updated = { ...prev, [activeFileId]: newLang.id };
+        try {
+          localStorage.setItem('cortex_file_language_overrides', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
 
     setCurrentLang(newLang);
-
-    let targetFileId = activeFileId;
-
-    setFiles((prevFiles) => {
-      const currentActive = prevFiles.find((f) => f.id === activeFileId) || prevFiles[0];
-
-      // Check if current active file has untouched starter code
-      const isUntouchedStarter = currentActive && (
-        currentActive.content === oldLang.starterCode ||
-        currentActive.content.trim() === ''
-      );
-
-      // Check if a file for the new language already exists in the project
-      const existingNewFile = prevFiles.find(
-        (f) => !f.isFolder && (f.name === newLang.defaultFileName || f.name.endsWith(newLang.fileExtension))
-      );
-
-      if (isUntouchedStarter && !existingNewFile) {
-        // Safe to transition the untouched starter file to the new language template
-        targetFileId = currentActive.id;
-        return prevFiles.map((f) => {
-          if (f.id !== currentActive.id) return f;
-          return {
-            ...f,
-            name: newLang.defaultFileName,
-            path: `/${newLang.defaultFileName}`,
-            content: newLang.starterCode,
-          };
-        });
-      } else if (existingNewFile) {
-        // A file for the new language already exists; preserve all files and switch active file to it
-        targetFileId = existingNewFile.id;
-        return prevFiles;
-      } else {
-        // The user authored custom code in the previous language.
-        // PRESERVE the previous file completely (do not rename or overwrite it).
-        // Create a new dedicated file for the new language with its starter code.
-        const newFileId = `file_${newLang.id}_${Date.now()}`;
-        targetFileId = newFileId;
-        const newFile: ProjectFile = {
-          id: newFileId,
-          name: newLang.defaultFileName,
-          path: `/${newLang.defaultFileName}`,
-          content: newLang.starterCode,
-        };
-        return [...prevFiles, newFile];
-      }
-    });
-
-    setActiveFileId(targetFileId);
     setExecutionResult(null);
     setTraceSession(null);
     if (newLang.id === 'html' || newLang.id === 'css') {
@@ -664,9 +724,104 @@ function CloudIDEPageInner() {
 
   // Code Execution Handler
   const handleRun = async () => {
+    if (currentLang.executable === false) {
+      setActiveBottomTab('output');
+      setIsBottomCollapsed(false);
+      setExecutionResult({
+        status: 'system_error',
+        exitCode: 0,
+        stdout: `[Cortex IDE] File: ${activeFile?.name || 'file'}\nFormat: ${currentLang.name} (${currentLang.fileExtension})\n\nLanguage "${currentLang.name}" is a documentation or data format and cannot be executed as a standalone program.\nMonaco syntax highlighting and formatting are active.`,
+        stderr: `Language "${currentLang.name}" is a documentation or data format and cannot be executed as a standalone program.`,
+        executionTimeMs: 0,
+        memoryUsageMb: 0,
+        diagnostics: [],
+        timestamp: new Date().toISOString(),
+        provider: 'cloud_sandbox',
+      });
+      return;
+    }
+
     if (currentLang.id === 'html' || currentLang.id === 'css') {
       setActiveBottomTab('preview');
       setIsBottomCollapsed(false);
+      return;
+    }
+
+    if (currentLang.id === 'sql') {
+      setIsRunning(true);
+      setActiveBottomTab('output');
+      setIsBottomCollapsed(false);
+      try {
+        await handleForceSave();
+        const res = await fetch('/api/v1/sql/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: projectId || 'demo_sql_project',
+            query: activeFile.content,
+            dialect: 'sqlite',
+          }),
+        });
+        const data = await res.json();
+        if (data.result) {
+          const { columns, rows, executionTimeMs, error, warning } = data.result;
+          if (error) {
+            setExecutionResult({
+              status: 'runtime_error',
+              exitCode: 1,
+              stdout: '',
+              stderr: error,
+              executionTimeMs,
+              memoryUsageMb: 1,
+              diagnostics: [],
+              timestamp: new Date().toISOString(),
+              provider: 'cloud_sandbox',
+            });
+          } else {
+            let formatted = formatSqlResultsToAsciiTable(columns, rows);
+            if (warning) {
+              formatted = `[Dialect Info] ${warning}\n\n` + formatted;
+            }
+            setExecutionResult({
+              status: 'success',
+              exitCode: 0,
+              stdout: formatted,
+              stderr: '',
+              executionTimeMs,
+              memoryUsageMb: 2,
+              diagnostics: [],
+              timestamp: new Date().toISOString(),
+              provider: 'cloud_sandbox',
+            });
+          }
+        } else {
+          setExecutionResult({
+            status: 'runtime_error',
+            exitCode: 1,
+            stdout: '',
+            stderr: data.error || 'SQL query execution failed',
+            executionTimeMs: 0,
+            memoryUsageMb: 0,
+            diagnostics: [],
+            timestamp: new Date().toISOString(),
+            provider: 'cloud_sandbox',
+          });
+        }
+      } catch (err: any) {
+        setExecutionResult({
+          status: 'runtime_error',
+          exitCode: 1,
+          stdout: '',
+          stderr: err.message || 'SQL execution failed',
+          executionTimeMs: 0,
+          memoryUsageMb: 0,
+          diagnostics: [],
+          timestamp: new Date().toISOString(),
+          provider: 'cloud_sandbox',
+        });
+      } finally {
+        setIsRunning(false);
+      }
       return;
     }
 
@@ -679,7 +834,6 @@ function CloudIDEPageInner() {
         (f) => !f.isFolder && (f.name === currentLang.defaultFileName || f.id === 'main')
       ) || activeFile;
 
-      
       // Force save active file before run
       if (projectId && activeFileId) {
          try {
@@ -704,6 +858,111 @@ function CloudIDEPageInner() {
     } finally {
       setIsRunning(false);
     }
+  };
+
+  const loadProjectFiles = useCallback(async (targetProjectId: string) => {
+    try {
+      const projRes = await fetch(`/api/v1/projects/${targetProjectId}`);
+      if (projRes.ok) {
+        const projData = await projRes.json();
+        if (Array.isArray(projData.files) && projData.files.length > 0) {
+          setFiles(projData.files);
+          projData.files.forEach((f: any) => {
+            if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
+          });
+          return projData.files;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to reload project files:', e);
+    }
+    return null;
+  }, []);
+
+  const handleUploadFiles = async (uploadedFiles: FileList | File[]) => {
+    if (!uploadedFiles || uploadedFiles.length === 0) return;
+
+    if (!projectId) {
+      const newFiles: ProjectFile[] = [];
+      const fileList = Array.from(uploadedFiles);
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        try {
+          const text = await file.text();
+          const relativePath = (file as any).webkitRelativePath || file.name;
+          const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+          const newF: ProjectFile = {
+            id: `f_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            path: cleanPath,
+            content: text,
+            isFolder: false,
+          };
+          newFiles.push(newF);
+        } catch (e) {
+          console.error('Failed to read uploaded file', e);
+        }
+      }
+      if (newFiles.length > 0) {
+        setFiles((prev) => [...prev, ...newFiles]);
+        handleSelectFile(newFiles[0].id);
+      }
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      const fileList = Array.from(uploadedFiles);
+      for (const file of fileList) {
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        formData.append('files', file, relativePath);
+      }
+      const res = await fetch(`/api/v1/projects/${projectId}/files/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        const uploadResult = await res.json().catch(() => ({}));
+        const reloadedFiles = await loadProjectFiles(projectId);
+        if (reloadedFiles && reloadedFiles.length > 0) {
+          const firstUploaded = Array.isArray(uploadResult?.uploadedFiles) && uploadResult.uploadedFiles[0];
+          const target = firstUploaded
+            ? reloadedFiles.find((f: any) => f.path === firstUploaded.path || (f.name === firstUploaded.name && !f.isFolder))
+            : reloadedFiles.find((f: any) => !f.isFolder);
+          if (target) {
+            handleSelectFile(target.id);
+          }
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'File upload failed');
+      }
+    } catch (e: any) {
+      alert(`Upload error: ${e.message}`);
+    }
+  };
+
+  const handleDownloadFile = (file: ProjectFile) => {
+    if (file.isFolder) return;
+
+    if (!projectId) {
+      const blob = new Blob([file.content || ''], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = `/api/v1/projects/${projectId}/files/${file.id}/download`;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   // Apply Fix & Re-Verify
@@ -922,15 +1181,20 @@ function CloudIDEPageInner() {
           <FileExplorer
             width={sidebarWidth}
             files={files}
-          activeFileId={activeFileId}
-          onSelectFile={setActiveFileId}
-          currentLanguage={currentLang}
-          onOpenFeedback={() => setIsFeedbackOpen(true)}
-          hasActiveError={Boolean((executionResult && executionResult.status !== 'success') || executionResult?.stderr?.trim())}
-          onCreateFile={async (name, isFolder, parentFolderId) => {
+            activeFileId={activeFileId}
+            onSelectFile={handleSelectFile}
+            currentLanguage={currentLang}
+            onOpenFeedback={() => setIsFeedbackOpen(true)}
+            hasActiveError={Boolean((executionResult && executionResult.status !== 'success') || executionResult?.stderr?.trim())}
+            onUploadFiles={handleUploadFiles}
+            onDownloadFile={handleDownloadFile}
+            onCreateFile={async (name, isFolder, parentFolderId) => {
             const parent = parentFolderId ? files.find((f) => f.id === parentFolderId) : null;
             const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
-            const initialContent = isFolder ? '' : getStarterContentForFile(name, currentLang);
+            const detectedLangId = detectLanguage(name, '');
+            const detectedLang = getLanguageConfig(detectedLangId);
+            const starter = getStarterContentForFile(name, detectedLang);
+            const initialContent = isFolder ? '' : (starter || detectedLang.starterCode || '');
             const path = parent ? `${parentPath}/${name}` : `/${name}`;
             
             if (projectId) {
@@ -944,9 +1208,27 @@ function CloudIDEPageInner() {
                   const data = await res.json();
                   const newF = data.file;
                   setFiles((prev) => [...prev, newF]);
-                  if (!isFolder) setActiveFileId(newF.id);
+                  if (newF.updatedAt) lastFetchTimestampRef.current[newF.id] = newF.updatedAt;
+                  if (!isFolder) {
+                    setActiveFileId(newF.id);
+                    setCurrentLang(detectedLang);
+                  }
                 }
               } catch (e) { console.error(e); }
+            } else {
+              const newF: ProjectFile = {
+                id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                name,
+                path,
+                content: initialContent,
+                isFolder,
+                parentId: parentFolderId,
+              };
+              setFiles((prev) => [...prev, newF]);
+              if (!isFolder) {
+                setActiveFileId(newF.id);
+                setCurrentLang(detectedLang);
+              }
             }
           }}
           onDeleteFile={async (id) => {
@@ -963,32 +1245,51 @@ function CloudIDEPageInner() {
             setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
             if (toDelete.includes(activeFileId)) {
               const remaining = files.filter((f) => !toDelete.includes(f.id) && !f.isFolder);
-              setActiveFileId(remaining[0]?.id || '');
+              if (remaining[0]) handleSelectFile(remaining[0].id);
+              else setActiveFileId('');
             }
           }}
           onRenameFile={async (id, newName) => {
+            const f = files.find((x) => x.id === id);
+            const parentPath = f ? f.path.substring(0, f.path.lastIndexOf('/')) : '';
+            const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
+
             if (projectId) {
-              const f = files.find(x => x.id === id);
-              if (f) {
-                const parentPath = f.path.substring(0, f.path.lastIndexOf('/'));
-                const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
+              try {
+                await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: newName, path: newPath }),
+                });
+              } catch (e) { console.error(e); }
+            }
+
+            if (id === activeFileId && f && !f.isFolder) {
+              // Clear override so new extension takes effect
+              setFileLanguageOverrides((prev) => {
+                const next = { ...prev };
+                delete next[id];
                 try {
-                  await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: newName, path: newPath })
-                  });
-                } catch(e) { console.error(e); }
+                  localStorage.setItem('cortex_file_language_overrides', JSON.stringify(next));
+                } catch {}
+                return next;
+              });
+
+              // Re-detect language from new filename without explicit override
+              const detected = detectLanguage(newName, f.content, undefined, currentLang.id);
+              const conf = getLanguageConfig(detected);
+              if (conf) {
+                setCurrentLang(conf);
               }
             }
+
             setFiles((prev) =>
-              prev.map((f) => {
-                if (f.id !== id) return f;
-                const parentPath = f.path.substring(0, f.path.lastIndexOf('/'));
+              prev.map((file) => {
+                if (file.id !== id) return file;
                 return {
-                  ...f,
+                  ...file,
                   name: newName,
-                  path: parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`,
+                  path: newPath,
                 };
               })
             );
@@ -1045,7 +1346,9 @@ function CloudIDEPageInner() {
                 <MonacoCodeEditor
                   files={files}
                   activeFileId={activeFileId}
-                  onSelectFile={setActiveFileId}
+                  onSelectFile={handleSelectFile}
+                  saveStatus={saveStatus}
+                  onForceSave={handleForceSave}
                   onCloseFile={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
                   onNewFile={() => {
                     const nonFolders = files.filter((f) => !f.isFolder);
@@ -1060,7 +1363,7 @@ function CloudIDEPageInner() {
                     setActiveFileId(newF.id);
                   }}
                   onContentChange={handleContentChange}
-                  language={getMonacoLangForFile(activeFile?.name || '', currentLang.monacoLang)}
+                  language={getMonacoLanguage(currentLang.id || activeFile?.name || '')}
                   theme={theme}
                   fontSize={fontSize}
                   breakpoints={breakpoints}

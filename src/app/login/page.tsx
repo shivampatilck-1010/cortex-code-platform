@@ -43,13 +43,40 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState<string>('');
   const turnstileRef = useRef<CloudflareTurnstileRef>(null);
 
-  // Check if a code was passed via query params or session
+  // Check if a code or auth error was passed via query params
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const codeParam = new URLSearchParams(window.location.search).get('code');
+      const params = new URLSearchParams(window.location.search);
+      const codeParam = params.get('code');
       if (codeParam) {
         setClassroomCode(codeParam.toUpperCase().trim());
         setActiveTab('classroom');
+      }
+
+      const errorParam = params.get('error');
+      const messageParam = params.get('message');
+      if (errorParam) {
+        let displayMessage = messageParam;
+        if (messageParam) {
+          try {
+            displayMessage = decodeURIComponent(messageParam);
+          } catch {
+            displayMessage = messageParam;
+          }
+        }
+
+        const errorMap: Record<string, string> = {
+          google_not_configured: 'Google OAuth is not configured on this instance.',
+          google_auth_cancelled: 'Google authentication was cancelled or access denied.',
+          google_missing_parameters: 'Missing authorization code or state parameter.',
+          google_invalid_state: 'Invalid or expired OAuth state.',
+          google_csrf_invalid: 'Invalid or expired OAuth state.',
+          email_not_verified: 'Google account email is not verified.',
+          account_suspended: 'This account has been suspended.',
+          google_auth_failed: 'Authentication failed. Please try again.',
+        };
+
+        setError(displayMessage || errorMap[errorParam] || errorParam);
       }
     }
   }, []);

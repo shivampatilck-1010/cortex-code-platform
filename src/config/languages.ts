@@ -11,14 +11,15 @@ export interface LanguageConfig {
   runCommand: string;
   debuggerSupported: boolean;
   packageManager?: string;
-  pistonRuntime: {
+  pistonRuntime?: {
     language: string;
     version: string;
   };
   starterCode: string;
   memoryLimitMb: number;
   timeoutSec: number;
-  category: 'systems' | 'web' | 'scripting' | 'enterprise' | 'data';
+  category: 'systems' | 'web' | 'scripting' | 'enterprise' | 'data' | 'config';
+  executable?: boolean;
 }
 
 export const SUPPORTED_LANGUAGES: LanguageConfig[] = [
@@ -466,6 +467,183 @@ ORDER BY total_projects DESC;
     memoryLimitMb: 128,
     timeoutSec: 8,
     category: 'data',
+    executable: true,
+  },
+  {
+    id: 'bash',
+    name: 'Bash / Shell',
+    version: '5.0+',
+    aliases: ['sh', 'bash', 'shell'],
+    monacoLang: 'shell',
+    fileExtension: '.sh',
+    defaultFileName: 'main.sh',
+    compiler: 'GNU Bash 5.0',
+    runCommand: 'bash main.sh',
+    debuggerSupported: false,
+    pistonRuntime: { language: 'bash', version: '5.2.0' },
+    starterCode: `#!/bin/bash
+# Universal Online Platform - Bash Scripting
+echo "[Cortex] Bash / Shell Execution Sandbox"
+echo "Active environment initialized successfully."
+for item in Stage-1 Stage-2 Stage-3; do
+  echo "Executing: $item"
+done
+`,
+    memoryLimitMb: 128,
+    timeoutSec: 10,
+    category: 'scripting',
+    executable: true,
+  },
+  {
+    id: 'lua',
+    name: 'Lua',
+    version: '5.4+',
+    aliases: ['lua'],
+    monacoLang: 'lua',
+    fileExtension: '.lua',
+    defaultFileName: 'main.lua',
+    compiler: 'Lua 5.4',
+    runCommand: 'lua main.lua',
+    debuggerSupported: false,
+    pistonRuntime: { language: 'lua', version: '5.4.4' },
+    starterCode: `-- Universal Online Platform - Lua 5.4+
+print("[Cortex] Lua High-Efficiency Scripting")
+local features = {"Lightweight", "Fast", "Embeddable"}
+for i, feature in ipairs(features) do
+    print(string.format("Capability %d: %s", i, feature))
+end
+`,
+    memoryLimitMb: 128,
+    timeoutSec: 10,
+    category: 'scripting',
+    executable: true,
+  },
+  {
+    id: 'perl',
+    name: 'Perl',
+    version: '5.38+',
+    aliases: ['pl', 'perl'],
+    monacoLang: 'perl',
+    fileExtension: '.pl',
+    defaultFileName: 'main.pl',
+    compiler: 'Perl 5 (perl)',
+    runCommand: 'perl main.pl',
+    debuggerSupported: false,
+    pistonRuntime: { language: 'perl', version: '5.36.0' },
+    starterCode: `#!/usr/bin/perl
+# Universal Online Platform - Perl 5+
+use strict;
+use warnings;
+
+print "[Cortex] Perl Text Processing & Pattern Matching\\n";
+my @modules = ("Regex Engine", "Data Transform", "Report Pipeline");
+foreach my $mod (@modules) {
+    print "Pipeline: $mod active\\n";
+}
+`,
+    memoryLimitMb: 128,
+    timeoutSec: 10,
+    category: 'scripting',
+    executable: true,
+  },
+  {
+    id: 'json',
+    name: 'JSON',
+    version: 'RFC 8259',
+    aliases: ['json'],
+    monacoLang: 'json',
+    fileExtension: '.json',
+    defaultFileName: 'data.json',
+    compiler: 'JSON Parser',
+    runCommand: '',
+    debuggerSupported: false,
+    starterCode: `{
+  "platform": "Cortex IDE",
+  "version": "1.0.0",
+  "features": [
+    "Multi-language execution",
+    "SQL Practice DB",
+    "Cloud Persistence"
+  ]
+}
+`,
+    memoryLimitMb: 64,
+    timeoutSec: 5,
+    category: 'config',
+    executable: false,
+  },
+  {
+    id: 'yaml',
+    name: 'YAML',
+    version: '1.2',
+    aliases: ['yaml', 'yml'],
+    monacoLang: 'yaml',
+    fileExtension: '.yaml',
+    defaultFileName: 'config.yaml',
+    compiler: 'YAML Parser',
+    runCommand: '',
+    debuggerSupported: false,
+    starterCode: `# Cortex IDE Configuration
+platform: Cortex IDE
+version: 1.0.0
+environment: cloud
+features:
+  - auto-save
+  - dialect-sql
+  - versioning
+`,
+    memoryLimitMb: 64,
+    timeoutSec: 5,
+    category: 'config',
+    executable: false,
+  },
+  {
+    id: 'xml',
+    name: 'XML',
+    version: '1.0',
+    aliases: ['xml'],
+    monacoLang: 'xml',
+    fileExtension: '.xml',
+    defaultFileName: 'data.xml',
+    compiler: 'XML Parser',
+    runCommand: '',
+    debuggerSupported: false,
+    starterCode: `<?xml version="1.0" encoding="UTF-8"?>
+<cortex>
+  <platform name="Cortex IDE">
+    <status>active</status>
+  </platform>
+</cortex>
+`,
+    memoryLimitMb: 64,
+    timeoutSec: 5,
+    category: 'config',
+    executable: false,
+  },
+  {
+    id: 'markdown',
+    name: 'Markdown',
+    version: 'CommonMark',
+    aliases: ['md', 'markdown'],
+    monacoLang: 'markdown',
+    fileExtension: '.md',
+    defaultFileName: 'README.md',
+    compiler: 'Markdown Renderer',
+    runCommand: '',
+    debuggerSupported: false,
+    starterCode: `# Cortex Project
+
+Welcome to your project in Cortex IDE.
+
+## Features
+- 28+ Supported Languages
+- Isolated SQL Sandbox
+- Real-time Collaboration
+`,
+    memoryLimitMb: 64,
+    timeoutSec: 5,
+    category: 'config',
+    executable: false,
   }
 ];
 

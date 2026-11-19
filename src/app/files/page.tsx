@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Clock,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 
@@ -212,9 +213,10 @@ export default function FilesPage() {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2.5 text-gray-500 hover:text-gray-300 text-xs font-bold"
+                  className="absolute right-2.5 top-2.5 text-gray-500 hover:text-gray-300"
+                  aria-label="Clear search"
                 >
-                  ✕
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
