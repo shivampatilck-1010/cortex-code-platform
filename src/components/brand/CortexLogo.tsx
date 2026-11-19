@@ -135,7 +135,7 @@ export const CortexLogo: React.FC<CortexLogoProps> = ({
 
           {/* Primary Tagline: CODE BEYOND LIMITS */}
           {(variant === 'header' || variant === 'full') && (
-            <span className={`font-heading text-zinc-500 dark:text-gray-400 font-bold tracking-[0.25em] ${iconSizes.sub} uppercase mt-1 select-none`}>
+            <span className={`font-heading text-zinc-400 dark:text-gray-300 font-bold tracking-[0.3em] ${iconSizes.sub} uppercase mt-1 select-none`}>
               CODE BEYOND LIMITS
             </span>
           )}

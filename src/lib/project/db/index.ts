@@ -260,6 +260,20 @@ class ProjectDatabase {
     await (await this.getDb()).prepare('DELETE FROM project_files WHERE id = ?').run(id);
   }
 
+  async listAllFilesForUser(ownerId: string): Promise<{
+    project: Project;
+    files: ProjectFile[];
+  }[]> {
+    if (!(await this.getDb())) return [];
+    const projects = await this.listProjectsForUser(ownerId);
+    const result: { project: Project; files: ProjectFile[] }[] = [];
+    for (const project of projects) {
+      const files = await this.listFilesForProject(project.id);
+      result.push({ project, files });
+    }
+    return result;
+  }
+
   // --- GitHub Integration ---
   
   async getGitHubConnection(userId: string) {

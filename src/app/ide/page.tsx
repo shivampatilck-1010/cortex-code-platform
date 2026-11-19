@@ -15,6 +15,7 @@ import {
   Minimize2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { AppShell } from '@/components/layout/AppShell';
 import { Navbar } from '@/components/layout/Navbar';
 import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
 import { CodeVisualizationWorkspace } from '@/components/visualization/CodeVisualizationWorkspace';
@@ -355,6 +356,26 @@ function CloudIDEPageInner() {
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingDock, setIsResizingDock] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const fileExplorerRef = useRef<HTMLDivElement>(null);
+
+  // Hydration-safe localStorage persistence for FileExplorer width
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cortex_file_explorer_width');
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 160 && val <= 600) {
+          setSidebarWidth(val);
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cortex_file_explorer_width', String(sidebarWidth));
+    } catch {}
+  }, [sidebarWidth]);
 
   const startResizingSidebar = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -369,8 +390,10 @@ function CloudIDEPageInner() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizingSidebar) {
+        const containerLeft = fileExplorerRef.current?.getBoundingClientRect().left ?? 0;
+        const desiredWidth = e.clientX - containerLeft;
         const maxWidth = typeof window !== 'undefined' ? Math.min(600, Math.floor(window.innerWidth * 0.45)) : 500;
-        const newWidth = Math.min(Math.max(e.clientX, 160), maxWidth);
+        const newWidth = Math.min(Math.max(desiredWidth, 160), maxWidth);
         setSidebarWidth(newWidth);
       }
       if (isResizingDock) {
@@ -866,34 +889,36 @@ function CloudIDEPageInner() {
   }
     
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0b0c0e] text-[#e6edf3] overflow-hidden font-sans select-none">
-      {/* 1. Header Navigation (Permanently sleek Cortex dark #0b0c0e without theme toggle) */}
-      <Navbar
-        currentLanguage={currentLang}
-        onLanguageChange={handleLanguageChange}
-        onRun={handleRun}
-        isRunning={isRunning}
-        onDebug={handleStartDebug}
-        isDebugging={isDebugging}
-        onVisualize={handleRunTrace}
-        isVisualizing={isTracing}
-        layoutMode={editorLayoutMode}
-        onLayoutModeChange={setEditorLayoutMode}
-        autoFixEnabled={aiSettings.autoFixErrors}
-        onToggleAutoFix={() =>
-          setAiSettings((s) => ({ ...s, autoFixErrors: !s.autoFixErrors }))
-        }
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenShare={() => setIsShareOpen(true)}
-      />
+    <AppShell onOpenSettings={() => setIsSettingsOpen(true)}>
+      <div className="flex flex-col h-full w-full bg-[#0b0c0e] text-[#e6edf3] overflow-hidden font-sans select-none">
+        {/* 1. Header Navigation (Permanently sleek Cortex dark #0b0c0e without theme toggle) */}
+        <Navbar
+          currentLanguage={currentLang}
+          onLanguageChange={handleLanguageChange}
+          onRun={handleRun}
+          isRunning={isRunning}
+          onDebug={handleStartDebug}
+          isDebugging={isDebugging}
+          onVisualize={handleRunTrace}
+          isVisualizing={isTracing}
+          layoutMode={editorLayoutMode}
+          onLayoutModeChange={setEditorLayoutMode}
+          autoFixEnabled={aiSettings.autoFixErrors}
+          onToggleAutoFix={() =>
+            setAiSettings((s) => ({ ...s, autoFixErrors: !s.autoFixErrors }))
+          }
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenShare={() => setIsShareOpen(true)}
+        />
 
-      {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
-      <div className="flex-1 flex overflow-hidden bg-[#0b0c0e]">
-        {/* Left Sidebar: File Explorer (Resizable width) */}
-        <div 
-          style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px`, maxWidth: `${sidebarWidth}px` }} 
-          className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0"
-        >
+        {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
+        <div className="flex-1 flex overflow-hidden bg-[#0b0c0e]">
+          {/* Left Sidebar: File Explorer (Resizable width) */}
+          <div 
+            ref={fileExplorerRef}
+            style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px`, maxWidth: `${sidebarWidth}px` }} 
+            className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0"
+          >
           <FileExplorer
             width={sidebarWidth}
             files={files}
@@ -1357,6 +1382,7 @@ function CloudIDEPageInner() {
         </nav>
       </section>
     </div>
+  </AppShell>
   );
 }
 
