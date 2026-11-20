@@ -8,8 +8,9 @@ import {
   PRACTICE_KEYWORDS, 
   FULLSTACK_KEYWORDS 
 } from '@/config/seo';
+import { env } from '@/config/env';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://cortexcode.io';
+const APP_URL = env.NEXT_PUBLIC_APP_URL || 'https://cortexcode.io';
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),

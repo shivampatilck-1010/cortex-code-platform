@@ -1,4 +1,5 @@
 import { SUPPORTED_LANGUAGES, getLanguageConfig } from '@/config/languages';
+import { env } from '@/config/env';
 import { ExecutionRequest, ExecutionResult, DiagnosticError, TestCase, BenchmarkMetrics } from './types';
 import { parseDiagnostics } from './diagnostics-parser';
 
@@ -14,13 +15,14 @@ export async function executeInCloudSandbox(req: ExecutionRequest): Promise<Exec
   const startTime = Date.now();
 
   try {
-    const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+    const baseUrl = typeof window !== 'undefined' ? '' : (env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
     const response = await fetch(`${baseUrl}/api/v1/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        projectId: req.projectId,
         language: req.language,
         version: req.version || langConfig.version,
         files: req.files,

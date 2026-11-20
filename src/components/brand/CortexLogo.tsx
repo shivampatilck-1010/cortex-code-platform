@@ -128,14 +128,14 @@ export const CortexLogo: React.FC<CortexLogoProps> = ({
         
         <div className="flex flex-col leading-none">
           {/* Brand Name: Corte + Orange x */}
-          <span className={`font-heading font-black tracking-tight ${iconSizes.text} text-zinc-950 dark:text-white flex items-center`}>
+          <span className={`font-heading font-black tracking-tight ${iconSizes.text} text-white flex items-center`}>
             <span>Corte</span>
             <span className="text-[#ff9100]">x</span>
           </span>
 
           {/* Primary Tagline: CODE BEYOND LIMITS */}
           {(variant === 'header' || variant === 'full') && (
-            <span className={`font-heading text-zinc-400 dark:text-gray-300 font-bold tracking-[0.3em] ${iconSizes.sub} uppercase mt-1 select-none`}>
+            <span className={`font-heading text-[#ffb300] font-bold tracking-[0.25em] ${iconSizes.sub} uppercase mt-1 select-none drop-shadow-sm`}>
               CODE BEYOND LIMITS
             </span>
           )}

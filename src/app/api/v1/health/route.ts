@@ -9,12 +9,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { env } from '@/config/env';
+import { apiHandler } from '@/lib/api';
 import { classroomDb } from '@/lib/classroom/db';
 import { createLogger } from '@/lib/classroom/logger';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+export const GET = apiHandler(async (req: NextRequest) => {
   const logger = createLogger(req.headers.get('x-request-id') || undefined, {
     eventType: 'health_check',
   });
@@ -47,10 +49,10 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. Runtime Environment Detection
-  let appEnv = 'development';
+  let appEnv: string = env.NODE_ENV;
   if (process.env.APP_ENV === 'staging' || (typeof globalThis !== 'undefined' && (globalThis as any).env?.APP_ENV === 'staging')) {
     appEnv = 'staging';
-  } else if (process.env.NODE_ENV === 'production') {
+  } else if (env.isProduction) {
     appEnv = 'production';
   }
 
@@ -72,7 +74,7 @@ export async function GET(req: NextRequest) {
 
     const isAuthorized = (token && token === expectedSecret) || (secretHeader && secretHeader === expectedSecret);
 
-    if (!isAuthorized && process.env.NODE_ENV === 'production') {
+    if (!isAuthorized && (env.isProduction || process.env.NODE_ENV === 'production')) {
       return NextResponse.json(
         { error: 'Unauthorized: Operational diagnostics require valid monitoring credentials' },
         { status: 401 }
@@ -121,4 +123,4 @@ export async function GET(req: NextRequest) {
       },
     }
   );
-}
+});

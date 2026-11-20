@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { env } from '@/config/env';
+import { apiHandler } from '@/lib/api';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { projectDb } from '@/lib/project/db';
 import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
@@ -22,7 +24,7 @@ function getClientIdentifier(req: NextRequest): string {
   return 'anonymous_client';
 }
 
-export async function POST(req: NextRequest) {
+export const POST = apiHandler(async (req: NextRequest) => {
   const clientKey = getClientIdentifier(req);
 
   // 1. Rate Limiting Check
@@ -67,7 +69,10 @@ export async function POST(req: NextRequest) {
 
     let rawFiles: any[] = [];
 
-    if (projectId) {
+    if (bodyFiles && Array.isArray(bodyFiles) && bodyFiles.length > 0) {
+      // Prefer direct active in-memory files (allows guest execution and unsaved active edits)
+      rawFiles = bodyFiles;
+    } else if (projectId) {
       // 2.5 Auth & Ownership Verification
       const user = await ClassroomAuth.authenticateRequest(req);
       if (!user) {
@@ -91,8 +96,6 @@ export async function POST(req: NextRequest) {
         content: f.content,
         isFolder: f.isFolder
       }));
-    } else if (bodyFiles && Array.isArray(bodyFiles)) {
-      rawFiles = bodyFiles;
     } else {
       return NextResponse.json({ error: 'Either projectId or files array is required for execution' }, { status: 400 });
     }
@@ -172,7 +175,7 @@ export async function POST(req: NextRequest) {
       result = await executeInCloudRunner(execReq);
 
       // FAIL CLOSED: Never fallback to host execution in production!
-      if (result.status === 'system_error' && process.env.NODE_ENV === 'production') {
+      if (result.status === 'system_error' && (env.isProduction || process.env.NODE_ENV === 'production')) {
         return NextResponse.json(
           {
             error: 'SYSTEM_ERROR',
@@ -225,7 +228,7 @@ export async function POST(req: NextRequest) {
   } finally {
     executionRateLimiter.releaseSlot(clientKey);
   }
-}
+});
 
 export async function OPTIONS() {
   return new NextResponse(null, {

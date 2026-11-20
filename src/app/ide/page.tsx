@@ -46,96 +46,11 @@ import {
 } from '@/lib/ai/assistant';
 import { CollaborationBroker, Collaborator } from '@/lib/collaboration/broker';
 import { detectLanguage, detectLanguageFromFilename, getMonacoLanguage } from '@/lib/editor/language-detector';
-
-function formatSqlResultsToAsciiTable(columns: string[], rows: any[][]): string {
-  if (!columns || columns.length === 0) return 'Query executed successfully with 0 columns returned.\n';
-  
-  const colWidths = columns.map((col, idx) => {
-    let max = col.length;
-    for (const r of rows) {
-      const valStr = r[idx] === null || r[idx] === undefined ? 'NULL' : String(r[idx]);
-      if (valStr.length > max) max = valStr.length;
-    }
-    return Math.min(Math.max(max, 3), 40);
-  });
-
-  const sepLine = '+' + colWidths.map(w => '-'.repeat(w + 2)).join('+') + '+';
-  const headerLine = '| ' + columns.map((col, idx) => col.padEnd(colWidths[idx])).join(' | ') + ' |';
-
-  const rowLines = rows.map(r => {
-    return '| ' + r.map((cell, idx) => {
-      const valStr = cell === null || cell === undefined ? 'NULL' : String(cell);
-      return valStr.slice(0, 40).padEnd(colWidths[idx]);
-    }).join(' | ') + ' |';
-  });
-
-  return [sepLine, headerLine, sepLine, ...rowLines, sepLine].join('\n') + `\n\n(${rows.length} ${rows.length === 1 ? 'row' : 'rows'} in set)\n`;
-}
-
-const getStarterContentForFile = (filename: string, langConfig: LanguageConfig): string => {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const baseName = filename.split('.')[0] || 'Helper';
-  
-  switch (ext) {
-    case 'java':
-      return `public class ${baseName} {\n    public ${baseName}() {\n        \n    }\n}\n`;
-    case 'cpp':
-    case 'cc':
-    case 'cxx':
-      return `#include <iostream>\n\n`;
-    case 'h':
-    case 'hpp':
-      return `#pragma once\n\n`;
-    case 'c':
-      return `#include <stdio.h>\n\n`;
-    case 'py':
-      return `# Python module\n\n`;
-    case 'js':
-      return `// JavaScript module\nexport const helper = () => {\n  \n};\n`;
-    case 'ts':
-      return `// TypeScript module\nexport interface Config {\n  \n}\n`;
-    case 'go':
-      return `package main\n\n`;
-    case 'rs':
-      return `// Rust module\npub fn helper() {\n    \n}\n`;
-    case 'cs':
-      return `using System;\n\npublic class ${baseName} {\n    \n}\n`;
-    case 'php':
-      return `<?php\n\n`;
-    case 'rb':
-      return `# Ruby module\n\n`;
-    case 'swift':
-      return `import Foundation\n\n`;
-    case 'kt':
-      return `// Kotlin module\nclass ${baseName} {\n}\n`;
-    case 'json':
-      return `{\n  \n}\n`;
-    case 'html':
-      return `<!DOCTYPE html>\n<html>\n<head>\n  <title>Preview</title>\n</head>\n<body>\n  \n</body>\n</html>\n`;
-    case 'css':
-      return `/* Styles */\n\n`;
-    case 'sql':
-      return `-- SQL Query\n\n`;
-    case 'md':
-      return `# ${baseName}\n\n`;
-    case 'sh':
-    case 'bash':
-      return `#!/bin/bash\n# Bash script\n\n`;
-    case 'lua':
-      return `-- Lua module\n\n`;
-    case 'pl':
-    case 'pm':
-      return `#!/usr/bin/perl\n# Perl script\nuse strict;\nuse warnings;\n\n`;
-    case 'yaml':
-    case 'yml':
-      return `# YAML configuration\n`;
-    case 'xml':
-    case 'svg':
-      return `<?xml version="1.0" encoding="UTF-8"?>\n`;
-    default:
-      return langConfig.starterCode || '';
-  }
-};
+import { zipSync, strToU8 } from 'fflate';
+import { formatSqlResultsToAsciiTable } from '@/lib/sql/formatter';
+import { useIdeLayout, useIdeDebugger } from '@/hooks';
+import { getStarterContentForFile } from '@/hooks/useIdeFiles';
+import { Badge } from '@/components/ui/Badge';
 
 const getMonacoLangForFile = (filename: string, defaultMonacoLang: string): string => {
   const detected = getMonacoLanguage(filename);
@@ -314,19 +229,45 @@ function CloudIDEPageInner() {
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState<BenchmarkMetrics | null>(null);
 
-  // 3. Bottom / Side Panels State
-  const [activeBottomTab, setActiveBottomTab] = useState<'output' | 'terminal' | 'tests' | 'ai' | 'debug' | 'preview'>('output');
-  const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
+  // 3. Extracted Modular State Management Hooks
+  const {
+    sidebarWidth,
+    setSidebarWidth,
+    dockHeight,
+    setDockHeight,
+    isExplorerCollapsed,
+    setIsExplorerCollapsed,
+    isBottomCollapsed,
+    setIsBottomCollapsed,
+    editorLayoutMode,
+    setEditorLayoutMode,
+    activeBottomTab,
+    setActiveBottomTab,
+    isFullscreen,
+    setIsFullscreen,
+    fileExplorerRef,
+    isResizingDock,
+    startResizingSidebar,
+    startResizingDock,
+    toggleFileExplorer,
+  } = useIdeLayout();
 
-  // 4. Visualization & Layout State
-  const [editorLayoutMode, setEditorLayoutMode] = useState<'code' | 'visualize' | 'split'>('code');
+  const {
+    isDebugging,
+    setIsDebugging,
+    breakpoints,
+    setBreakpoints,
+    activeDebugLine,
+    setActiveDebugLine,
+    toggleBreakpoint,
+    startDebug,
+    stopDebug,
+    stepOver,
+    parsedDebugInfo,
+  } = useIdeDebugger();
+
   const [traceSession, setTraceSession] = useState<TraceSession | null>(null);
   const [isTracing, setIsTracing] = useState<boolean>(false);
-
-  // 4. Debugger State
-  const [isDebugging, setIsDebugging] = useState(false);
-  const [breakpoints, setBreakpoints] = useState<number[]>([6]);
-  const [activeDebugLine, setActiveDebugLine] = useState<number | undefined>(undefined);
 
   // 5. AI Assistant & Auto-Fix State
   const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
@@ -373,81 +314,6 @@ function CloudIDEPageInner() {
   const [fontSize, setFontSize] = useState(14);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [theme, setTheme] = useState('cortex-dark');
-
-  // 7. Resizable Panels & Fullscreen State
-  const [sidebarWidth, setSidebarWidth] = useState(240);
-  const [dockHeight, setDockHeight] = useState(280);
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
-  const [isResizingDock, setIsResizingDock] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const fileExplorerRef = useRef<HTMLDivElement>(null);
-
-  // Hydration-safe localStorage persistence for FileExplorer width
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('cortex_file_explorer_width');
-      if (saved) {
-        const val = parseInt(saved, 10);
-        if (!isNaN(val) && val >= 160 && val <= 600) {
-          setSidebarWidth(val);
-        }
-      }
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('cortex_file_explorer_width', String(sidebarWidth));
-    } catch {}
-  }, [sidebarWidth]);
-
-  const startResizingSidebar = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-  };
-
-  const startResizingDock = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingDock(true);
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizingSidebar) {
-        const containerLeft = fileExplorerRef.current?.getBoundingClientRect().left ?? 0;
-        const desiredWidth = e.clientX - containerLeft;
-        const maxWidth = typeof window !== 'undefined' ? Math.min(600, Math.floor(window.innerWidth * 0.45)) : 500;
-        const newWidth = Math.min(Math.max(desiredWidth, 160), maxWidth);
-        setSidebarWidth(newWidth);
-      }
-      if (isResizingDock) {
-        const newHeight = Math.min(Math.max(window.innerHeight - e.clientY, 80), window.innerHeight - 120);
-        setDockHeight(newHeight);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-      setIsResizingDock(false);
-    };
-
-    if (isResizingSidebar || isResizingDock) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = isResizingSidebar ? 'col-resize' : 'row-resize';
-      document.body.style.userSelect = 'none';
-    } else {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizingSidebar, isResizingDock]);
 
   // Trigger Monaco layout recalculation on layout mode or dock/sidebar dimension change
   useEffect(() => {
@@ -663,6 +529,7 @@ function CloudIDEPageInner() {
   };
 
   const handleReanalyzeWithKey = async (newKey: string) => {
+    if (!activeFile) return;
     handleSaveApiKey(newKey);
     setIsAnalyzingFix(true);
     try {
@@ -685,6 +552,7 @@ function CloudIDEPageInner() {
 
   // Option 1: Insert explanatory comments beside all error lines
   const handleApplyExplanationComment = (comment: string, targetLine: number, commentedCode?: string) => {
+    if (!activeFile) return;
     setPreviousCodeSnapshot(activeFile.content);
 
     // If multi-error commentedCode is available, apply all comments across the entire file
@@ -724,6 +592,23 @@ function CloudIDEPageInner() {
 
   // Code Execution Handler
   const handleRun = async () => {
+    if (files.length === 0 || !activeFile) {
+      setActiveBottomTab('output');
+      setIsBottomCollapsed(false);
+      setExecutionResult({
+        status: 'system_error',
+        exitCode: 1,
+        stdout: '',
+        stderr: 'No files available to execute. Please create or open a file first.',
+        executionTimeMs: 0,
+        memoryUsageMb: 0,
+        diagnostics: [],
+        timestamp: new Date().toISOString(),
+        provider: 'cloud_sandbox',
+      });
+      return;
+    }
+
     if (currentLang.executable === false) {
       setActiveBottomTab('output');
       setIsBottomCollapsed(false);
@@ -846,10 +731,14 @@ function CloudIDEPageInner() {
          } catch(e) {}
       }
 
+      const syncedFiles = files.map((f) =>
+        f.id === activeFileId ? { ...f, content: activeFile.content } : f
+      );
+
       const res = await executeInCloudSandbox({
         projectId: projectId || undefined,
         language: currentLang.id,
-        files: [], // Sent by backend now
+        files: syncedFiles,
         entrypoint: mainFile?.name || activeFile.name,
         stdin: customStdin,
       });
@@ -943,30 +832,22 @@ function CloudIDEPageInner() {
   };
 
   const handleDownloadFile = (file: ProjectFile) => {
-    if (file.isFolder) return;
-
-    if (!projectId) {
-      const blob = new Blob([file.content || ''], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = file.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      return;
-    }
+    if (!file || file.isFolder) return;
+    const content = file.id === activeFileId ? (activeFile?.content || file.content || '') : (file.content || '');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = `/api/v1/projects/${projectId}/files/${file.id}/download`;
+    a.href = url;
     a.download = file.name;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // Apply Fix & Re-Verify
   const applyFixAndReverify = async (fixToApply: AIFixResult) => {
+    if (!activeFile || files.length === 0) return;
     setPreviousCodeSnapshot(activeFile.content);
     // Step 6: Apply fix
     handleContentChange(fixToApply.fixedCode);
@@ -1006,6 +887,7 @@ function CloudIDEPageInner() {
 
   // Automated Test Cases Runner
   const handleRunAllTests = async () => {
+    if (!activeFile || files.length === 0) return;
     setIsRunningTests(true);
     try {
       
@@ -1020,11 +902,15 @@ function CloudIDEPageInner() {
          } catch(e) {}
       }
 
+      const syncedFiles = files.map((f) =>
+        f.id === activeFileId ? { ...f, content: activeFile.content } : f
+      );
+
       const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
         {
           projectId: projectId || undefined,
           language: currentLang.id,
-          files: [],
+          files: syncedFiles,
           entrypoint: activeFile.name,
         },
         testCases
@@ -1041,6 +927,7 @@ function CloudIDEPageInner() {
 
   // Benchmark Runner
   const handleRunBenchmark = async () => {
+    if (!activeFile || files.length === 0) return;
     
       if (projectId && activeFileId) {
          try {
@@ -1053,10 +940,14 @@ function CloudIDEPageInner() {
          } catch(e) {}
       }
 
+      const syncedFiles = files.map((f) =>
+        f.id === activeFileId ? { ...f, content: activeFile.content } : f
+      );
+
       const res = await benchmarkExecution({
         projectId: projectId || undefined,
         language: currentLang.id,
-        files: [],
+        files: syncedFiles,
         entrypoint: activeFile.name,
       });
     setBenchmarkResult(res);
@@ -1114,33 +1005,16 @@ function CloudIDEPageInner() {
     }
   };
 
-  // Visual Debugger Controls
+  // Visual Debugger Controls wired to useIdeDebugger hook
   const handleStartDebug = () => {
-    setIsDebugging(true);
-    setActiveBottomTab('debug');
-    setIsBottomCollapsed(false);
-    setActiveDebugLine(breakpoints[0] || 1);
+    startDebug(() => {
+      setActiveBottomTab('debug');
+      setIsBottomCollapsed(false);
+    });
   };
 
-  const handleStopDebug = () => {
-    setIsDebugging(false);
-    setActiveDebugLine(undefined);
-  };
-
-  const handleStepOver = () => {
-    setActiveDebugLine((prev) => (prev ? prev + 1 : 1));
-  };
-
-  // Real Dynamic Debugger Variable & Callstack Parser
-  const parsedDebugInfo = useMemo(() => {
-    return {
-      variables: {
-        STATUS: 'NOT SUPPORTED',
-        REASON: 'Interactive step-debugging (DAP) cannot be safely supported over a stateless edge HTTP boundary.',
-      },
-      callStack: [{ name: 'Debugger Disabled', file: 'N/A', line: 0 }],
-    };
-  }, []);
+  const handleStopDebug = stopDebug;
+  const handleStepOver = stepOver;
 
   
   if (isProjectLoading) {
@@ -1172,12 +1046,14 @@ function CloudIDEPageInner() {
 
         {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
         <div className="flex-1 flex overflow-hidden bg-[#0b0c0e]">
-          {/* Left Sidebar: File Explorer (Resizable width) */}
-          <div 
-            ref={fileExplorerRef}
-            style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px`, maxWidth: `${sidebarWidth}px` }} 
-            className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0"
-          >
+          {/* Left Sidebar: File Explorer (Resizable width & Collapsible) */}
+          {!isExplorerCollapsed && (
+            <>
+              <div 
+                ref={fileExplorerRef}
+                style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px`, maxWidth: `${sidebarWidth}px` }} 
+                className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0"
+              >
           <FileExplorer
             width={sidebarWidth}
             files={files}
@@ -1295,15 +1171,24 @@ function CloudIDEPageInner() {
             );
           }}
           onExportProject={() => {
-            if (projectId) {
-              window.open(`/api/v1/projects/${projectId}/export`, '_blank');
-            } else {
-              const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(files, null, 2));
-              const dl = document.createElement('a');
-              dl.setAttribute('href', dataStr);
-              dl.setAttribute('download', `${currentLang.id}-project.json`);
-              dl.click();
-            }
+            const zipData: Record<string, Uint8Array> = {};
+            files.forEach((f) => {
+              if (!f.isFolder) {
+                const cleanPath = f.path.replace(/^\/+/, '') || f.name;
+                const content = f.id === activeFileId ? (activeFile?.content || f.content || '') : (f.content || '');
+                zipData[cleanPath] = strToU8(content);
+              }
+            });
+            const zipped = zipSync(zipData);
+            const blob = new Blob([zipped as any], { type: 'application/zip' });
+            const url = URL.createObjectURL(blob);
+            const dl = document.createElement('a');
+            dl.href = url;
+            dl.download = `${projectId || 'cortex-project'}.zip`;
+            document.body.appendChild(dl);
+            dl.click();
+            document.body.removeChild(dl);
+            URL.revokeObjectURL(url);
           }}
           onImportProject={async (file) => {
             if (!projectId) return;
@@ -1337,6 +1222,8 @@ function CloudIDEPageInner() {
           className="w-1 hover:w-1.5 bg-[#1f2024] hover:bg-[#ff9100] active:bg-[#ff9100] cursor-col-resize transition-all z-20 select-none flex-shrink-0"
           title="Drag to adjust sidebar size"
         />
+        </>
+        )}
 
         {/* Center & Bottom Area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[#0b0c0e]">
@@ -1367,11 +1254,7 @@ function CloudIDEPageInner() {
                   theme={theme}
                   fontSize={fontSize}
                   breakpoints={breakpoints}
-                  onToggleBreakpoint={(line) => {
-                    setBreakpoints((prev) =>
-                      prev.includes(line) ? prev.filter((l) => l !== line) : [...prev, line]
-                    );
-                  }}
+                  onToggleBreakpoint={toggleBreakpoint}
                   activeLine={activeDebugLine}
                   diagnostics={executionResult?.diagnostics}
                   onCursorChange={(l, c) => {
@@ -1466,9 +1349,9 @@ function CloudIDEPageInner() {
               <div className="flex items-center space-x-2">
                 {executionResult && !isBottomCollapsed && (
                   <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-gray-300 pr-2 border-r border-[#1f2024]">
-                    <span className={executionResult.status === 'success' ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                    <Badge variant={executionResult.status === 'success' ? 'emerald' : 'rose'} dot size="sm">
                       Exit {executionResult.exitCode}
-                    </span>
+                    </Badge>
                     <span>•</span>
                     <span>{executionResult.executionTimeMs}ms</span>
                   </div>
@@ -1491,13 +1374,14 @@ function CloudIDEPageInner() {
                   <OutputPanel
                     result={executionResult}
                     isRunning={isRunning}
-                    onTriggerAutoFix={() =>
+                    onTriggerAutoFix={() => {
+                      if (!activeFile) return;
                       processAutoFix(
                         activeFile.content,
                         executionResult?.stderr || '',
                         executionResult?.diagnostics || []
-                      )
-                    }
+                      );
+                    }}
                   />
                 )}
                 {activeBottomTab === 'terminal' && (
@@ -1522,11 +1406,12 @@ function CloudIDEPageInner() {
                 )}
                 {activeBottomTab === 'ai' && (
                   <AIAssistantPanel
-                    currentCode={activeFile.content}
+                    currentCode={activeFile?.content || ''}
                     language={currentLang.id}
                     settings={aiSettings}
                     onUpdateSettings={(s) => setAiSettings((prev) => ({ ...prev, ...s }))}
                     onTriggerExplain={async () => {
+                      if (!activeFile) return;
                       setAnalysisMode('explain');
                       setIsAnalyzingAI(true);
                       const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'explain');
@@ -1534,6 +1419,7 @@ function CloudIDEPageInner() {
                       setIsAnalyzingAI(false);
                     }}
                     onTriggerOptimize={async () => {
+                      if (!activeFile) return;
                       setAnalysisMode('optimize');
                       setIsAnalyzingAI(true);
                       const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'optimize');
@@ -1541,6 +1427,7 @@ function CloudIDEPageInner() {
                       setIsAnalyzingAI(false);
                     }}
                     onTriggerRefactor={async () => {
+                      if (!activeFile) return;
                       setAnalysisMode('refactor');
                       setIsAnalyzingAI(true);
                       const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'refactor');
@@ -1548,18 +1435,20 @@ function CloudIDEPageInner() {
                       setIsAnalyzingAI(false);
                     }}
                     onTriggerConvert={async (toLang) => {
+                      if (!activeFile) return;
                       const res = await convertCode(activeFile.content, currentLang.id, toLang);
                       const targetLangConfig = getLanguageConfig(toLang);
                       setCurrentLang(targetLangConfig);
                       handleContentChange(res.convertedCode);
                     }}
-                    onTriggerAutoFix={() =>
+                    onTriggerAutoFix={() => {
+                      if (!activeFile) return;
                       processAutoFix(
                         activeFile.content,
                         executionResult?.stderr || '',
                         executionResult?.diagnostics || []
-                      )
-                    }
+                      );
+                    }}
                     analysisResult={aiAnalysis}
                     isAnalyzing={isAnalyzingAI}
                     analysisMode={analysisMode}
@@ -1575,11 +1464,7 @@ function CloudIDEPageInner() {
                     onStepOut={() => handleStepOver()}
                     onResume={() => handleStepOver()}
                     breakpoints={breakpoints}
-                    onToggleBreakpoint={(l) =>
-                      setBreakpoints((prev) =>
-                        prev.includes(l) ? prev.filter((item) => item !== l) : [...prev, l]
-                      )
-                    }
+                    onToggleBreakpoint={toggleBreakpoint}
                     activeLine={activeDebugLine}
                     variables={parsedDebugInfo.variables}
                     callStack={parsedDebugInfo.callStack}
@@ -1629,12 +1514,12 @@ function CloudIDEPageInner() {
         onClose={() => setIsFeedbackOpen(false)}
         diagnostics={{
           language: currentLang.name,
-          activeFile: activeFile.name,
+          activeFile: activeFile?.name || 'none',
           executionStatus: executionResult?.status,
           exitCode: executionResult?.exitCode,
           stderr: executionResult?.stderr,
           diagnosticsList: executionResult?.diagnostics,
-          codeSnippet: activeFile.content ? activeFile.content.slice(0, 2000) : undefined,
+          codeSnippet: activeFile?.content ? activeFile.content.slice(0, 2000) : undefined,
           systemInfo: typeof window !== 'undefined' ? {
             userAgent: navigator.userAgent,
             platform: navigator.platform,
