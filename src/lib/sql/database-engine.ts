@@ -598,6 +598,12 @@ function validateAndTranspileDialect(sql: string, dialect: SqlDialect): { transS
   let warning: string | undefined;
   let transSql = sql;
 
+  // Transpile harmless database creation/selection (e.g. CREATE DATABASE x; USE x;) so standard scripts execute cleanly in sandbox
+  transSql = transSql.replace(
+    /^\s*(?:CREATE\s+DATABASE(?:\s+IF\s+NOT\s+EXISTS)?|USE)\s+[`"']?[a-zA-Z0-9_]+[`"']?\s*;?/gim,
+    '-- [Practice Sandbox DB active]'
+  );
+
   // Dialect specific checks & helpful keyword transpilation
   if (dialect === 'oracle') {
     if (/\b(CONNECT\s+BY|PRIOR|PL\/SQL|BULK\s+COLLECT|EXECUTE\s+IMMEDIATE)\b/i.test(cleanWithoutStrings)) {
@@ -733,14 +739,65 @@ export async function executeSqlQuery(
 
   const db = await getProjectPracticeDb(projectId);
   if (!db) {
-    return {
-      columns: [],
-      rows: [],
-      rowCount: 0,
-      executionTimeMs: 0,
-      dialect,
-      error: 'SQLite execution engine is not available in the current runtime environment.',
-    };
+    try {
+      const { executeInCloudRunner } = await import('@/lib/execution/cloud-runner');
+      const { transSql, warning } = validateAndTranspileDialect(query, dialect);
+      const cloudRes = await executeInCloudRunner({
+        language: 'sql',
+        files: [{ id: 'sql_main', name: 'main.sql', path: '/main.sql', content: transSql }],
+        entrypoint: 'main.sql',
+        runTimeoutMs: 5000,
+        memoryLimitMb: 128,
+      });
+
+      const executionTimeMs = Date.now() - startTime;
+      if (cloudRes.status === 'runtime_error' || cloudRes.status === 'compilation_error' || cloudRes.status === 'system_error') {
+        return {
+          columns: [],
+          rows: [],
+          rowCount: 0,
+          executionTimeMs,
+          dialect,
+          error: cloudRes.stderr || cloudRes.stdout || 'SQL execution failed',
+          warning,
+        };
+      }
+
+      const stdout = (cloudRes.stdout || '').trim();
+      if (!stdout) {
+        return {
+          columns: ['status', 'affected_rows'],
+          rows: [['Query executed successfully', 0]],
+          rowCount: 0,
+          executionTimeMs,
+          dialect,
+          warning,
+        };
+      }
+
+      const lines = stdout.split('\n').filter(Boolean);
+      const rows = lines.map((line) => line.split('|'));
+      const colCount = rows[0]?.length || 1;
+      const columns = Array.from({ length: colCount }, (_, i) => `col_${i + 1}`);
+
+      return {
+        columns,
+        rows,
+        rowCount: rows.length,
+        executionTimeMs,
+        dialect,
+        warning,
+      };
+    } catch {
+      return {
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        executionTimeMs: 0,
+        dialect,
+        error: 'SQLite execution engine is not available in the current runtime environment.',
+      };
+    }
   }
 
   const TIMEOUT_MS = 5000;

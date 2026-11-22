@@ -80,6 +80,17 @@ export function parseDiagnostics(stderr: string, langId: string): DiagnosticErro
         severity: 'error',
         message: line.trim(),
       });
+      continue;
+    }
+
+    // SQL / SQLite error format: Error: near line 4: unrecognized token: "{" or Parse error near line 4: ...
+    const sqlMatch = line.match(/(?:Error|Parse error):?\s*near line (\d+):\s*(.+)/i);
+    if (sqlMatch) {
+      diagnostics.push({
+        line: parseInt(sqlMatch[1], 10),
+        severity: 'error',
+        message: sqlMatch[2].trim(),
+      });
     }
   }
 

@@ -36,7 +36,7 @@ import { ShareModal } from '@/components/modals/ShareModal';
 import { FeedbackModal } from '@/components/modals/FeedbackModal';
 import { SUPPORTED_LANGUAGES, LanguageConfig, getLanguageConfig } from '@/config/languages';
 import { ProjectFile, ExecutionResult, TestCase, BenchmarkMetrics } from '@/lib/execution/types';
-import { executeInCloudSandbox, runTestCases, benchmarkExecution } from '@/lib/execution/engine';
+import { executeInCloudSandbox, runTestCases, benchmarkExecution, parseDiagnostics } from '@/lib/execution/engine';
 import { 
   AISettings, 
   DEFAULT_AI_SETTINGS, 
@@ -705,16 +705,47 @@ function CloudIDEPageInner() {
       setIsBottomCollapsed(false);
       try {
         await handleForceSave();
-        const res = await fetch('/api/v1/sql/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: projectId || 'demo_sql_project',
-            query: currentActive.content,
-            dialect: 'sqlite',
-          }),
-        });
-        const data = await res.json();
+        const syncedFiles = files.map((f) =>
+          f.id === currentActive.id ? { ...f, content: currentActive.content } : f
+        );
+
+        let data: any = null;
+        try {
+          const res = await fetch('/api/v1/sql/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: projectId || 'demo_sql_project',
+              query: currentActive.content,
+              dialect: 'sqlite',
+            }),
+          });
+          if (res.ok) {
+            data = await res.json();
+          }
+        } catch {}
+
+        const isUnavailable =
+          !data ||
+          !data.result ||
+          (typeof data.result?.error === 'string' &&
+            data.result.error.toLowerCase().includes('not available in the current runtime environment')) ||
+          (typeof data.error === 'string' &&
+            data.error.toLowerCase().includes('not available in the current runtime environment'));
+
+        if (isUnavailable) {
+          // Cloudflare Workers / Edge fallback: run via Judge0 / Piston cloud sandbox
+          const cloudRes = await executeInCloudSandbox({
+            projectId: projectId || undefined,
+            language: 'sql',
+            files: syncedFiles,
+            entrypoint: currentActive.name,
+            stdin: customStdin,
+          });
+          setExecutionResult(cloudRes);
+          return;
+        }
+
         if (data.result) {
           const { columns, rows, executionTimeMs, error, warning } = data.result;
           if (error) {
@@ -723,9 +754,9 @@ function CloudIDEPageInner() {
               exitCode: 1,
               stdout: '',
               stderr: error,
-              executionTimeMs,
+              executionTimeMs: executionTimeMs || 0,
               memoryUsageMb: 1,
-              diagnostics: [],
+              diagnostics: parseDiagnostics(error, 'sql'),
               timestamp: new Date().toISOString(),
               provider: 'cloud_sandbox',
             });
@@ -739,19 +770,34 @@ function CloudIDEPageInner() {
               exitCode: 0,
               stdout: formatted,
               stderr: '',
-              executionTimeMs,
+              executionTimeMs: executionTimeMs || 0,
               memoryUsageMb: 2,
               diagnostics: [],
               timestamp: new Date().toISOString(),
               provider: 'cloud_sandbox',
             });
           }
-        } else {
+        }
+      } catch (err: any) {
+        // Fallback to cloud sandbox on unexpected error
+        try {
+          const syncedFiles = files.map((f) =>
+            f.id === currentActive.id ? { ...f, content: currentActive.content } : f
+          );
+          const cloudRes = await executeInCloudSandbox({
+            projectId: projectId || undefined,
+            language: 'sql',
+            files: syncedFiles,
+            entrypoint: currentActive.name,
+            stdin: customStdin,
+          });
+          setExecutionResult(cloudRes);
+        } catch (innerErr: any) {
           setExecutionResult({
             status: 'runtime_error',
             exitCode: 1,
             stdout: '',
-            stderr: data.error || 'SQL query execution failed',
+            stderr: innerErr.message || err.message || 'SQL execution failed',
             executionTimeMs: 0,
             memoryUsageMb: 0,
             diagnostics: [],
@@ -759,18 +805,6 @@ function CloudIDEPageInner() {
             provider: 'cloud_sandbox',
           });
         }
-      } catch (err: any) {
-        setExecutionResult({
-          status: 'runtime_error',
-          exitCode: 1,
-          stdout: '',
-          stderr: err.message || 'SQL execution failed',
-          executionTimeMs: 0,
-          memoryUsageMb: 0,
-          diagnostics: [],
-          timestamp: new Date().toISOString(),
-          provider: 'cloud_sandbox',
-        });
       } finally {
         setIsRunning(false);
       }
