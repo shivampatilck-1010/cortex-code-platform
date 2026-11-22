@@ -27,8 +27,7 @@
     ],
     "paths": {
       "@/types/*": [
-        "./src/types/*",
-        "./src/components/live-class/types/*"
+        "./src/types/*"
       ],
       "@/context/*": [
         "./src/components/live-class/context/*"
