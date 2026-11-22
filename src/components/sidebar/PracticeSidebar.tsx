@@ -16,6 +16,7 @@ interface PracticeSidebarProps {
   currentLanguage?: string;
   onLoadChallenge?: (code: string, language: string, title: string) => void;
   onClose?: () => void;
+  isDarkMode?: boolean;
 }
 
 export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
@@ -23,6 +24,7 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
   currentLanguage = 'python',
   onLoadChallenge,
   onClose,
+  isDarkMode = true,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<'All' | 'Easy' | 'Medium' | 'Hard'>('All');
@@ -73,13 +75,19 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
   return (
     <div
       style={{ width: `${width}px` }}
-      className="h-full flex flex-col bg-[#101114] text-[#e6edf3] select-none text-xs"
+      className={`h-full flex flex-col select-none text-xs transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#101114] text-[#e6edf3]' : 'bg-white text-slate-800'
+      }`}
     >
       {/* Header */}
-      <div className="h-10 px-3.5 border-b border-[#1f2024] flex items-center justify-between shrink-0 bg-[#0d0e11]">
+      <div className={`h-10 px-3.5 border-b flex items-center justify-between shrink-0 transition-colors ${
+        isDarkMode ? 'border-[#1f2024] bg-[#0d0e11]' : 'border-slate-200 bg-slate-50'
+      }`}>
         <div className="flex items-center space-x-2">
           <Swords className="w-4 h-4 text-[#ff9100]" />
-          <span className="font-semibold uppercase tracking-wider text-[11px] text-gray-200">
+          <span className={`font-semibold uppercase tracking-wider text-[11px] ${
+            isDarkMode ? 'text-gray-200' : 'text-slate-800'
+          }`}>
             Practice
           </span>
           <span className="px-1.5 py-0.2 bg-[#ff9100]/15 text-[#ff9100] text-[10px] rounded font-mono font-medium">
@@ -97,15 +105,23 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
       </div>
 
       {/* Search and Filters */}
-      <div className="p-2.5 border-b border-[#1f2024] bg-[#0c0d10] space-y-2 shrink-0">
+      <div className={`p-2.5 border-b space-y-2 shrink-0 transition-colors ${
+        isDarkMode ? 'border-[#1f2024] bg-[#0c0d10]' : 'border-slate-200 bg-slate-50'
+      }`}>
         <div className="relative">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <Search className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${
+            isDarkMode ? 'text-gray-400' : 'text-slate-400'
+          }`} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search problems, tags..."
-            className="w-full pl-8 pr-2.5 py-1.5 bg-[#14151b] border border-[#232530] rounded-md text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#ff9100]"
+            className={`w-full pl-8 pr-2.5 py-1.5 rounded-md text-xs focus:outline-none focus:border-[#ff9100] border transition-colors ${
+              isDarkMode
+                ? 'bg-[#14151b] border-[#232530] text-gray-200 placeholder-gray-500'
+                : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400'
+            }`}
           />
         </div>
 

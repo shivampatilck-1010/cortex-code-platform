@@ -1110,10 +1110,11 @@ function CloudIDEPageInner() {
   }
     
   return (
-    <AppShell onOpenSettings={() => setIsSettingsOpen(true)}>
+    <AppShell isDarkMode={isDarkMode} onOpenSettings={() => setIsSettingsOpen(true)}>
       <div className={`flex flex-col h-full w-full ${isDarkMode ? 'bg-[#0b0c0e] text-[#e6edf3]' : 'bg-[#f8fafc] text-[#0f172a]'} overflow-hidden font-sans select-none`}>
-        {/* 1. Header Navigation (Permanently sleek Cortex dark #0b0c0e without theme toggle) */}
+        {/* 1. Header Navigation */}
         <Navbar
+          isDarkMode={isDarkMode}
           currentLanguage={currentLang}
           onLanguageChange={handleLanguageChange}
           onRun={handleRun}
@@ -1143,8 +1144,8 @@ function CloudIDEPageInner() {
               maxWidth: isSidebarOpen ? `${sidebarWidth}px` : 0,
               opacity: isSidebarOpen ? 1 : 0,
             }} 
-            className={`bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0 ${
-              !isSidebarOpen ? 'border-r-0 pointer-events-none' : 'border-r border-[#1f2024]'
+            className={`${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-white border-slate-200'} flex flex-col h-full shadow-md overflow-hidden shrink-0 ${
+              !isSidebarOpen ? 'border-r-0 pointer-events-none' : 'border-r'
             } ${
               isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'
             }`}
@@ -1325,6 +1326,7 @@ function CloudIDEPageInner() {
               {activeSidebarTab === 'benchmark' && (
                 <BenchmarkSidebar
                   width={sidebarWidth}
+                  isDarkMode={isDarkMode}
                   onLoadCode={(code, lang) => {
                     const foundLang = SUPPORTED_LANGUAGES.find(
                       (l) => l.id === lang || l.monacoLang === lang
@@ -1342,6 +1344,7 @@ function CloudIDEPageInner() {
               {activeSidebarTab === 'practice' && (
                 <PracticeSidebar
                   width={sidebarWidth}
+                  isDarkMode={isDarkMode}
                   currentLanguage={currentLang?.id}
                   onLoadChallenge={(code, lang, title) => {
                     const foundLang = SUPPORTED_LANGUAGES.find(
@@ -1360,6 +1363,7 @@ function CloudIDEPageInner() {
               {activeSidebarTab === 'learn' && (
                 <LearnSidebar
                   width={sidebarWidth}
+                  isDarkMode={isDarkMode}
                   currentLanguage={currentLang?.id}
                   onLoadLesson={(code, lang, title) => {
                     const foundLang = SUPPORTED_LANGUAGES.find(
@@ -1385,7 +1389,7 @@ function CloudIDEPageInner() {
               opacity: !isSidebarOpen ? 0 : 1,
               pointerEvents: !isSidebarOpen ? 'none' : 'auto',
             }}
-            className={`hover:w-1.5 bg-[#1f2024] hover:bg-[#ff9100] active:bg-[#ff9100] cursor-col-resize z-20 select-none flex-shrink-0 ${
+            className={`hover:w-1.5 ${isDarkMode ? 'bg-[#1f2024]' : 'bg-slate-200'} hover:bg-[#ff9100] active:bg-[#ff9100] cursor-col-resize z-20 select-none flex-shrink-0 ${
               !isSidebarOpen ? 'w-0 overflow-hidden' : 'w-1'
             } ${isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'}`}
             title="Drag to adjust sidebar size"
@@ -1395,7 +1399,7 @@ function CloudIDEPageInner() {
           <div className={`flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-white'}`}>
             {/* Center Pane: Multi-Layout (Code, Visualize, Split View) */}
             <div className="flex-1 flex overflow-hidden relative">
-              <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? 'w-1/2 border-r border-[#1f2024]' : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
+              <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? (isDarkMode ? 'w-1/2 border-r border-[#1f2024]' : 'w-1/2 border-r border-slate-200') : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
                   <MonacoCodeEditor
                     files={files}
                     activeFileId={activeFileId}
@@ -1444,6 +1448,11 @@ function CloudIDEPageInner() {
                     onReanalyzeWithKey={handleReanalyzeWithKey}
                     enableInlineSuggestions={enableInlineSuggestions}
                     onToggleInlineSuggestions={handleToggleInlineSuggestions}
+                    onRun={handleRun}
+                    isRunning={isRunning}
+                    onDebug={handleStartDebug}
+                    isDebugging={isDebugging}
+                    isExecutable={currentLang.executable !== false}
                   />
               </div>
 
@@ -1466,7 +1475,7 @@ function CloudIDEPageInner() {
             {!isBottomCollapsed && (
               <div
                 onMouseDown={startResizingDock}
-                className="h-1 hover:h-1.5 bg-[#1f2024] hover:bg-[#ff9100] active:bg-[#ff9100] cursor-row-resize transition-all z-20 select-none flex-shrink-0"
+                className={`h-1 hover:h-1.5 ${isDarkMode ? 'bg-[#1f2024]' : 'bg-slate-200'} hover:bg-[#ff9100] active:bg-[#ff9100] cursor-row-resize transition-all z-20 select-none flex-shrink-0`}
                 title="Drag to adjust bottom bar size"
               />
             )}
@@ -1479,7 +1488,7 @@ function CloudIDEPageInner() {
               }`}
             >
               {/* Dock Tab Selector Header */}
-              <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-slate-100 border-slate-200'} flex items-center justify-between px-2 text-xs select-none border-b`}>
+              <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-slate-100 border-slate-200'} flex items-center justify-between px-2 text-xs select-none border-b transition-colors`}>
                 <div className="flex items-center space-x-1">
                   {[
                     { id: 'output', label: 'Output', icon: TermIcon },
@@ -1498,10 +1507,14 @@ function CloudIDEPageInner() {
                           setActiveBottomTab(tab.id as any);
                           setIsBottomCollapsed(false);
                         }}
-                        className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded transition font-heading font-semibold text-xs tracking-wide ${
+                        className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded transition font-heading font-semibold text-xs tracking-wide border ${
                           isActive && !isBottomCollapsed
-                            ? 'bg-[#18191f] text-[#ff9100] border-b-2 border-[#ff9100]'
-                            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14151a]'
+                            ? isDarkMode
+                              ? 'bg-[#18191f] text-[#ff9100] border-transparent border-b-2 border-b-[#ff9100]'
+                              : 'bg-white text-[#ff9100] border-slate-200 border-b-2 border-b-[#ff9100] shadow-sm'
+                            : isDarkMode
+                              ? 'text-gray-400 hover:text-gray-200 hover:bg-[#14151a] border-transparent'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300 border-transparent'
                         }`}
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -1514,7 +1527,9 @@ function CloudIDEPageInner() {
                 {/* Right Side: Status Summary & Collapse Toggle */}
                 <div className="flex items-center space-x-2">
                   {executionResult && !isBottomCollapsed && (
-                    <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-gray-300 pr-2 border-r border-[#1f2024]">
+                    <div className={`hidden sm:flex items-center space-x-2 text-xs font-mono pr-2 border-r ${
+                      isDarkMode ? 'text-gray-300 border-[#1f2024]' : 'text-slate-600 border-slate-300'
+                    }`}>
                       <Badge variant={executionResult.status === 'success' ? 'emerald' : 'rose'} dot size="sm">
                         Exit {executionResult.exitCode}
                       </Badge>
@@ -1525,7 +1540,11 @@ function CloudIDEPageInner() {
 
                   <button
                     onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
-                    className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#1c1e24] transition"
+                    className={`p-1 rounded transition border border-transparent ${
+                      isDarkMode
+                        ? 'text-gray-400 hover:text-white hover:bg-[#1c1e24]'
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300'
+                    }`}
                     title={isBottomCollapsed ? 'Expand Dock' : 'Collapse Dock'}
                   >
                     {isBottomCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -1540,6 +1559,7 @@ function CloudIDEPageInner() {
                     <OutputPanel
                       result={executionResult}
                       isRunning={isRunning}
+                      isDarkMode={isDarkMode}
                       onTriggerAutoFix={() => {
                         if (!activeFile) return;
                         processAutoFix(
@@ -1556,6 +1576,7 @@ function CloudIDEPageInner() {
                   {activeBottomTab === 'tests' && (
                     <TestCasesPanel
                       testCases={testCases}
+                      isDarkMode={isDarkMode}
                       onAddTestCase={(tc) =>
                         setTestCases((prev) => [...prev, { ...tc, id: `tc_${Date.now()}` }])
                       }

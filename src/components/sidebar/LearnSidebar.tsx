@@ -19,6 +19,7 @@ interface LearnSidebarProps {
   currentLanguage?: string;
   onLoadLesson?: (code: string, language: string, title: string) => void;
   onClose?: () => void;
+  isDarkMode?: boolean;
 }
 
 export const LearnSidebar: React.FC<LearnSidebarProps> = ({
@@ -26,6 +27,7 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
   currentLanguage = 'python',
   onLoadLesson,
   onClose,
+  isDarkMode = true,
 }) => {
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(COURSES[0]?.id || null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -58,13 +60,19 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
   return (
     <div
       style={{ width: `${width}px` }}
-      className="h-full flex flex-col bg-[#101114] text-[#e6edf3] select-none text-xs"
+      className={`h-full flex flex-col select-none text-xs transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#101114] text-[#e6edf3]' : 'bg-white text-slate-800'
+      }`}
     >
       {/* Header */}
-      <div className="h-10 px-3.5 border-b border-[#1f2024] flex items-center justify-between shrink-0 bg-[#0d0e11]">
+      <div className={`h-10 px-3.5 border-b flex items-center justify-between shrink-0 transition-colors ${
+        isDarkMode ? 'border-[#1f2024] bg-[#0d0e11]' : 'border-slate-200 bg-slate-50'
+      }`}>
         <div className="flex items-center space-x-2">
           <BookOpen className="w-4 h-4 text-[#ff9100]" />
-          <span className="font-semibold uppercase tracking-wider text-[11px] text-gray-200">
+          <span className={`font-semibold uppercase tracking-wider text-[11px] ${
+            isDarkMode ? 'text-gray-200' : 'text-slate-800'
+          }`}>
             Learn
           </span>
           <span className="px-1.5 py-0.2 bg-[#ff9100]/15 text-[#ff9100] text-[10px] rounded font-mono font-medium">
@@ -82,12 +90,18 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
       </div>
 
       {/* Course Banner */}
-      <div className="p-2.5 bg-[#0c0d10] border-b border-[#1f2024] shrink-0">
-        <div className="flex items-center space-x-1.5 mb-1 text-gray-200 font-medium">
+      <div className={`p-2.5 border-b shrink-0 transition-colors ${
+        isDarkMode ? 'bg-[#0c0d10] border-[#1f2024]' : 'bg-slate-50 border-slate-200'
+      }`}>
+        <div className={`flex items-center space-x-1.5 mb-1 font-medium ${
+          isDarkMode ? 'text-gray-200' : 'text-slate-800'
+        }`}>
           <Award className="w-3.5 h-3.5 text-[#ff9100]" />
           <span>Interactive Curricula</span>
         </div>
-        <p className="text-[10px] text-gray-400 leading-relaxed">
+        <p className={`text-[10px] leading-relaxed ${
+          isDarkMode ? 'text-gray-400' : 'text-slate-500'
+        }`}>
           Step-by-step programming tracks with live editor verification and instant terminal feedback.
         </p>
       </div>

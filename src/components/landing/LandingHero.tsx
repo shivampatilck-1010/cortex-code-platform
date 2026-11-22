@@ -106,7 +106,7 @@ export const LandingHero: React.FC = () => {
             className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono tracking-wider shadow-sm hover:scale-105 transition-all cursor-pointer border ${
               isDark 
                 ? 'bg-[#111216]/90 border-[#20222A] text-zinc-300 hover:border-[#FF9100]/50' 
-                : 'bg-white/90 border-slate-300 text-zinc-800 hover:border-black shadow-md'
+                : 'bg-white/90 border-slate-300 text-zinc-800 hover:border-slate-400 shadow-md'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#FF9100] animate-pulse" />
@@ -157,7 +157,7 @@ export const LandingHero: React.FC = () => {
             className={`w-full sm:w-auto px-7 py-3.5 rounded-xl text-sm font-mono tracking-wider transition-all duration-200 flex items-center justify-center gap-2 group border backdrop-blur-md ${
               isDark 
                 ? 'bg-[#111216]/90 text-zinc-300 hover:text-white border-[#20222A] hover:border-zinc-700' 
-                : 'bg-white/90 text-zinc-900 hover:text-black border-slate-300 hover:border-black shadow-md'
+                : 'bg-white/90 text-zinc-900 hover:text-black border-slate-300 hover:border-slate-400 shadow-md'
             }`}
           >
             <Play className="w-4 h-4 text-[#FF9100] fill-[#FF9100]" />
@@ -196,7 +196,7 @@ export const LandingHero: React.FC = () => {
                 className={`relative z-10 p-6 flex flex-col justify-between h-full border rounded-2xl transition-colors ${
                   isDark 
                     ? 'border-[#1F2024] hover:border-[#FF9100]/60 shadow-black/40 hover:shadow-[0_10px_30px_rgba(255,145,0,0.15)]' 
-                    : 'border-slate-300 hover:border-black shadow-slate-900/5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.12)]'
+                    : 'border-slate-300 hover:border-slate-400 shadow-slate-900/5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.12)]'
                 }`}
               >
                 <div>

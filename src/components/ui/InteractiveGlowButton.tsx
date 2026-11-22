@@ -52,7 +52,7 @@ export function InteractiveGlowButton({
     'group relative inline-flex items-center justify-center gap-2.5 overflow-hidden rounded-full px-6 py-3 text-xs font-semibold tracking-wide transition-all duration-300 select-none cursor-pointer animate-slide-blur-in',
     isDarkBase
       ? 'border border-[#FF9100]/50 bg-[#070708] text-white shadow-[0_0_20px_-3px_rgba(255,145,0,0.35)] hover:border-[#FF9100] hover:shadow-[0_0_35px_rgba(255,145,0,0.55)] hover:scale-[1.02]'
-      : 'border border-zinc-300 bg-white/95 text-zinc-950 dark:border-white/15 dark:bg-[#070708] dark:text-zinc-100 hover:border-black dark:hover:border-[#FF9100] hover:scale-[1.02]',
+      : 'border border-zinc-300 bg-white/95 text-zinc-950 dark:border-white/15 dark:bg-[#070708] dark:text-zinc-100 hover:border-zinc-400 dark:hover:border-[#FF9100] hover:scale-[1.02]',
     className,
   ].filter(Boolean).join(' ');
 

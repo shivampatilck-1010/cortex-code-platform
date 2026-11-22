@@ -153,12 +153,14 @@ interface BenchmarkSidebarProps {
   width?: number;
   onLoadCode?: (code: string, language: string) => void;
   onClose?: () => void;
+  isDarkMode?: boolean;
 }
 
 export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
   width = 240,
   onLoadCode,
   onClose,
+  isDarkMode = true,
 }) => {
   const [selectedPresetId, setSelectedPresetId] = useState<string>(BENCHMARK_PRESETS[0].id);
   const [benchmarkStatus, setBenchmarkStatus] = useState<string | null>(null);
@@ -176,13 +178,19 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
   return (
     <div
       style={{ width: `${width}px` }}
-      className="h-full flex flex-col bg-[#101114] text-[#e6edf3] select-none text-xs"
+      className={`h-full flex flex-col select-none text-xs transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#101114] text-[#e6edf3]' : 'bg-white text-slate-800'
+      }`}
     >
       {/* Header */}
-      <div className="h-10 px-3.5 border-b border-[#1f2024] flex items-center justify-between shrink-0 bg-[#0d0e11]">
+      <div className={`h-10 px-3.5 border-b flex items-center justify-between shrink-0 transition-colors ${
+        isDarkMode ? 'border-[#1f2024] bg-[#0d0e11]' : 'border-slate-200 bg-slate-50'
+      }`}>
         <div className="flex items-center space-x-2">
           <BarChart3 className="w-4 h-4 text-[#ff9100]" />
-          <span className="font-semibold uppercase tracking-wider text-[11px] text-gray-200">
+          <span className={`font-semibold uppercase tracking-wider text-[11px] ${
+            isDarkMode ? 'text-gray-200' : 'text-slate-800'
+          }`}>
             Benchmark
           </span>
           <span className="px-1.5 py-0.2 bg-[#ff9100]/15 text-[#ff9100] text-[10px] rounded font-mono font-medium">
@@ -202,12 +210,18 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
       {/* Preset List & Content */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
         {/* Banner */}
-        <div className="p-2.5 bg-[#14151b] border border-[#232530] rounded-lg">
-          <div className="flex items-center space-x-1.5 mb-1 text-gray-200 font-medium">
+        <div className={`p-2.5 rounded-lg border transition-colors ${
+          isDarkMode ? 'bg-[#14151b] border-[#232530]' : 'bg-slate-50 border-slate-200'
+        }`}>
+          <div className={`flex items-center space-x-1.5 mb-1 font-medium ${
+            isDarkMode ? 'text-gray-200' : 'text-slate-800'
+          }`}>
             <Zap className="w-3.5 h-3.5 text-[#ff9100]" />
             <span>Multi-Language Profiling</span>
           </div>
-          <p className="text-[11px] text-gray-400 leading-relaxed">
+          <p className={`text-[11px] leading-relaxed ${
+            isDarkMode ? 'text-gray-400' : 'text-slate-500'
+          }`}>
             Select an algorithmic preset below to inspect asymptotic complexity and load code directly into the IDE.
           </p>
         </div>

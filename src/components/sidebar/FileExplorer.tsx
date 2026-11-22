@@ -420,8 +420,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         <div className="flex items-center space-x-1">
           <button
             onClick={() => handleStartCreate('file', selectedFolderId || undefined)}
-            className={`p-1 rounded transition ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900'
+            className={`p-1 rounded transition border border-transparent ${
+              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
             }`}
             title={selectedFolderName ? `New File in ${selectedFolderName}` : 'New File (root)'}
           >
@@ -429,16 +429,16 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           </button>
           <button
             onClick={() => handleStartCreate('folder', selectedFolderId || undefined)}
-            className={`p-1 rounded transition ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900'
+            className={`p-1 rounded transition border border-transparent ${
+              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
             }`}
             title={selectedFolderName ? `New Subfolder in ${selectedFolderName}` : 'New Folder (root)'}
           >
             <FolderPlus className="w-3.5 h-3.5" />
           </button>
           <label
-            className={`p-1 rounded transition cursor-pointer ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900'
+            className={`p-1 rounded transition cursor-pointer border border-transparent ${
+              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
             }`}
             title="Upload Files or ZIP"
           >
@@ -461,8 +461,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           </label>
           <button
             onClick={onExportProject}
-            className={`p-1 rounded transition ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900'
+            className={`p-1 rounded transition border border-transparent ${
+              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
             }`}
             title="Export Project (ZIP)"
           >

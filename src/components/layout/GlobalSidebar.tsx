@@ -21,6 +21,7 @@ export type SidebarTab = 'files' | 'benchmark' | 'practice' | 'learn';
 
 interface GlobalSidebarProps {
   onOpenSettings?: () => void;
+  isDarkMode?: boolean;
 }
 
 interface UserProfile {
@@ -39,8 +40,23 @@ interface NavItem {
   functionality?: string;
 }
 
-export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) => {
+export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, isDarkMode: propDarkMode }) => {
   const pathname = usePathname() || '/';
+
+  const [internalDarkMode, setInternalDarkMode] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      setInternalDarkMode(document.documentElement.classList.contains('dark'));
+      const observer = new MutationObserver(() => {
+        setInternalDarkMode(document.documentElement.classList.contains('dark'));
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      return () => observer.disconnect();
+    }
+  }, []);
+
+  const isDarkMode = propDarkMode !== undefined ? propDarkMode : internalDarkMode;
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAccountOpen, setIsAccountOpen] = useState<boolean>(false);
@@ -254,18 +270,24 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
           minWidth: '58px',
           maxWidth: '58px',
         }}
-        className="bg-[#0a0b0d] border-r border-[#1f2024] text-[#e6edf3] flex flex-col justify-between h-full select-none z-40 shrink-0 overflow-visible"
+        className={`border-r flex flex-col justify-between h-full select-none z-40 shrink-0 overflow-visible transition-colors duration-200 ${
+          isDarkMode ? 'bg-[#0a0b0d] border-[#1f2024] text-[#e6edf3]' : 'bg-[#f8fafc] border-slate-200 text-slate-800'
+        }`}
       >
         {/* Top: Logo & Main Nav */}
         <div className="flex flex-col flex-1 overflow-visible">
           {/* Logo Section */}
-          <div className="h-14 flex items-center justify-center px-2 border-b border-[#1f2024]/60">
+          <div className={`h-14 flex items-center justify-center px-2 border-b transition-colors ${
+            isDarkMode ? 'border-[#1f2024]/60' : 'border-slate-200'
+          }`}>
             <Link
               href="/ide"
               onMouseEnter={(e) => showFloatingTooltip('Cortex', 'Code Beyond Limits', e)}
               onMouseMove={moveFloatingTooltip}
               onMouseLeave={hideFloatingTooltip}
-              className="relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-[#14151a] transition"
+              className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition border border-transparent ${
+                isDarkMode ? 'hover:bg-[#14151a]' : 'hover:bg-slate-200 hover:border-slate-300'
+              }`}
               title="Cortex — Code Beyond Limits"
             >
               <CortexLogo variant="icon" size="sm" />
@@ -290,10 +312,14 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
                   onMouseEnter={(e) => showFloatingTooltip(item.name, item.functionality, e)}
                   onMouseMove={moveFloatingTooltip}
                   onMouseLeave={hideFloatingTooltip}
-                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium ${
+                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium border ${
                     isActive
-                      ? 'bg-[#1e1f26] text-[#ff9100]'
-                      : 'text-gray-400 hover:text-[#e6edf3] hover:bg-[#14151a]'
+                      ? isDarkMode
+                        ? 'bg-[#1e1f26] text-[#ff9100] border-transparent'
+                        : 'bg-white text-[#ff9100] shadow-sm border-slate-200'
+                      : isDarkMode
+                        ? 'text-gray-400 hover:text-[#e6edf3] hover:bg-[#14151a] border-transparent'
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300 border-transparent'
                   }`}
                 >
                   {/* Left accent bar on active item */}
@@ -303,7 +329,11 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
 
                   <Icon
                     className={`w-5 h-5 shrink-0 transition-colors ${
-                      isActive ? 'text-[#ff9100]' : 'text-gray-400 hover:text-gray-200'
+                      isActive
+                        ? 'text-[#ff9100]'
+                        : isDarkMode
+                          ? 'text-gray-400 hover:text-gray-200'
+                          : 'text-slate-500 hover:text-slate-800'
                     }`}
                   />
                 </Link>
@@ -313,16 +343,22 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
         </div>
 
         {/* Bottom Section: Settings & Account */}
-        <div className="border-t border-[#1f2024] p-2 space-y-2 bg-[#0a0b0d] overflow-visible">
+        <div className={`border-t p-2 space-y-2 overflow-visible transition-colors ${
+          isDarkMode ? 'border-[#1f2024] bg-[#0a0b0d]' : 'border-slate-200 bg-[#f8fafc]'
+        }`}>
           {/* Settings Button */}
           <button
             onClick={handleSettingsClick}
             onMouseEnter={(e) => showFloatingTooltip('Settings', 'Editor, AI Assistant & Theme', e)}
             onMouseMove={moveFloatingTooltip}
             onMouseLeave={hideFloatingTooltip}
-            className="relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium text-gray-400 hover:text-white hover:bg-[#14151a]"
+            className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium border border-transparent ${
+              isDarkMode
+                ? 'text-gray-400 hover:text-white hover:bg-[#14151a]'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300'
+            }`}
           >
-            <Settings className="w-5 h-5 shrink-0 text-gray-400 hover:text-gray-200" />
+            <Settings className={`w-5 h-5 shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-slate-500 hover:text-slate-800'}`} />
           </button>
 
           {/* Account / User Section */}
@@ -334,25 +370,33 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
                   onMouseEnter={(e) => showFloatingTooltip(user.name, user.role || 'Student', e)}
                   onMouseMove={moveFloatingTooltip}
                   onMouseLeave={hideFloatingTooltip}
-                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs text-gray-300 hover:text-white hover:bg-[#14151a] ${
-                    isAccountOpen ? 'bg-[#16171d]' : ''
-                  }`}
+                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs border border-transparent ${
+                    isDarkMode
+                      ? 'text-gray-300 hover:text-white hover:bg-[#14151a]'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300'
+                  } ${isAccountOpen ? (isDarkMode ? 'bg-[#16171d]' : 'bg-slate-200') : ''}`}
                 >
                   {/* Avatar Circle with Online Dot */}
                   <div className="relative shrink-0">
-                    <div className="w-8 h-8 rounded-full bg-[#1e1f26] border border-[#2a2c38] flex items-center justify-center font-bold text-xs text-[#ff9100]">
+                    <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-xs text-[#ff9100] ${
+                      isDarkMode ? 'bg-[#1e1f26] border-[#2a2c38]' : 'bg-white border-slate-200 shadow-sm'
+                    }`}>
                       {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
                     </div>
-                    <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border border-[#0a0b0d]" />
+                    <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border ${
+                      isDarkMode ? 'border-[#0a0b0d]' : 'border-white'
+                    }`} />
                   </div>
                 </button>
 
                 {/* Account Dropdown Popover */}
                 {isAccountOpen && (
-                  <div className="absolute bottom-0 left-[calc(100%+12px)] bg-[#121318] border border-[#232530] rounded-lg shadow-2xl p-2 z-[110] text-xs w-56">
-                    <div className="px-2 py-1.5 border-b border-[#1f2024] mb-1">
-                      <div className="font-semibold text-gray-100 truncate">{user.name}</div>
-                      <div className="text-[11px] text-gray-400 truncate">
+                  <div className={`absolute bottom-0 left-[calc(100%+12px)] border rounded-lg shadow-2xl p-2 z-[110] text-xs w-56 ${
+                    isDarkMode ? 'bg-[#121318] border-[#232530] text-gray-100' : 'bg-white border-slate-200 text-slate-800 shadow-xl'
+                  }`}>
+                    <div className={`px-2 py-1.5 border-b mb-1 ${isDarkMode ? 'border-[#1f2024]' : 'border-slate-200'}`}>
+                      <div className={`font-semibold truncate ${isDarkMode ? 'text-gray-100' : 'text-slate-800'}`}>{user.name}</div>
+                      <div className={`text-[11px] truncate ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                         {user.professionalEmail || user.email}
                       </div>
                       <div className="mt-1">
@@ -379,7 +423,11 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
                 onMouseEnter={(e) => showFloatingTooltip('Sign In', 'Sync your projects & progress', e)}
                 onMouseMove={moveFloatingTooltip}
                 onMouseLeave={hideFloatingTooltip}
-                className="relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-semibold text-gray-300 hover:text-white hover:bg-[#14151a] border border-[#232530] bg-[#121318]"
+                className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-semibold ${
+                  isDarkMode
+                    ? 'text-gray-300 hover:text-white hover:bg-[#14151a] border-[#232530] bg-[#121318]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200 border-slate-200 bg-white shadow-sm'
+                }`}
               >
                 <User className="w-5 h-5 shrink-0 text-[#ff9100]" />
               </Link>
@@ -400,15 +448,17 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
           }}
           className="fixed pointer-events-none z-[9999] select-none transition-opacity duration-150"
         >
-          <div className="bg-[#121318]/95 backdrop-blur-md text-[#e6edf3] text-xs rounded-lg shadow-2xl px-3.5 py-2 border border-[#2b2d3a] flex flex-col items-start gap-1 min-w-[130px] max-w-[260px] animate-in fade-in duration-100">
+          <div className={`text-xs rounded-lg shadow-2xl px-3.5 py-2 border flex flex-col items-start gap-1 min-w-[130px] max-w-[260px] animate-in fade-in duration-100 backdrop-blur-md ${
+            isDarkMode ? 'bg-[#121318]/95 border-[#2b2d3a] text-[#e6edf3]' : 'bg-white/95 border-slate-200 text-slate-800 shadow-xl'
+          }`}>
             <div className="flex items-center space-x-1.5 w-full">
               <span className="w-1.5 h-1.5 rounded-full bg-[#ff9100] shrink-0" />
-              <span className="font-semibold text-white tracking-wide text-xs">
+              <span className={`font-semibold tracking-wide text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                 {floatingTooltip.title}
               </span>
             </div>
             {floatingTooltip.description && (
-              <span className="text-[11px] text-gray-400 font-normal leading-tight">
+              <span className={`text-[11px] font-normal leading-tight ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                 {floatingTooltip.description}
               </span>
             )}

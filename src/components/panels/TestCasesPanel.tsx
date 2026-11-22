@@ -24,6 +24,7 @@ interface TestCasesPanelProps {
   benchmarkResult: BenchmarkMetrics | null;
   customStdin: string;
   onChangeCustomStdin: (val: string) => void;
+  isDarkMode?: boolean;
 }
 
 export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
@@ -36,6 +37,7 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
   benchmarkResult,
   customStdin,
   onChangeCustomStdin,
+  isDarkMode = true,
 }) => {
   const [activeTab, setActiveTab] = useState<'tests' | 'custom' | 'benchmark'>('tests');
   const [newStdin, setNewStdin] = useState('');
@@ -61,16 +63,22 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#141518] text-xs font-mono select-text overflow-hidden">
+    <div className={`h-full flex flex-col text-xs font-mono select-text overflow-hidden transition-colors duration-200 ${
+      isDarkMode ? 'bg-[#141518] text-gray-200' : 'bg-white text-slate-800'
+    }`}>
       {/* Sub-tabs header */}
-      <div className="px-3 bg-[#18191d] border-b border-[#252830] flex items-center justify-between">
+      <div className={`px-3 border-b flex items-center justify-between transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#18191d] border-[#252830]' : 'bg-slate-100 border-slate-200'
+      }`}>
         <div className="flex space-x-1">
           <button
             onClick={() => setActiveTab('tests')}
             className={`py-2 px-3.5 border-b-2 font-heading font-semibold text-xs tracking-wide transition ${
               activeTab === 'tests'
                 ? 'border-[#ff9100] text-[#ff9100]'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
+                : isDarkMode
+                  ? 'border-transparent text-gray-400 hover:text-gray-200'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
             Tests ({totalCount > 0 ? `${passedCount}/${totalCount}` : 0})
@@ -80,7 +88,9 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
             className={`py-2 px-3.5 border-b-2 font-heading font-semibold text-xs tracking-wide transition ${
               activeTab === 'custom'
                 ? 'border-[#ff9100] text-[#ff9100]'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
+                : isDarkMode
+                  ? 'border-transparent text-gray-400 hover:text-gray-200'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
             Input (stdin)
@@ -90,7 +100,9 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
             className={`py-2 px-3.5 border-b-2 font-heading font-semibold text-xs tracking-wide transition ${
               activeTab === 'benchmark'
                 ? 'border-[#ff9100] text-[#ff9100]'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
+                : isDarkMode
+                  ? 'border-transparent text-gray-400 hover:text-gray-200'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
             Benchmark
@@ -101,7 +113,9 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setShowAddModal(!showAddModal)}
-              className="p-1.5 text-gray-400 hover:text-white hover:bg-[#252830] rounded transition"
+              className={`p-1.5 rounded transition border border-transparent ${
+                isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#252830]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300'
+              }`}
               title="Add Test Case"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -112,7 +126,7 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-heading font-bold transition shadow-sm ${
                 isRunningTests
                   ? 'bg-gray-700 text-gray-300 cursor-not-allowed'
-                  : 'bg-[#ff9100] hover:bg-[#e08000] text-[#0b0c0e]'
+                  : 'bg-[#ff9100] hover:bg-[#e08000] text-slate-950'
               }`}
             >
               <Play className={`w-3.5 h-3.5 ${isRunningTests ? 'animate-spin' : 'fill-current'}`} />

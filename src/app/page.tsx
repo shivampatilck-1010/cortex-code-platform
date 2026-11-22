@@ -220,7 +220,7 @@ function LandingHeaderNav({
             className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-[11px] font-bold transition-all ${
               isDark
                 ? 'border-white/15 bg-white/[0.04] text-zinc-200 hover:border-[#FF9100]/50'
-                : 'border-zinc-300 bg-zinc-100 text-black hover:border-zinc-950'
+                : 'border-zinc-300 bg-zinc-100 text-black hover:border-zinc-400'
             }`}
             aria-label="Toggle color theme"
           >
@@ -316,7 +316,7 @@ function LandingHero({ isDark }: { isDark: boolean }) {
               className={`group relative rounded-2xl border overflow-hidden transition-all duration-300 ${
                 isDark
                   ? 'border-white/[0.12] bg-[#0B0D11]/90 hover:border-[#FF9100]/60'
-                  : 'border-zinc-300 bg-white/95 shadow-lg hover:border-black'
+                  : 'border-zinc-300 bg-white/95 shadow-lg hover:border-zinc-400'
               }`}
             >
               <TubesBackground enableClickInteraction={true} className="min-h-[270px]">

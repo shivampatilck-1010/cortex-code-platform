@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Editor, { OnMount, Monaco } from '@monaco-editor/react';
-import { X, Plus, FileCode, Sun, Moon, Maximize2, Minimize2, Sparkles, Check, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { X, Plus, FileCode, Sparkles, Play, ChevronDown, Bug } from 'lucide-react';
 import { ProjectFile, DiagnosticError } from '@/lib/execution/types';
 import { AIFixResult, fetchInlineSuggestion } from '@/lib/ai/assistant';
 import { registerMonacoSnippets } from '@/lib/editor/snippets';
@@ -44,6 +44,11 @@ interface MonacoCodeEditorProps {
   onEditorMount?: (editor: any, monaco: any) => void;
   saveStatus?: 'saved' | 'saving' | 'error' | 'conflict';
   onForceSave?: () => void;
+  onRun?: () => void;
+  isRunning?: boolean;
+  onDebug?: () => void;
+  isDebugging?: boolean;
+  isExecutable?: boolean;
 }
 
 export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
@@ -81,7 +86,34 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   onEditorMount,
   saveStatus = 'saved',
   onForceSave,
+  onRun,
+  isRunning = false,
+  onDebug,
+  isDebugging = false,
+  isExecutable = true,
 }) => {
+  const [isRunDropdownOpen, setIsRunDropdownOpen] = useState(false);
+  const runDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (runDropdownRef.current && !runDropdownRef.current.contains(e.target as Node)) {
+        setIsRunDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsRunDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -435,7 +467,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                         : 'bg-[#ffffff] text-[#0f172a] font-medium border-t-2 border-t-[#ff9100]'
                       : isDarkMode
                       ? 'text-gray-400 hover:bg-[#16171c] hover:text-gray-200'
-                      : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                      : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900 hover:border-slate-300'
                   }`}
                 >
                   <FileCode className={`w-3.5 h-3.5 ${isActive ? 'text-[#ff9100]' : isDarkMode ? 'text-gray-500' : 'text-slate-400'}`} />
@@ -446,7 +478,11 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                         e.stopPropagation();
                         onCloseFile(file.id);
                       }}
-                      className={`p-0.5 ${isDarkMode ? 'hover:bg-[#252830] text-gray-500 hover:text-gray-200' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'} rounded-full transition ml-1`}
+                      className={`p-0.5 rounded-full transition ml-1 border border-transparent ${
+                        isDarkMode
+                          ? 'hover:bg-[#252830] text-gray-500 hover:text-gray-200'
+                          : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300'
+                      }`}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -456,7 +492,11 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             })}
           <button
             onClick={onNewFile}
-            className={`p-1.5 ml-1 ${isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#1c1e24]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'} rounded transition`}
+            className={`p-1.5 ml-1 rounded transition border border-transparent ${
+              isDarkMode
+                ? 'text-gray-400 hover:text-white hover:bg-[#1c1e24]'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300'
+            }`}
             title="New File"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -465,50 +505,6 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
         {/* Action Controls for Just this Editor Part */}
         <div className="flex items-center space-x-1.5 pr-2.5">
-          {/* Cloud Auto-Save Status Badge */}
-          <div
-            onClick={onForceSave}
-            className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono transition cursor-pointer select-none border ${
-              saveStatus === 'saving'
-                ? 'bg-amber-950/20 text-amber-300 border-amber-800/30'
-                : saveStatus === 'conflict'
-                ? 'bg-red-950/30 text-rose-300 border-rose-800/40 hover:bg-red-950/50'
-                : saveStatus === 'error'
-                ? 'bg-red-950/30 text-rose-400 border-rose-800/40 hover:bg-red-950/50'
-                : 'bg-emerald-950/15 text-emerald-400/90 border-emerald-900/20'
-            }`}
-            title={
-              saveStatus === 'saving'
-                ? 'Saving changes to cloud...'
-                : saveStatus === 'conflict'
-                ? 'Conflict detected: Server has newer changes. Click to retry/force save.'
-                : saveStatus === 'error'
-                ? 'Save failed. Click or press Ctrl+S to retry.'
-                : 'All changes saved to cloud (Ctrl+S to save immediately)'
-            }
-          >
-            {saveStatus === 'saving' ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-                <span className="hidden sm:inline">Saving...</span>
-              </>
-            ) : saveStatus === 'conflict' ? (
-              <>
-                <AlertTriangle className="w-3 h-3 text-rose-400" />
-                <span className="hidden sm:inline">Conflict</span>
-              </>
-            ) : saveStatus === 'error' ? (
-              <>
-                <AlertCircle className="w-3 h-3 text-rose-400" />
-                <span className="hidden sm:inline">Save Failed</span>
-              </>
-            ) : (
-              <>
-                <Check className="w-3 h-3 text-emerald-400" />
-                <span className="hidden sm:inline">Saved</span>
-              </>
-            )}
-          </div>
           {/* Inline Suggestions Toggle Indicator */}
           {onToggleInlineSuggestions && (
             <button
@@ -516,7 +512,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
               className={`px-2.5 py-1 rounded transition flex items-center space-x-1.5 text-xs font-heading font-semibold border ${
                 enableInlineSuggestions
                   ? 'bg-[#ff9100]/20 text-[#ff9100] border-[#ff9100]/50 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2024] border-[#2b2d35]'
+                  : isDarkMode
+                  ? 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2024] border-[#2b2d35]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-300 hover:border-slate-400 shadow-sm'
               }`}
               title={
                 enableInlineSuggestions
@@ -531,7 +529,120 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             </button>
           )}
 
-          {/* Active Theme Toggle Pill Switch (Matching Day Mode / Night Mode Reference) */}
+          {/* Relocated Run & Debug Split Button */}
+          {onRun && (
+            <div ref={runDropdownRef} className="relative inline-flex items-center rounded-md shadow-sm shrink-0">
+              {/* Main Action Button (Executes Run by default) */}
+              <button
+                type="button"
+                onClick={onRun}
+                disabled={isRunning || !isExecutable}
+                className={`h-[26px] flex items-center space-x-1.5 px-2.5 rounded-l-md text-xs font-bold font-heading tracking-wide transition active:scale-95 border ${
+                  !isExecutable
+                    ? isDarkMode
+                      ? 'bg-[#181920] text-gray-500 border-[#252830] cursor-not-allowed'
+                      : 'bg-slate-100 text-slate-400 border-slate-300 cursor-not-allowed'
+                    : isRunning
+                    ? 'bg-emerald-800 text-emerald-200 border-emerald-700 cursor-not-allowed'
+                    : isDarkMode
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 hover:border-emerald-500'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 hover:border-emerald-700'
+                }`}
+                title={
+                  !isExecutable
+                    ? 'Syntax Highlighting Only (Non-executable format)'
+                    : 'Run File (Ctrl+Enter)'
+                }
+              >
+                <Play className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin' : !isExecutable ? 'text-gray-400' : 'fill-current'}`} />
+                <span>{!isExecutable ? 'Preview Only' : (isRunning ? 'Running...' : 'Run')}</span>
+              </button>
+
+              {/* Adjacent Downward-Facing Arrow Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isExecutable) {
+                    setIsRunDropdownOpen((prev) => !prev);
+                  }
+                }}
+                disabled={!isExecutable}
+                className={`h-[26px] px-1.5 rounded-r-md border-t border-b border-r transition flex items-center justify-center ${
+                  !isExecutable
+                    ? isDarkMode
+                      ? 'bg-[#181920] text-gray-600 border-[#252830] cursor-not-allowed'
+                      : 'bg-slate-100 text-slate-400 border-slate-300 cursor-not-allowed'
+                    : isDarkMode
+                    ? 'bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-800/60'
+                    : 'bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-700 hover:border-emerald-800'
+                }`}
+                title="Execution Options (Run or Debug)"
+                aria-expanded={isRunDropdownOpen}
+                aria-haspopup="menu"
+                aria-label="Execution options"
+              >
+                <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${isRunDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Execution Options Dropdown Popover */}
+              {isRunDropdownOpen && isExecutable && (
+                <div
+                  role="menu"
+                  aria-label="Execution options"
+                  className={`absolute right-0 top-full mt-1 w-40 rounded-md border shadow-2xl py-1 z-50 transition-colors ${
+                    isDarkMode ? 'border-[#2b2d35] bg-[#14161b]' : 'border-slate-200 bg-white shadow-xl'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsRunDropdownOpen(false);
+                      onRun();
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition font-semibold border border-transparent ${
+                      isDarkMode
+                        ? 'hover:bg-[#1f2128] hover:border-[#2b2d35] text-emerald-400 bg-[#181a22]'
+                        : 'hover:bg-emerald-50 hover:border-slate-200 text-emerald-700 bg-emerald-50/50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Play className={`w-3.5 h-3.5 fill-current ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                      <span>Run</span>
+                    </div>
+                    <span className={`text-[10px] font-mono ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>Default</span>
+                  </button>
+
+                  {onDebug && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsRunDropdownOpen(false);
+                        onDebug();
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition font-semibold border border-transparent ${
+                        isDarkMode
+                          ? 'hover:bg-[#1f2128] hover:border-[#2b2d35] text-amber-400'
+                          : 'hover:bg-amber-50 hover:border-slate-200 text-amber-700'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Bug className={`w-3.5 h-3.5 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`} />
+                        <span>Debug</span>
+                      </div>
+                      {isDebugging && (
+                        <span className={`text-[10px] font-mono ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>Active</span>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Active Theme Toggle Pill Switch (LIGHT / DARK) */}
           {onToggleDarkMode && (
             <button
               type="button"
@@ -543,21 +654,21 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                 const y = typeof e.clientY === 'number' && e.clientY > 0 ? e.clientY : rect.top + rect.height / 2;
                 onToggleDarkMode({ x, y });
               }}
-              className={`relative h-[26px] w-[114px] rounded-full p-[2px] transition-colors duration-300 flex items-center select-none cursor-pointer border shrink-0 ${
+              className={`relative h-[26px] w-[80px] rounded-full p-[2px] transition-colors duration-300 flex items-center select-none cursor-pointer border shrink-0 ${
                 isDarkMode
-                  ? 'bg-black border-zinc-700 shadow-inner'
-                  : 'bg-[#eceef1] border-gray-300 shadow-inner'
+                  ? 'bg-black border-zinc-700 hover:border-zinc-500 shadow-inner'
+                  : 'bg-[#eceef1] border-slate-300 hover:border-slate-400 shadow-inner'
               }`}
-              title={isDarkMode ? 'Night Mode active (Click to switch to Day Mode)' : 'Day Mode active (Click to switch to Night Mode)'}
+              title={isDarkMode ? 'Dark Mode active (Click to switch to Light Mode)' : 'Light Mode active (Click to switch to Dark Mode)'}
             >
               {/* Sliding Circular Knob */}
               <div
                 className={`absolute top-[1px] w-[22px] h-[22px] rounded-full bg-white shadow-md flex items-center justify-center transition-transform duration-300 ease-out z-10 ${
-                  isDarkMode ? 'left-[2px] translate-x-0' : 'left-[2px] translate-x-[88px]'
+                  isDarkMode ? 'left-[2px] translate-x-0' : 'left-[2px] translate-x-[54px]'
                 }`}
               >
                 {isDarkMode ? (
-                  /* Night Mode: Moon with sparkle stars */
+                  /* Dark Mode: Moon with sparkle stars */
                   <svg
                     className="w-3.5 h-3.5 text-black"
                     viewBox="0 0 24 24"
@@ -572,7 +683,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                     <path d="M17.5 5.5h3" strokeWidth="2" />
                   </svg>
                 ) : (
-                  /* Day Mode: Sun with radial rays */
+                  /* Light Mode: Sun with radial rays */
                   <svg
                     className="w-3.5 h-3.5 text-black"
                     viewBox="0 0 24 24"
@@ -600,40 +711,15 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                 {isDarkMode ? (
                   <>
                     <span className="w-[22px] shrink-0" aria-hidden="true" />
-                    <span className="text-white pr-2 pl-1 truncate select-none text-right flex-1">NIGHT MODE</span>
+                    <span className="text-white pr-2 pl-0.5 truncate select-none text-right flex-1">DARK</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-black pl-2 pr-1 truncate select-none text-left flex-1">DAY MODE</span>
+                    <span className="text-black pl-2 pr-0.5 truncate select-none text-left flex-1">LIGHT</span>
                     <span className="w-[22px] shrink-0" aria-hidden="true" />
                   </>
                 )}
               </div>
-            </button>
-          )}
-
-          {/* Full Screen Code Toggle */}
-          {onToggleFullscreen && (
-            <button
-              onClick={onToggleFullscreen}
-              className={`px-2 py-1 rounded transition flex items-center space-x-1.5 text-xs font-mono border ${
-                isFullscreen 
-                  ? 'bg-[#1f2024] text-[#ff9100] border-[#ff9100]/50' 
-                  : 'text-gray-400 hover:text-white hover:bg-[#1f2024] border-transparent hover:border-[#2b2d35]'
-              }`}
-              title={isFullscreen ? 'Exit Full Screen (Esc)' : 'Full Screen Code (F11)'}
-            >
-              {isFullscreen ? (
-                <>
-                  <Minimize2 className="w-3.5 h-3.5 text-[#ff9100]" />
-                  <span className="hidden md:inline text-[11px] text-[#ff9100]">Exit Fullscreen</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline text-[11px] text-gray-300">Fullscreen</span>
-                </>
-              )}
             </button>
           )}
         </div>
