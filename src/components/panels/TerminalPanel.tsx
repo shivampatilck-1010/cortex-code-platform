@@ -17,6 +17,7 @@ interface TerminalPanelProps {
   files: ProjectFile[];
   onSyncFiles?: (files: ProjectFile[]) => void;
   onExecuteCommand?: (cmd: string) => void;
+  isDarkMode?: boolean;
 }
 
 interface TerminalLine {
@@ -47,7 +48,12 @@ const DEFAULT_WELCOME_LINES: TerminalLine[] = [
   },
 ];
 
-export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles, onExecuteCommand }) => {
+export const TerminalPanel: React.FC<TerminalPanelProps> = ({
+  files,
+  onSyncFiles,
+  onExecuteCommand,
+  isDarkMode = true,
+}) => {
   const [tabs, setTabs] = useState<TerminalTab[]>([
     {
       id: 'tab-1',
@@ -273,57 +279,57 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
       case 'prompt':
         return (
           <div className="flex items-start font-mono leading-[22px] text-[13.5px]">
-            <span className="text-[#ff9100] font-semibold">sandbox</span>
-            <span className="text-[#6b7280]">:~/workspace $ </span>
-            <span className="text-[#ffffff] font-medium">{item.content}</span>
+            <span className={isDarkMode ? 'text-[#ff9100] font-semibold' : 'text-[#d97706] font-semibold'}>sandbox</span>
+            <span className={isDarkMode ? 'text-[#6b7280]' : 'text-slate-500'}>:~/workspace $ </span>
+            <span className={isDarkMode ? 'text-[#ffffff] font-medium' : 'text-slate-900 font-medium'}>{item.content}</span>
           </div>
         );
 
       case 'system':
         return (
-          <div className="text-[#ff9100] font-mono leading-[22px] text-[13.5px]">
+          <div className={`font-mono leading-[22px] text-[13.5px] ${isDarkMode ? 'text-[#ff9100]' : 'text-[#d97706]'}`}>
             {item.content}
           </div>
         );
 
       case 'info':
         return (
-          <div className="text-gray-300 font-mono leading-[22px] text-[13.5px]">
+          <div className={`font-mono leading-[22px] text-[13.5px] ${isDarkMode ? 'text-gray-300' : 'text-slate-600'}`}>
             {item.content}
           </div>
         );
 
       case 'stdout':
         return (
-          <pre className="text-[#cccccc] whitespace-pre-wrap font-mono leading-[22px] text-[13.5px] m-0">
+          <pre className={`whitespace-pre-wrap font-mono leading-[22px] text-[13.5px] m-0 ${isDarkMode ? 'text-[#cccccc]' : 'text-slate-800'}`}>
             {item.content}
           </pre>
         );
 
       case 'stderr':
         return (
-          <div className="text-[#f14c4c] font-mono leading-[22px] text-[13.5px] whitespace-pre-wrap">
+          <div className={`font-mono leading-[22px] text-[13.5px] whitespace-pre-wrap ${isDarkMode ? 'text-[#f14c4c]' : 'text-rose-600'}`}>
             {item.content}
           </div>
         );
 
       case 'warning':
         return (
-          <div className="text-[#cca700] font-mono leading-[22px] text-[13.5px] whitespace-pre-wrap">
+          <div className={`font-mono leading-[22px] text-[13.5px] whitespace-pre-wrap ${isDarkMode ? 'text-[#cca700]' : 'text-amber-600'}`}>
             {item.content}
           </div>
         );
 
       case 'success':
         return (
-          <div className="text-[#89d185] font-mono leading-[22px] text-[13.5px] whitespace-pre-wrap">
+          <div className={`font-mono leading-[22px] text-[13.5px] whitespace-pre-wrap ${isDarkMode ? 'text-[#89d185]' : 'text-emerald-600'}`}>
             {item.content}
           </div>
         );
 
       default:
         return (
-          <div className="text-[#cccccc] font-mono leading-[22px] text-[13.5px]">
+          <div className={`font-mono leading-[22px] text-[13.5px] ${isDarkMode ? 'text-[#cccccc]' : 'text-slate-800'}`}>
             {item.content}
           </div>
         );
@@ -333,10 +339,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
   return (
     <div
       onClick={() => inputRef.current?.focus()}
-      className="h-full flex flex-col bg-[#141518] text-[#cccccc] font-['Consolas','Courier_New',monospace] text-[13px] select-text overflow-hidden cursor-text"
+      className={`h-full flex flex-col font-['Consolas','Courier_New',monospace] text-[13px] select-text overflow-hidden cursor-text transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#141518] text-[#cccccc]' : 'bg-white text-slate-800'
+      }`}
     >
       {/* VS Code Integrated Terminal Tab & Action Header Bar */}
-      <div className="h-8 bg-[#101114] border-b border-[#1f2024] flex items-center justify-between px-2 select-none">
+      <div className={`h-8 border-b flex items-center justify-between px-2 select-none transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-slate-100 border-slate-200'
+      }`}>
         {/* Left: Terminal Tabs */}
         <div className="flex items-center space-x-1 overflow-x-auto h-full">
           {tabs.map((tab) => {
@@ -350,11 +360,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
                 }}
                 className={`h-full flex items-center space-x-1.5 px-2.5 text-xs transition border-b-2 font-heading font-semibold tracking-wide ${
                   isActive
-                    ? 'bg-[#141518] text-white border-[#ff9100]'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-[#1c1e24] border-transparent'
+                    ? isDarkMode
+                      ? 'bg-[#141518] text-white border-[#ff9100]'
+                      : 'bg-white text-slate-900 border-[#ff9100] shadow-sm'
+                    : isDarkMode
+                      ? 'text-gray-500 hover:text-gray-300 hover:bg-[#1c1e24] border-transparent'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 border-transparent'
                 }`}
               >
-                <TerminalIcon className="w-3.5 h-3.5 text-[#4ec9b0]" />
+                <TerminalIcon className={`w-3.5 h-3.5 ${isDarkMode ? 'text-[#4ec9b0]' : 'text-[#0d9488]'}`} />
                 <span>{tab.name}</span>
               </button>
             );
@@ -366,14 +380,16 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
               handleNewTerminal();
             }}
             title="New Terminal (bash)"
-            className="p-1 text-[#969696] hover:text-white hover:bg-[#2a2d2e] rounded transition"
+            className={`p-1 rounded transition ${
+              isDarkMode ? 'text-[#969696] hover:text-white hover:bg-[#2a2d2e]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'
+            }`}
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Right: VS Code Terminal Toolbar Actions */}
-        <div className="flex items-center space-x-1 text-[#969696]">
+        <div className={`flex items-center space-x-1 ${isDarkMode ? 'text-[#969696]' : 'text-slate-500'}`}>
 
           <button
             onClick={(e) => {
@@ -381,7 +397,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
               handleNewTerminal();
             }}
             title="Split Terminal"
-            className="p-1 hover:text-white hover:bg-[#2a2d2e] rounded transition"
+            className={`p-1 rounded transition ${isDarkMode ? 'hover:text-white hover:bg-[#2a2d2e]' : 'hover:text-slate-900 hover:bg-slate-200'}`}
           >
             <Split className="w-3.5 h-3.5" />
           </button>
@@ -392,7 +408,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
               clearActiveTab();
             }}
             title="Clear Terminal Buffer"
-            className="p-1 hover:text-white hover:bg-[#2a2d2e] rounded transition"
+            className={`p-1 rounded transition ${isDarkMode ? 'hover:text-white hover:bg-[#2a2d2e]' : 'hover:text-slate-900 hover:bg-slate-200'}`}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -403,7 +419,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
               handleCloseActiveTerminal();
             }}
             title="Kill Terminal Session"
-            className="p-1 hover:text-[#f14c4c] hover:bg-[#2a2d2e] rounded transition"
+            className={`p-1 rounded transition ${isDarkMode ? 'hover:text-[#f14c4c] hover:bg-[#2a2d2e]' : 'hover:text-rose-600 hover:bg-rose-100'}`}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -411,15 +427,17 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
       </div>
 
       {/* Terminal History Output Stream */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin scrollbar-thumb-[#2d2f37] scrollbar-track-transparent">
+      <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1 ${
+        isDarkMode ? 'scrollbar-thin scrollbar-thumb-[#2d2f37] scrollbar-track-transparent' : 'scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent'
+      }`}>
         {activeTab.lines.map((item) => (
           <div key={item.id}>{renderLineContent(item)}</div>
         ))}
 
         {/* Active Command Prompt Line */}
         <form onSubmit={handleCommand} className="flex items-center pt-0.5 leading-[20px]">
-          <span className="text-[#ff9100] font-semibold">sandbox</span>
-          <span className="text-[#6b7280]">:~/workspace $ </span>
+          <span className={isDarkMode ? 'text-[#ff9100] font-semibold' : 'text-[#d97706] font-semibold'}>sandbox</span>
+          <span className={isDarkMode ? 'text-[#6b7280]' : 'text-slate-500'}>:~/workspace $ </span>
           <input
             ref={inputRef}
             type="text"
@@ -429,7 +447,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ files, onSyncFiles
             autoFocus
             spellCheck={false}
             autoComplete="off"
-            className="flex-1 bg-transparent text-[#ffffff] font-['Consolas','Courier_New',monospace] text-[13px] outline-none border-none p-0 m-0 leading-[20px]"
+            className={`flex-1 bg-transparent font-['Consolas','Courier_New',monospace] text-[13px] outline-none border-none p-0 m-0 leading-[20px] ${
+              isDarkMode ? 'text-[#ffffff]' : 'text-slate-900'
+            }`}
           />
           {/* Authentic VS Code block cursor */}
           <span className="w-2 h-4 bg-[#ff9100] inline-block animate-pulse -ml-1 pointer-events-none opacity-80" />

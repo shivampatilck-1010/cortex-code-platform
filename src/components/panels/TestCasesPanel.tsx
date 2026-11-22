@@ -143,27 +143,33 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
           <div className="space-y-3">
             {/* Add Test Case Form */}
             {showAddModal && (
-              <form onSubmit={handleCreateTest} className="p-2.5 bg-[#1c1e24] border border-[#2d303b] rounded space-y-2">
-                <span className="font-bold text-gray-200 block text-[11px]">Add New Test Case</span>
+              <form onSubmit={handleCreateTest} className={`p-2.5 rounded space-y-2 border ${
+                isDarkMode ? 'bg-[#1c1e24] border-[#2d303b]' : 'bg-slate-50 border-slate-200 shadow-sm'
+              }`}>
+                <span className={`font-bold block text-[11px] ${isDarkMode ? 'text-gray-200' : 'text-slate-900'}`}>Add New Test Case</span>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-gray-400 block mb-1">Standard Input (stdin)</label>
+                    <label className={`text-[10px] block mb-1 ${isDarkMode ? 'text-gray-400' : 'text-slate-600'}`}>Standard Input (stdin)</label>
                     <textarea
                       rows={2}
                       value={newStdin}
                       onChange={(e) => setNewStdin(e.target.value)}
                       placeholder="e.g. 5\n10 20 30"
-                      className="w-full bg-[#141518] text-gray-200 p-1.5 rounded border border-[#2d303b] text-xs focus:outline-none"
+                      className={`w-full p-1.5 rounded border text-xs focus:outline-none ${
+                        isDarkMode ? 'bg-[#141518] text-gray-200 border-[#2d303b]' : 'bg-white text-slate-800 border-slate-200 shadow-sm'
+                      }`}
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-400 block mb-1">Expected Output (stdout)</label>
+                    <label className={`text-[10px] block mb-1 ${isDarkMode ? 'text-gray-400' : 'text-slate-600'}`}>Expected Output (stdout)</label>
                     <textarea
                       rows={2}
                       value={newExpected}
                       onChange={(e) => setNewExpected(e.target.value)}
                       placeholder="e.g. 60"
-                      className="w-full bg-[#141518] text-gray-200 p-1.5 rounded border border-[#2d303b] text-xs focus:outline-none"
+                      className={`w-full p-1.5 rounded border text-xs focus:outline-none ${
+                        isDarkMode ? 'bg-[#141518] text-gray-200 border-[#2d303b]' : 'bg-white text-slate-800 border-slate-200 shadow-sm'
+                      }`}
                     />
                   </div>
                 </div>
@@ -171,13 +177,13 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-2 py-0.5 rounded text-gray-400 hover:text-white"
+                    className={`px-2 py-0.5 rounded ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-3 py-1 rounded bg-[#ff9100] hover:bg-[#e08000] text-[#0b0c0e] font-bold text-[11px] transition"
+                    className="px-3 py-1 rounded bg-[#ff9100] hover:bg-[#e08000] text-slate-950 font-bold text-[11px] transition shadow-sm"
                   >
                     Save Test Case
                   </button>
@@ -186,7 +192,7 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
             )}
 
             {safeTests.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className={`text-center py-8 ${isDarkMode ? 'text-gray-500' : 'text-slate-500'}`}>
                 <p>No test cases yet.</p>
                 <p className="text-[11px] mt-1">Click + above to add an input and expected output.</p>
               </div>
@@ -196,10 +202,10 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
                   key={tc.id}
                   className={`p-2.5 rounded border transition ${
                     tc.passed === true
-                      ? 'bg-emerald-950/20 border-emerald-800/50'
+                      ? isDarkMode ? 'bg-emerald-950/20 border-emerald-800/50' : 'bg-emerald-50 border-emerald-200'
                       : tc.passed === false
-                      ? 'bg-rose-950/20 border-rose-800/50'
-                      : 'bg-[#18191d] border-[#282a33]'
+                      ? isDarkMode ? 'bg-rose-950/20 border-rose-800/50' : 'bg-rose-50 border-rose-200'
+                      : isDarkMode ? 'bg-[#18191d] border-[#282a33]' : 'bg-slate-50 border-slate-200 shadow-sm'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
@@ -211,20 +217,22 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
                       ) : (
                         <span className="w-3.5 h-3.5 rounded-full border border-gray-500 inline-block" />
                       )}
-                      <span className="font-semibold text-gray-200">{tc.name}</span>
+                      <span className={`font-semibold ${isDarkMode ? 'text-gray-200' : 'text-slate-900'}`}>{tc.name}</span>
                       {tc.isHidden && (
-                        <span className="flex items-center space-x-1 px-1.5 py-0.2 rounded bg-gray-800 text-gray-400 text-[10px]">
+                        <span className={`flex items-center space-x-1 px-1.5 py-0.2 rounded text-[10px] ${
+                          isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-slate-200 text-slate-700'
+                        }`}>
                           <EyeOff className="w-3 h-3" />
                           <span>Hidden</span>
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center space-x-3 text-gray-400 text-[11px]">
+                    <div className={`flex items-center space-x-3 text-[11px] ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                       {tc.timeMs !== undefined && <span>{tc.timeMs} ms</span>}
                       <button
                         onClick={() => onDeleteTestCase(tc.id)}
-                        className="text-gray-500 hover:text-rose-400 transition"
+                        className={`${isDarkMode ? 'text-gray-500 hover:text-rose-400' : 'text-slate-400 hover:text-rose-600'} transition`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -234,30 +242,36 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
                   {!tc.isHidden ? (
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div>
-                        <span className="text-gray-500 block mb-0.5">Input:</span>
-                        <pre className="bg-[#121316] p-1.5 rounded border border-[#22242b] text-gray-300 whitespace-pre-wrap">
+                        <span className={`block mb-0.5 ${isDarkMode ? 'text-gray-500' : 'text-slate-500'}`}>Input:</span>
+                        <pre className={`p-1.5 rounded border whitespace-pre-wrap ${
+                          isDarkMode ? 'bg-[#121316] border-[#22242b] text-gray-300' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                        }`}>
                           {tc.stdin || '<empty>'}
                         </pre>
                       </div>
                       <div>
-                        <span className="text-gray-500 block mb-0.5">Expected:</span>
-                        <pre className="bg-[#121316] p-1.5 rounded border border-[#22242b] text-gray-300 whitespace-pre-wrap">
+                        <span className={`block mb-0.5 ${isDarkMode ? 'text-gray-500' : 'text-slate-500'}`}>Expected:</span>
+                        <pre className={`p-1.5 rounded border whitespace-pre-wrap ${
+                          isDarkMode ? 'bg-[#121316] border-[#22242b] text-gray-300' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                        }`}>
                           {tc.expectedStdout}
                         </pre>
                       </div>
                       {tc.actualStdout !== undefined && (
                         <div className="col-span-2">
-                          <span className={`block mb-0.5 ${tc.passed ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <span className={`block mb-0.5 ${tc.passed ? (isDarkMode ? 'text-emerald-400' : 'text-emerald-700') : (isDarkMode ? 'text-rose-400' : 'text-rose-700')}`}>
                             Actual Output:
                           </span>
-                          <pre className="bg-[#121316] p-1.5 rounded border border-[#22242b] text-gray-300 whitespace-pre-wrap">
+                          <pre className={`p-1.5 rounded border whitespace-pre-wrap ${
+                            isDarkMode ? 'bg-[#121316] border-[#22242b] text-gray-300' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+                          }`}>
                             {tc.actualStdout}
                           </pre>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <p className="text-gray-500 text-[11px]">
+                    <p className={`text-[11px] ${isDarkMode ? 'text-gray-500' : 'text-slate-500'}`}>
                       Hidden test case.
                     </p>
                   )}
@@ -270,7 +284,7 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
         {/* TAB 2: Custom Stdin */}
         {activeTab === 'custom' && (
           <div className="space-y-2 h-full flex flex-col">
-            <span className="text-gray-400 text-[11px]">
+            <span className={`text-[11px] ${isDarkMode ? 'text-gray-400' : 'text-slate-600'}`}>
               Standard input passed to your program at runtime:
             </span>
             <textarea
@@ -278,7 +292,9 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
               value={customStdin}
               onChange={(e) => onChangeCustomStdin(e.target.value)}
               placeholder="Enter standard input values here..."
-              className="flex-1 w-full bg-[#18191d] text-gray-200 p-2 rounded border border-[#282a33] focus:outline-none focus:ring-1 focus:ring-[#ff9100] font-mono text-xs"
+              className={`flex-1 w-full p-2 rounded border focus:outline-none focus:ring-1 focus:ring-[#ff9100] font-mono text-xs ${
+                isDarkMode ? 'bg-[#18191d] text-gray-200 border-[#282a33]' : 'bg-white text-slate-900 border-slate-200 shadow-sm'
+              }`}
             />
           </div>
         )}
@@ -288,12 +304,12 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="font-heading font-bold text-sm text-gray-200">Benchmark</h4>
-                <p className="text-gray-300 text-xs mt-0.5">Measure execution latency, memory, and estimated complexity across multiple runs.</p>
+                <h4 className={`font-heading font-bold text-sm ${isDarkMode ? 'text-gray-200' : 'text-slate-900'}`}>Benchmark</h4>
+                <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-300' : 'text-slate-600'}`}>Measure execution latency, memory, and estimated complexity across multiple runs.</p>
               </div>
               <button
                 onClick={onRunBenchmark}
-                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#ff9100] hover:bg-[#e08000] text-[#0b0c0e] font-heading font-bold rounded text-xs transition shadow-sm"
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#ff9100] hover:bg-[#e08000] text-slate-950 font-heading font-bold rounded text-xs transition shadow-sm"
               >
                 <Gauge className="w-3.5 h-3.5" />
                 <span>Run Benchmark</span>
@@ -302,25 +318,27 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
 
             {benchmarkResult ? (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-[#1c1e24] border border-[#2d303b] rounded">
-                  <span className="text-xs text-gray-400 font-heading font-semibold uppercase tracking-wider block mb-1">Average Latency</span>
+                <div className={`p-3 rounded border ${isDarkMode ? 'bg-[#1c1e24] border-[#2d303b]' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                  <span className={`text-xs font-heading font-semibold uppercase tracking-wider block mb-1 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>Average Latency</span>
                   <span className="text-xl font-bold font-mono text-[#ff9100]">{benchmarkResult.averageTimeMs} ms</span>
                 </div>
-                <div className="p-3 bg-[#1c1e24] border border-[#2d303b] rounded">
-                  <span className="text-xs text-gray-400 font-heading font-semibold uppercase tracking-wider block mb-1">Latency Range</span>
-                  <span className="text-xl font-bold font-mono text-emerald-400">{benchmarkResult.minTimeMs} - {benchmarkResult.maxTimeMs} ms</span>
+                <div className={`p-3 rounded border ${isDarkMode ? 'bg-[#1c1e24] border-[#2d303b]' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                  <span className={`text-xs font-heading font-semibold uppercase tracking-wider block mb-1 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>Latency Range</span>
+                  <span className={`text-xl font-bold font-mono ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>{benchmarkResult.minTimeMs} - {benchmarkResult.maxTimeMs} ms</span>
                 </div>
-                <div className="p-3 bg-[#1c1e24] border border-[#2d303b] rounded">
-                  <span className="text-xs text-gray-400 font-heading font-semibold uppercase tracking-wider block mb-1">Resident Memory</span>
-                  <span className="text-xl font-bold font-mono text-amber-300">{benchmarkResult.memoryUsageMb} MB</span>
+                <div className={`p-3 rounded border ${isDarkMode ? 'bg-[#1c1e24] border-[#2d303b]' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                  <span className={`text-xs font-heading font-semibold uppercase tracking-wider block mb-1 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>Resident Memory</span>
+                  <span className={`text-xl font-bold font-mono ${isDarkMode ? 'text-amber-300' : 'text-amber-600'}`}>{benchmarkResult.memoryUsageMb} MB</span>
                 </div>
-                <div className="p-3 bg-[#1c1e24] border border-[#2d303b] rounded">
-                  <span className="text-xs text-gray-400 font-heading font-semibold uppercase tracking-wider block mb-1">Estimated Complexity</span>
+                <div className={`p-3 rounded border ${isDarkMode ? 'bg-[#1c1e24] border-[#2d303b]' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                  <span className={`text-xs font-heading font-semibold uppercase tracking-wider block mb-1 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>Estimated Complexity</span>
                   <span className="text-base font-bold font-mono text-[#ff9100]">{benchmarkResult.approxComplexity}</span>
                 </div>
               </div>
             ) : (
-              <div className="p-4 bg-[#18191d] border border-[#282a33] rounded text-gray-400 text-xs text-center">
+              <div className={`p-4 rounded text-xs text-center border ${
+                isDarkMode ? 'bg-[#18191d] border-[#282a33] text-gray-400' : 'bg-slate-50 border-slate-200 text-slate-500 shadow-sm'
+              }`}>
                 Click "Run Benchmark" to measure execution latency and memory.
               </div>
             )}

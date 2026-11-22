@@ -15,9 +15,10 @@ import { ProjectFile } from '@/lib/execution/types';
 
 interface WebPreviewPanelProps {
   files: ProjectFile[];
+  isDarkMode?: boolean;
 }
 
-export const WebPreviewPanel: React.FC<WebPreviewPanelProps> = ({ files }) => {
+export const WebPreviewPanel: React.FC<WebPreviewPanelProps> = ({ files, isDarkMode = true }) => {
   const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [reloadKey, setReloadKey] = useState(0);
   const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
@@ -83,19 +84,25 @@ export const WebPreviewPanel: React.FC<WebPreviewPanelProps> = ({ files }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#121316] select-none overflow-hidden">
+    <div className={`h-full flex flex-col select-none overflow-hidden transition-colors duration-200 ${
+      isDarkMode ? 'bg-[#121316]' : 'bg-slate-100'
+    }`}>
       {/* Browser Bar */}
-      <div className="px-3 py-1.5 bg-[#18191d] border-b border-[#262832] flex items-center justify-between text-xs font-mono">
+      <div className={`px-3 py-1.5 border-b flex items-center justify-between text-xs font-mono transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#18191d] border-[#262832]' : 'bg-white border-slate-200 shadow-sm'
+      }`}>
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="p-1 text-gray-400 hover:text-white rounded transition"
+            className={`p-1 rounded transition ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
             title="Reload Preview"
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>
-          <div className="flex items-center space-x-1.5 px-2 py-0.5 bg-[#121316] border border-[#2d303b] rounded text-gray-300 text-[11px] w-64 truncate">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+          <div className={`flex items-center space-x-1.5 px-2 py-0.5 rounded text-[11px] w-64 truncate border ${
+            isDarkMode ? 'bg-[#121316] border-[#2d303b] text-gray-300' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-inner'
+          }`}>
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
             <span className="truncate">http://localhost:3000/preview</span>
           </div>
         </div>
@@ -104,29 +111,41 @@ export const WebPreviewPanel: React.FC<WebPreviewPanelProps> = ({ files }) => {
         <div className="flex items-center space-x-1">
           <button
             onClick={() => setDevice('desktop')}
-            className={`p-1 rounded transition ${device === 'desktop' ? 'bg-[#252830] text-[#ff9100]' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`p-1 rounded transition ${
+              device === 'desktop'
+                ? isDarkMode ? 'bg-[#252830] text-[#ff9100]' : 'bg-slate-200 text-[#ff9100] shadow-sm'
+                : isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-slate-500 hover:text-slate-900'
+            }`}
             title="Desktop View (100%)"
           >
             <Monitor className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setDevice('tablet')}
-            className={`p-1 rounded transition ${device === 'tablet' ? 'bg-[#252830] text-[#ff9100]' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`p-1 rounded transition ${
+              device === 'tablet'
+                ? isDarkMode ? 'bg-[#252830] text-[#ff9100]' : 'bg-slate-200 text-[#ff9100] shadow-sm'
+                : isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-slate-500 hover:text-slate-900'
+            }`}
             title="Tablet View (768px)"
           >
             <Tablet className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setDevice('mobile')}
-            className={`p-1 rounded transition ${device === 'mobile' ? 'bg-[#252830] text-[#ff9100]' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`p-1 rounded transition ${
+              device === 'mobile'
+                ? isDarkMode ? 'bg-[#252830] text-[#ff9100]' : 'bg-slate-200 text-[#ff9100] shadow-sm'
+                : isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-slate-500 hover:text-slate-900'
+            }`}
             title="Mobile View (375px)"
           >
             <Smartphone className="w-3.5 h-3.5" />
           </button>
-          <div className="h-3.5 w-[1px] bg-[#2d303b] mx-1" />
+          <div className={`h-3.5 w-[1px] mx-1 ${isDarkMode ? 'bg-[#2d303b]' : 'bg-slate-200'}`} />
           <button
             onClick={handleOpenInNewTab}
-            className="p-1 rounded text-gray-400 hover:text-white hover:bg-[#252830] transition"
+            className={`p-1 rounded transition ${isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#252830]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
             title="Open Live Preview in New Window"
           >
             <ExternalLink className="w-3.5 h-3.5" />
@@ -135,7 +154,9 @@ export const WebPreviewPanel: React.FC<WebPreviewPanelProps> = ({ files }) => {
       </div>
 
       {/* Frame Container */}
-      <div className="flex-1 bg-[#1e2025] flex justify-center items-center overflow-auto p-2">
+      <div className={`flex-1 flex justify-center items-center overflow-auto p-2 transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#1e2025]' : 'bg-slate-200/60'
+      }`}>
         <div
           className={`h-full bg-white transition-all shadow-xl rounded overflow-hidden ${
             device === 'desktop' ? 'w-full' : device === 'tablet' ? 'w-[768px]' : 'w-[375px]'
@@ -153,7 +174,9 @@ export const WebPreviewPanel: React.FC<WebPreviewPanelProps> = ({ files }) => {
 
       {/* Console Drawer */}
       {consoleLogs.length > 0 && (
-        <div className="h-20 bg-[#121316] border-t border-[#262832] p-2 text-[11px] font-mono text-gray-300 overflow-y-auto">
+        <div className={`h-20 border-t p-2 text-[11px] font-mono overflow-y-auto transition-colors duration-200 ${
+          isDarkMode ? 'bg-[#121316] border-[#262832] text-gray-300' : 'bg-white border-slate-200 text-slate-700'
+        }`}>
           {consoleLogs.map((log, i) => (
             <div key={i} className="leading-tight">{log}</div>
           ))}

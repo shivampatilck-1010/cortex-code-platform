@@ -1571,7 +1571,11 @@ function CloudIDEPageInner() {
                     />
                   )}
                   {activeBottomTab === 'terminal' && (
-                    <TerminalPanel files={files} onSyncFiles={setFiles} />
+                    <TerminalPanel
+                      files={files}
+                      onSyncFiles={setFiles}
+                      isDarkMode={isDarkMode}
+                    />
                   )}
                   {activeBottomTab === 'tests' && (
                     <TestCasesPanel
@@ -1593,6 +1597,7 @@ function CloudIDEPageInner() {
                   )}
                   {activeBottomTab === 'ai' && (
                     <AIAssistantPanel
+                      isDarkMode={isDarkMode}
                       currentCode={activeFile?.content || ''}
                       language={currentLang.id}
                       settings={aiSettings}
@@ -1643,6 +1648,7 @@ function CloudIDEPageInner() {
                   )}
                   {activeBottomTab === 'debug' && (
                     <DebuggerPanel
+                      isDarkMode={isDarkMode}
                       isDebugging={isDebugging}
                       onStartDebug={handleStartDebug}
                       onStopDebug={handleStopDebug}
@@ -1657,7 +1663,12 @@ function CloudIDEPageInner() {
                       callStack={parsedDebugInfo.callStack}
                     />
                   )}
-                  {activeBottomTab === 'preview' && <WebPreviewPanel files={files} />}
+                  {activeBottomTab === 'preview' && (
+                    <WebPreviewPanel
+                      files={files}
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
                 </div>
               )}
             </div>

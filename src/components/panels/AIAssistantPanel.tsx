@@ -41,6 +41,7 @@ interface AIAssistantPanelProps {
   analysisResult: AIAnalysisResult | null;
   isAnalyzing: boolean;
   analysisMode: 'explain' | 'optimize' | 'refactor' | null;
+  isDarkMode?: boolean;
 }
 
 export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
@@ -55,6 +56,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
   analysisResult,
   isAnalyzing,
   analysisMode,
+  isDarkMode = true,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'assistant' | 'convert' | 'settings'>('assistant');
   const [targetLang, setTargetLang] = useState('cpp');
@@ -210,8 +212,12 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
       >
         {parts.map((part, pi) =>
           part.type === 'code' ? (
-            <div key={pi} className="w-full rounded border border-[#303340] bg-[#111215] overflow-hidden">
-              <div className="flex items-center justify-between px-2.5 py-1 bg-[#1c1e26] border-b border-[#303340]">
+            <div key={pi} className={`w-full rounded border overflow-hidden ${
+              isDarkMode ? 'border-[#303340] bg-[#111215]' : 'border-slate-200 bg-slate-900'
+            }`}>
+              <div className={`flex items-center justify-between px-2.5 py-1 border-b ${
+                isDarkMode ? 'bg-[#1c1e26] border-[#303340]' : 'bg-slate-800 border-slate-700'
+              }`}>
                 <span className="text-[10px] text-gray-400 font-heading font-semibold uppercase tracking-wider">
                   {part.lang}
                 </span>
@@ -232,8 +238,12 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
               key={pi}
               className={`px-3 py-2 rounded-xl ${
                 isUser
-                  ? 'bg-[#ff9100]/20 border border-[#ff9100]/40 text-amber-100'
-                  : 'bg-[#18191e] border border-[#252830] text-gray-200'
+                  ? isDarkMode
+                    ? 'bg-[#ff9100]/20 border border-[#ff9100]/40 text-amber-100'
+                    : 'bg-amber-100 border border-amber-300 text-amber-950 shadow-sm'
+                  : isDarkMode
+                    ? 'bg-[#18191e] border border-[#252830] text-gray-200'
+                    : 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
               }`}
             >
               {part.content.trim()}
@@ -245,9 +255,13 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#141518] text-xs font-mono select-text overflow-hidden">
+    <div className={`h-full flex flex-col text-xs font-mono select-text overflow-hidden transition-colors duration-200 ${
+      isDarkMode ? 'bg-[#141518] text-gray-200' : 'bg-white text-slate-800'
+    }`}>
       {/* Sub Tabs */}
-      <div className="px-3 bg-[#18191d] border-b border-[#252830] flex items-center">
+      <div className={`px-3 border-b flex items-center transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#18191d] border-[#252830]' : 'bg-slate-100 border-slate-200'
+      }`}>
         <div className="flex space-x-1">
           {[
             { id: 'assistant', label: 'Assistant', Icon: Sparkles },
@@ -260,7 +274,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
               className={`py-2 px-3.5 border-b-2 font-heading font-semibold text-xs tracking-wide transition ${
                 activeSubTab === id
                   ? 'border-[#ff9100] text-[#ff9100]'
-                  : 'border-transparent text-gray-400 hover:text-gray-200'
+                  : isDarkMode
+                    ? 'border-transparent text-gray-400 hover:text-gray-200'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
               }`}
             >
               <span className="flex items-center space-x-1.5">
@@ -278,11 +294,17 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         {activeSubTab === 'assistant' && (
           <div className="flex flex-col h-full overflow-hidden">
             {/* Action Buttons */}
-            <div className="grid grid-cols-3 gap-2 p-3 border-b border-[#1f2129]">
+            <div className={`grid grid-cols-3 gap-2 p-3 border-b transition-colors duration-200 ${
+              isDarkMode ? 'border-[#1f2129]' : 'border-slate-200 bg-slate-50'
+            }`}>
               <button
                 onClick={onTriggerExplain}
                 disabled={isAnalyzing}
-                className="flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded bg-[#1f2129] hover:bg-[#282b36] border border-[#303340] text-gray-200 font-heading font-semibold text-xs transition disabled:opacity-50"
+                className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded font-heading font-semibold text-xs transition disabled:opacity-50 border ${
+                  isDarkMode
+                    ? 'bg-[#1f2129] hover:bg-[#282b36] border-[#303340] text-gray-200'
+                    : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800 shadow-sm'
+                }`}
               >
                 <HelpCircle className="w-3.5 h-3.5 text-[#ff9100]" />
                 <span>Explain</span>
@@ -290,7 +312,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
               <button
                 onClick={onTriggerOptimize}
                 disabled={isAnalyzing}
-                className="flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded bg-[#1f2129] hover:bg-[#282b36] border border-[#303340] text-gray-200 font-heading font-semibold text-xs transition disabled:opacity-50"
+                className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded font-heading font-semibold text-xs transition disabled:opacity-50 border ${
+                  isDarkMode
+                    ? 'bg-[#1f2129] hover:bg-[#282b36] border-[#303340] text-gray-200'
+                    : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800 shadow-sm'
+                }`}
               >
                 <Zap className="w-3.5 h-3.5 text-[#ff9100]" />
                 <span>Optimize</span>
@@ -298,7 +324,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
               <button
                 onClick={onTriggerRefactor}
                 disabled={isAnalyzing}
-                className="flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded bg-[#1f2129] hover:bg-[#282b36] border border-[#303340] text-gray-200 font-heading font-semibold text-xs transition disabled:opacity-50"
+                className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded font-heading font-semibold text-xs transition disabled:opacity-50 border ${
+                  isDarkMode
+                    ? 'bg-[#1f2129] hover:bg-[#282b36] border-[#303340] text-gray-200'
+                    : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-800 shadow-sm'
+                }`}
               >
                 <Wand2 className="w-3.5 h-3.5 text-[#ff9100]" />
                 <span>Refactor</span>
@@ -307,7 +337,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
             {/* API Key Connection Banner — shows when no key is set */}
             {!isConnected && showKeyBanner && (
-              <div className="mx-3 mt-2 rounded border border-[#252830] bg-[#18191e] overflow-hidden flex-shrink-0">
+              <div className={`mx-3 mt-2 rounded border overflow-hidden flex-shrink-0 transition-colors duration-200 ${
+                isDarkMode ? 'border-[#252830] bg-[#18191e]' : 'border-slate-200 bg-slate-50 shadow-sm'
+              }`}>
                 <div className="px-3 py-2.5 space-y-2">
                   {/* Header */}
                   <div className="flex items-center justify-between">
@@ -317,7 +349,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                     </span>
                     <button
                       onClick={() => setShowKeyBanner(false)}
-                      className="text-gray-500 hover:text-gray-300 p-0.5 rounded"
+                      className={`p-0.5 rounded transition ${isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-slate-400 hover:text-slate-600'}`}
                       aria-label="Dismiss banner"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -325,7 +357,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                   </div>
 
                   {/* Steps */}
-                  <div className="text-gray-400 text-[11px] space-y-1">
+                  <div className={`text-[11px] space-y-1 ${isDarkMode ? 'text-gray-400' : 'text-slate-600'}`}>
                     <div className="flex items-start space-x-2">
                       <span className="text-[#ff9100] font-bold">1.</span>
                       <span>
@@ -359,7 +391,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleConnectKey(keyInput);
                         }}
-                        className="w-full bg-[#0b0c0e] border border-[#282a34] focus:border-[#ff9100] px-2.5 py-1.5 rounded text-white text-xs font-mono focus:outline-none placeholder:text-gray-500 pr-7"
+                        className={`w-full px-2.5 py-1.5 rounded text-xs font-mono focus:outline-none focus:border-[#ff9100] pr-7 border ${
+                          isDarkMode
+                            ? 'bg-[#0b0c0e] border-[#282a34] text-white placeholder:text-gray-500'
+                            : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 shadow-inner'
+                        }`}
                       />
                       {isValidatingKey && (
                         <Loader2 className="w-3 h-3 text-[#ff9100] animate-spin absolute right-2 top-2" />
@@ -376,13 +412,13 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
                   {/* Validation Result */}
                   {keyStatus === 'valid' && (
-                    <div className="text-emerald-400 text-[11px] flex items-center space-x-1.5">
+                    <div className="text-emerald-500 text-[11px] flex items-center space-x-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>{keyMsg}</span>
                     </div>
                   )}
                   {keyStatus === 'invalid' && (
-                    <div className="text-rose-400 text-[11px] flex items-center space-x-1.5">
+                    <div className="text-rose-500 text-[11px] flex items-center space-x-1.5">
                       <AlertTriangle className="w-3.5 h-3.5" />
                       <span>{keyMsg}</span>
                     </div>
@@ -393,14 +429,16 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
             {/* Connected indicator */}
             {isConnected && showKeyBanner && (
-              <div className="mx-3 mt-2 px-3 py-1.5 rounded bg-emerald-950/30 border border-emerald-800/40 flex items-center justify-between flex-shrink-0">
-                <span className="text-emerald-400 text-[11px] flex items-center space-x-1.5">
+              <div className={`mx-3 mt-2 px-3 py-1.5 rounded border flex items-center justify-between flex-shrink-0 ${
+                isDarkMode ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              }`}>
+                <span className="text-[11px] flex items-center space-x-1.5 font-semibold">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Gemini AI connected</span>
                 </span>
                 <button
                   onClick={() => setShowKeyBanner(false)}
-                  className="text-gray-500 hover:text-gray-300 p-0.5 rounded"
+                  className={`p-0.5 rounded transition ${isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-emerald-600 hover:text-emerald-800'}`}
                   aria-label="Dismiss banner"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -410,9 +448,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
             {/* Analysis Result */}
             {(isAnalyzing || analysisResult) && (
-              <div className="mx-3 mt-2.5 mb-1 rounded border border-[#252830] bg-[#18191e] overflow-hidden flex-shrink-0">
+              <div className={`mx-3 mt-2.5 mb-1 rounded border overflow-hidden flex-shrink-0 transition-colors duration-200 ${
+                isDarkMode ? 'border-[#252830] bg-[#18191e]' : 'border-slate-200 bg-slate-50 shadow-sm'
+              }`}>
                 {isAnalyzing ? (
-                  <div className="flex items-center space-x-2 p-3 text-gray-300">
+                  <div className={`flex items-center space-x-2 p-3 ${isDarkMode ? 'text-gray-300' : 'text-slate-600'}`}>
                     <RefreshCw className="w-4 h-4 text-[#ff9100] animate-spin" />
                     <span className="text-xs font-heading">Analyzing with Gemini AI...</span>
                   </div>
@@ -424,19 +464,21 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                         {getModeIcon()}
                         <span>{getModeLabel()}</span>
                       </span>
-                      <span className="text-[10px] text-gray-400 font-mono bg-[#111215] px-1.5 py-0.5 rounded">
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                        isDarkMode ? 'text-gray-400 bg-[#111215]' : 'text-slate-600 bg-slate-200'
+                      }`}>
                         {analysisResult.complexityEstimate}
                       </span>
                     </div>
 
                     {/* Explanation */}
-                    <p className="text-gray-200 text-xs leading-relaxed">{analysisResult.explanation}</p>
+                    <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-slate-800'}`}>{analysisResult.explanation}</p>
 
                     {/* Bugs */}
                     {analysisResult.bugs && analysisResult.bugs.length > 0 && analysisResult.bugs[0] !== 'No critical static syntax defects detected in current scope.' && (
                       <div>
-                        <span className="text-xs text-red-400 font-heading font-bold block mb-1">Issues Found:</span>
-                        <ul className="list-disc list-inside space-y-0.5 text-gray-300 text-xs">
+                        <span className="text-xs text-rose-500 font-heading font-bold block mb-1">Issues Found:</span>
+                        <ul className={`list-disc list-inside space-y-0.5 text-xs ${isDarkMode ? 'text-gray-300' : 'text-slate-700'}`}>
                           {analysisResult.bugs.map((b, i) => <li key={i}>{b}</li>)}
                         </ul>
                       </div>
@@ -448,7 +490,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                         <span className="text-xs text-[#ff9100] font-heading font-bold block mb-1">
                           {analysisMode === 'optimize' ? 'Optimizations:' : analysisMode === 'refactor' ? 'Improvements:' : 'Notes:'}
                         </span>
-                        <ul className="list-disc list-inside space-y-0.5 text-gray-300 text-xs">
+                        <ul className={`list-disc list-inside space-y-0.5 text-xs ${isDarkMode ? 'text-gray-300' : 'text-slate-700'}`}>
                           {analysisResult.optimizations.map((opt, i) => <li key={i}>{opt}</li>)}
                         </ul>
                       </div>
@@ -456,8 +498,12 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
                     {/* Suggested Code */}
                     {analysisResult.suggestedCode && analysisResult.suggestedCode.trim() && (
-                      <div className="rounded border border-[#303340] bg-[#111215] overflow-hidden">
-                        <div className="flex items-center justify-between px-2.5 py-1 bg-[#1c1e26] border-b border-[#303340]">
+                      <div className={`rounded border overflow-hidden ${
+                        isDarkMode ? 'border-[#303340] bg-[#111215]' : 'border-slate-200 bg-slate-900'
+                      }`}>
+                        <div className={`flex items-center justify-between px-2.5 py-1 border-b ${
+                          isDarkMode ? 'bg-[#1c1e26] border-[#303340]' : 'bg-slate-800 border-slate-700'
+                        }`}>
                           <span className="text-[10px] text-gray-400 font-heading font-semibold uppercase tracking-wider">
                             {analysisMode === 'refactor' ? 'Refactored Code' : 'Suggested Code'}
                           </span>
@@ -483,7 +529,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
               {chatMessages.map((msg, idx) => renderMessage(msg, idx))}
               {isChatLoading && (
-                <div className="mr-auto flex items-center space-x-2 px-3 py-2 rounded-xl bg-[#18191e] border border-[#252830] text-gray-400 text-xs">
+                <div className={`mr-auto flex items-center space-x-2 px-3 py-2 rounded-xl text-xs border ${
+                  isDarkMode ? 'bg-[#18191e] border-[#252830] text-gray-400' : 'bg-slate-100 border-slate-200 text-slate-600'
+                }`}>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#ff9100]" />
                   <span className="font-heading">Cortex AI is thinking...</span>
                 </div>
@@ -492,14 +540,20 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             </div>
 
             {/* Chat Input */}
-            <form onSubmit={handleSendChat} className="flex items-center space-x-2 p-3 border-t border-[#262832]">
+            <form onSubmit={handleSendChat} className={`flex items-center space-x-2 p-3 border-t transition-colors duration-200 ${
+              isDarkMode ? 'border-[#262832]' : 'border-slate-200 bg-slate-50'
+            }`}>
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Ask about your code, bugs, or how to improve it..."
                 disabled={isChatLoading}
-                className="flex-1 bg-[#141518] text-gray-200 px-3.5 py-2 rounded border border-[#252830] focus:outline-none focus:ring-1 focus:ring-[#ff9100] text-xs disabled:opacity-60"
+                className={`flex-1 px-3.5 py-2 rounded border focus:outline-none focus:ring-1 focus:ring-[#ff9100] text-xs disabled:opacity-60 ${
+                  isDarkMode
+                    ? 'bg-[#141518] text-gray-200 border-[#252830] placeholder:text-gray-500'
+                    : 'bg-white text-slate-900 border-slate-300 placeholder:text-slate-400 shadow-inner'
+                }`}
               />
               <button
                 type="submit"
@@ -516,16 +570,18 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         {activeSubTab === 'convert' && (
           <div className="p-3.5 space-y-4 overflow-y-auto">
             <div>
-              <h4 className="font-heading font-bold text-sm text-gray-200 mb-1">Convert Language</h4>
-              <p className="text-gray-400 text-xs">Translate your code from {language} to another language using Gemini AI.</p>
+              <h4 className={`font-heading font-bold text-sm mb-1 ${isDarkMode ? 'text-gray-200' : 'text-slate-900'}`}>Convert Language</h4>
+              <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-slate-600'}`}>Translate your code from {language} to another language using Gemini AI.</p>
             </div>
 
-            <div className="flex items-center space-x-3 p-3 rounded-lg bg-[#141518] border border-[#23252d]">
+            <div className={`flex items-center space-x-3 p-3 rounded-lg border ${
+              isDarkMode ? 'bg-[#141518] border-[#23252d]' : 'bg-slate-50 border-slate-200 shadow-sm'
+            }`}>
               <div className="flex items-center space-x-2">
                 <LanguageIcon languageId={language} size={20} />
-                <span className="text-xs font-heading font-bold text-white capitalize">{language}</span>
+                <span className={`text-xs font-heading font-bold capitalize ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{language}</span>
               </div>
-              <span className="text-gray-500 text-xs">→</span>
+              <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-slate-400'}`}>→</span>
               <div className="flex items-center space-x-2">
                 <LanguageIcon languageId={targetLang} size={20} />
                 <span className="text-xs font-heading font-bold text-[#ff9100] capitalize">{targetLang}</span>
@@ -533,7 +589,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs text-gray-400 font-heading font-semibold block">Target Language:</label>
+              <label className={`text-xs font-heading font-semibold block ${isDarkMode ? 'text-gray-400' : 'text-slate-600'}`}>Target Language:</label>
               <div className="relative flex items-center">
                 <div className="absolute left-3 pointer-events-none">
                   <LanguageIcon languageId={targetLang} size={16} />
@@ -541,10 +597,12 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                 <select
                   value={targetLang}
                   onChange={(e) => setTargetLang(e.target.value)}
-                  className="w-full bg-[#1c1e24] text-gray-200 pl-9 pr-3 py-2.5 rounded border border-[#2d303b] text-xs font-heading font-semibold focus:outline-none focus:border-[#ff9100] cursor-pointer"
+                  className={`w-full pl-9 pr-3 py-2.5 rounded border text-xs font-heading font-semibold focus:outline-none focus:border-[#ff9100] cursor-pointer ${
+                    isDarkMode ? 'bg-[#1c1e24] text-gray-200 border-[#2d303b]' : 'bg-white text-slate-900 border-slate-300 shadow-sm'
+                  }`}
                 >
                   {SUPPORTED_LANGUAGES.filter((l) => l.id !== language).map((l) => (
-                    <option key={l.id} value={l.id} className="bg-[#1c1e24] text-gray-200">
+                    <option key={l.id} value={l.id} className={isDarkMode ? 'bg-[#1c1e24] text-gray-200' : 'bg-white text-slate-900'}>
                       {l.name} ({l.version})
                     </option>
                   ))}
@@ -565,11 +623,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         {/* SUBTAB 3: Settings */}
         {activeSubTab === 'settings' && (
           <div className="p-3.5 space-y-4 overflow-y-auto">
-            <h4 className="font-heading font-bold text-sm text-gray-200">Assistant Settings</h4>
+            <h4 className={`font-heading font-bold text-sm ${isDarkMode ? 'text-gray-200' : 'text-slate-900'}`}>Assistant Settings</h4>
 
             {/* Operational Mode */}
             <div className="space-y-2">
-              <span className="text-xs text-gray-400 block font-heading font-semibold">Operational Mode:</span>
+              <span className={`text-xs block font-heading font-semibold ${isDarkMode ? 'text-gray-400' : 'text-slate-600'}`}>Operational Mode:</span>
               <div className="space-y-2">
                 {[
                   { id: 'manual', label: 'Manual', desc: 'Only analyze and suggest; do not generate automatic diffs.' },
@@ -581,7 +639,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                     className={`flex items-start space-x-2.5 p-2.5 rounded border cursor-pointer transition ${
                       settings.operationalMode === mode.id
                         ? 'bg-[#ff9100]/10 border-[#ff9100]'
-                        : 'bg-[#18191d] border-[#282a33] hover:border-[#ff9100]/40'
+                        : isDarkMode
+                          ? 'bg-[#18191d] border-[#282a33] hover:border-[#ff9100]/40'
+                          : 'bg-slate-50 border-slate-200 hover:border-[#ff9100]/40 shadow-sm'
                     }`}
                   >
                     <input
@@ -592,8 +652,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                       className="mt-0.5 accent-[#ff9100]"
                     />
                     <div>
-                      <span className="font-heading font-bold text-gray-200 block text-xs">{mode.label}</span>
-                      <span className="text-xs text-gray-400">{mode.desc}</span>
+                      <span className={`font-heading font-bold block text-xs ${isDarkMode ? 'text-gray-200' : 'text-slate-900'}`}>{mode.label}</span>
+                      <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>{mode.desc}</span>
                     </div>
                   </label>
                 ))}
@@ -601,7 +661,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             </div>
 
             {/* Toggles */}
-            <div className="space-y-2 pt-2 border-t border-[#262832]">
+            <div className={`space-y-2 pt-2 border-t ${isDarkMode ? 'border-[#262832]' : 'border-slate-200'}`}>
               {[
                 { key: 'autoFixErrors', label: 'Auto Fix Errors' },
                 { key: 'explainErrors', label: 'Explain Errors with Comments' },
@@ -609,7 +669,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                 { key: 'generateTestCases', label: 'Generate Test Cases' },
               ].map((item) => (
                 <div key={item.key} className="flex items-center justify-between py-1.5">
-                  <span className="text-gray-200 text-xs font-heading font-semibold">{item.label}</span>
+                  <span className={`text-xs font-heading font-semibold ${isDarkMode ? 'text-gray-200' : 'text-slate-800'}`}>{item.label}</span>
                   <input
                     type="checkbox"
                     checked={(settings as unknown as Record<string, boolean>)[item.key]}
