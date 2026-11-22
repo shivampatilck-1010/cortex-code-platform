@@ -58,21 +58,21 @@ export function triggerThemeRippleTransition(
   };
 
   if (typeof overlay.animate === 'function') {
-    // Hardware-accelerated Web Animations API
+    // Hardware-accelerated Web Animations API - gracefully paced expansion
     const expandAnim = overlay.animate(
       [
         { clipPath: `circle(0px at ${originX}px ${originY}px)` },
         { clipPath: `circle(${maxRadius + 40}px at ${originX}px ${originY}px)` },
       ],
       {
-        duration: 480,
+        duration: 950,
         easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
         fill: 'forwards',
       }
     );
 
-    // Apply IDE theme update as the expanding circle covers the view
-    const themeTimer = setTimeout(applyThemeUpdate, 320);
+    // Apply IDE theme update as the expanding circle blankets the screen
+    const themeTimer = setTimeout(applyThemeUpdate, 620);
 
     expandAnim.onfinish = () => {
       clearTimeout(themeTimer);
@@ -80,7 +80,7 @@ export function triggerThemeRippleTransition(
 
       const fadeAnim = overlay.animate(
         [{ opacity: 1 }, { opacity: 0 }],
-        { duration: 250, fill: 'forwards' }
+        { duration: 400, fill: 'forwards', easing: 'ease-out' }
       );
 
       fadeAnim.onfinish = () => {
@@ -95,23 +95,23 @@ export function triggerThemeRippleTransition(
       if (overlay.parentNode) {
         overlay.parentNode.removeChild(overlay);
       }
-    }, 900);
+    }, 1600);
   } else {
     // Fallback for headless environments or older browsers
-    overlay.style.transition = 'clip-path 500ms cubic-bezier(0.22, 1, 0.36, 1)';
+    overlay.style.transition = 'clip-path 950ms cubic-bezier(0.22, 1, 0.36, 1)';
     overlay.getBoundingClientRect();
     overlay.style.clipPath = `circle(${maxRadius + 40}px at ${originX}px ${originY}px)`;
 
     setTimeout(() => {
       applyThemeUpdate();
-      overlay.style.transition = 'opacity 250ms ease-out';
+      overlay.style.transition = 'opacity 400ms ease-out';
       overlay.style.opacity = '0';
-    }, 350);
+    }, 650);
 
     setTimeout(() => {
       if (overlay.parentNode) {
         overlay.parentNode.removeChild(overlay);
       }
-    }, 700);
+    }, 1200);
   }
 }

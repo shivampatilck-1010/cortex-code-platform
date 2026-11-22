@@ -531,7 +531,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             </button>
           )}
 
-          {/* Active Theme Toggle Button */}
+          {/* Active Theme Toggle Pill Switch (Matching Day Mode / Night Mode Reference) */}
           {onToggleDarkMode && (
             <button
               type="button"
@@ -543,24 +543,72 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                 const y = typeof e.clientY === 'number' && e.clientY > 0 ? e.clientY : rect.top + rect.height / 2;
                 onToggleDarkMode({ x, y });
               }}
-              className={`px-2 py-1 rounded transition flex items-center space-x-1.5 text-xs font-mono border cursor-pointer select-none ${
+              className={`relative h-[26px] w-[114px] rounded-full p-[2px] transition-colors duration-300 flex items-center select-none cursor-pointer border shrink-0 ${
                 isDarkMode
-                  ? 'bg-[#15161b] hover:bg-[#1f2024] text-gray-200 border-[#2b2d35]'
-                  : 'bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm'
+                  ? 'bg-black border-zinc-700 shadow-inner'
+                  : 'bg-[#eceef1] border-gray-300 shadow-inner'
               }`}
-              title={isDarkMode ? 'Current theme: Dark (Click to switch to Light)' : 'Current theme: Light (Click to switch to Dark)'}
+              title={isDarkMode ? 'Night Mode active (Click to switch to Day Mode)' : 'Day Mode active (Click to switch to Night Mode)'}
             >
-              {isDarkMode ? (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-cyan-400" />
-                  <span className="hidden sm:inline text-[11px] font-medium text-gray-200">Dark</span>
-                </>
-              ) : (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="hidden sm:inline text-[11px] font-medium text-gray-800">Light</span>
-                </>
-              )}
+              {/* Sliding Circular Knob */}
+              <div
+                className={`absolute top-[1px] w-[22px] h-[22px] rounded-full bg-white shadow-md flex items-center justify-center transition-transform duration-300 ease-out z-10 ${
+                  isDarkMode ? 'left-[2px] translate-x-0' : 'left-[2px] translate-x-[88px]'
+                }`}
+              >
+                {isDarkMode ? (
+                  /* Night Mode: Moon with sparkle stars */
+                  <svg
+                    className="w-3.5 h-3.5 text-black"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    <path d="M19 4v3" strokeWidth="2" />
+                    <path d="M17.5 5.5h3" strokeWidth="2" />
+                  </svg>
+                ) : (
+                  /* Day Mode: Sun with radial rays */
+                  <svg
+                    className="w-3.5 h-3.5 text-black"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="4" />
+                    <line x1="12" y1="2" x2="12" y2="4.5" />
+                    <line x1="12" y1="19.5" x2="12" y2="22" />
+                    <line x1="4.5" y1="4.5" x2="6.2" y2="6.2" />
+                    <line x1="17.8" y1="17.8" x2="19.5" y2="19.5" />
+                    <line x1="2" y1="12" x2="4.5" y2="12" />
+                    <line x1="19.5" y1="12" x2="22" y2="12" />
+                    <line x1="4.5" y1="19.5" x2="6.2" y2="17.8" />
+                    <line x1="17.8" y1="6.2" x2="19.5" y2="4.5" />
+                  </svg>
+                )}
+              </div>
+
+              {/* Text Label */}
+              <div className="w-full flex items-center justify-between text-[9px] font-black tracking-wider uppercase font-sans">
+                {isDarkMode ? (
+                  <>
+                    <span className="w-[22px] shrink-0" aria-hidden="true" />
+                    <span className="text-white pr-2 pl-1 truncate select-none text-right flex-1">NIGHT MODE</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-black pl-2 pr-1 truncate select-none text-left flex-1">DAY MODE</span>
+                    <span className="w-[22px] shrink-0" aria-hidden="true" />
+                  </>
+                )}
+              </div>
             </button>
           )}
 
