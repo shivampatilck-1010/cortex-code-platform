@@ -54,6 +54,7 @@ import { formatSqlResultsToAsciiTable } from '@/lib/sql/formatter';
 import { useIdeLayout, useIdeDebugger } from '@/hooks';
 import { getStarterContentForFile } from '@/hooks/useIdeFiles';
 import { Badge } from '@/components/ui/Badge';
+import { triggerThemeRippleTransition } from '@/lib/theme/ripple-transition';
 
 const getMonacoLangForFile = (filename: string, defaultMonacoLang: string): string => {
   const detected = getMonacoLanguage(filename);
@@ -137,15 +138,24 @@ function CloudIDEPageInner() {
                    if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
                  });
                  const main = data.files.find((f: any) => !f.isFolder) || data.files[0];
+                 let languageConfigured = false;
                  if (main) {
                    setActiveFileId(main.id);
                    const detected = detectLanguage(main.name, main.content, undefined, data.project?.language);
                    const conf = getLanguageConfig(detected);
-                   if (conf) setCurrentLang(conf);
+                   if (conf) {
+                     setCurrentLang(conf);
+                     languageConfigured = true;
+                   }
                  }
+                 if (!languageConfigured) {
+                   const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
+                   if (targetLang) setCurrentLang(targetLang);
+                 }
+              } else {
+                const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
+                if (targetLang) setCurrentLang(targetLang);
               }
-              const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
-              if (targetLang) setCurrentLang(targetLang);
             }
           } else if (res.status === 401) {
             // Unauthenticated: preserve projectId and route to login
@@ -349,11 +359,41 @@ function CloudIDEPageInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  const handleToggleDarkMode = () => {
-    setIsDarkMode((prev) => {
-      const next = !prev;
-      setTheme(next ? 'cortex-dark' : 'cortex-light');
-      return next;
+  // Synchronize document dark class with active theme on initial load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('cortex_ide_theme');
+      if (savedTheme === 'light') {
+        setIsDarkMode(false);
+        setTheme('cortex-light');
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.add('dark');
+      }
+    }
+  }, []);
+
+  const handleToggleDarkMode = (coords?: { x: number; y: number }) => {
+    const originX = coords?.x ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
+    const originY = coords?.y ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
+    const targetTheme = isDarkMode ? 'light' : 'dark';
+
+    triggerThemeRippleTransition(originX, originY, targetTheme, () => {
+      setIsDarkMode((prev) => {
+        const next = !prev;
+        setTheme(next ? 'cortex-dark' : 'cortex-light');
+        if (typeof document !== 'undefined') {
+          if (next) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('cortex_ide_theme', next ? 'dark' : 'light');
+        }
+        return next;
+      });
     });
   };
 
@@ -618,14 +658,32 @@ function CloudIDEPageInner() {
       return;
     }
 
-    if (currentLang.executable === false) {
+    // Resolve the active file to execute
+    const currentActive = files.find((f) => f.id === activeFileId && !f.isFolder) || activeFile;
+    if (!currentActive) return;
+
+    // Detect accurate language from active file's name and buffer
+    const activeFileLangId = detectLanguage(
+      currentActive.name,
+      currentActive.content,
+      fileLanguageOverrides[currentActive.id],
+      currentLang.id
+    );
+    const executionLang = getLanguageConfig(activeFileLangId) || currentLang;
+
+    // Sync currentLang if different from active file language
+    if (executionLang.id !== currentLang.id) {
+      setCurrentLang(executionLang);
+    }
+
+    if (executionLang.executable === false) {
       setActiveBottomTab('output');
       setIsBottomCollapsed(false);
       setExecutionResult({
         status: 'system_error',
         exitCode: 0,
-        stdout: `[Cortex IDE] File: ${activeFile?.name || 'file'}\nFormat: ${currentLang.name} (${currentLang.fileExtension})\n\nLanguage "${currentLang.name}" is a documentation or data format and cannot be executed as a standalone program.\nMonaco syntax highlighting and formatting are active.`,
-        stderr: `Language "${currentLang.name}" is a documentation or data format and cannot be executed as a standalone program.`,
+        stdout: `[Cortex IDE] File: ${currentActive.name}\nFormat: ${executionLang.name} (${executionLang.fileExtension})\n\nLanguage "${executionLang.name}" is a documentation or data format and cannot be executed as a standalone program.\nMonaco syntax highlighting and formatting are active.`,
+        stderr: `Language "${executionLang.name}" is a documentation or data format and cannot be executed as a standalone program.`,
         executionTimeMs: 0,
         memoryUsageMb: 0,
         diagnostics: [],
@@ -635,13 +693,13 @@ function CloudIDEPageInner() {
       return;
     }
 
-    if (currentLang.id === 'html' || currentLang.id === 'css') {
+    if (executionLang.id === 'html' || executionLang.id === 'css') {
       setActiveBottomTab('preview');
       setIsBottomCollapsed(false);
       return;
     }
 
-    if (currentLang.id === 'sql') {
+    if (executionLang.id === 'sql') {
       setIsRunning(true);
       setActiveBottomTab('output');
       setIsBottomCollapsed(false);
@@ -652,7 +710,7 @@ function CloudIDEPageInner() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             projectId: projectId || 'demo_sql_project',
-            query: activeFile.content,
+            query: currentActive.content,
             dialect: 'sqlite',
           }),
         });
@@ -724,31 +782,26 @@ function CloudIDEPageInner() {
     setIsBottomCollapsed(false);
 
     try {
-      const mainFile = files.find(
-        (f) => !f.isFolder && (f.name === currentLang.defaultFileName || f.id === 'main')
-      ) || activeFile;
-
       // Force save active file before run
-      if (projectId && activeFileId) {
-         try {
-           const currentContent = files.find(f => f.id === activeFileId)?.content || '';
-           await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
-             method: 'PATCH',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ content: currentContent })
-           });
-         } catch(e) {}
+      if (projectId && currentActive.id) {
+        try {
+          await fetch(`/api/v1/projects/${projectId}/files/${currentActive.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: currentActive.content })
+          });
+        } catch (e) {}
       }
 
       const syncedFiles = files.map((f) =>
-        f.id === activeFileId ? { ...f, content: activeFile.content } : f
+        f.id === currentActive.id ? { ...f, content: currentActive.content } : f
       );
 
       const res = await executeInCloudSandbox({
         projectId: projectId || undefined,
-        language: currentLang.id,
+        language: executionLang.id,
         files: syncedFiles,
-        entrypoint: mainFile?.name || activeFile.name,
+        entrypoint: currentActive.name,
         stdin: customStdin,
       });
 
@@ -856,22 +909,31 @@ function CloudIDEPageInner() {
 
   // Apply Fix & Re-Verify
   const applyFixAndReverify = async (fixToApply: AIFixResult) => {
-    if (!activeFile || files.length === 0) return;
-    setPreviousCodeSnapshot(activeFile.content);
+    const targetFile = files.find((f) => f.id === activeFileId && !f.isFolder) || activeFile;
+    if (!targetFile || files.length === 0) return;
+    setPreviousCodeSnapshot(targetFile.content);
     // Step 6: Apply fix
     handleContentChange(fixToApply.fixedCode);
 
     // Step 7: Recompile & Re-run
     setIsRunning(true);
     try {
+      const detectedLangId = detectLanguage(
+        targetFile.name,
+        fixToApply.fixedCode,
+        fileLanguageOverrides[targetFile.id],
+        currentLang.id
+      );
+      const executionLang = getLanguageConfig(detectedLangId) || currentLang;
+
       const updatedFiles = files.map((f) =>
-        f.id === activeFileId ? { ...f, content: fixToApply.fixedCode } : f
+        f.id === targetFile.id ? { ...f, content: fixToApply.fixedCode } : f
       );
       const retestRes = await executeInCloudSandbox({
         projectId: projectId || undefined,
-        language: currentLang.id,
+        language: executionLang.id,
         files: updatedFiles,
-        entrypoint: activeFile.name,
+        entrypoint: targetFile.name,
         stdin: customStdin,
       });
 
@@ -896,31 +958,39 @@ function CloudIDEPageInner() {
 
   // Automated Test Cases Runner
   const handleRunAllTests = async () => {
-    if (!activeFile || files.length === 0) return;
+    const targetFile = files.find((f) => f.id === activeFileId && !f.isFolder) || activeFile;
+    if (!targetFile || files.length === 0) return;
     setIsRunningTests(true);
     try {
-      
-      if (projectId && activeFileId) {
-         try {
-           const currentContent = files.find(f => f.id === activeFileId)?.content || '';
-           await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
-             method: 'PATCH',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ content: currentContent })
-           });
-         } catch(e) {}
+      if (projectId && targetFile.id) {
+        try {
+          const currentContent = files.find((f) => f.id === targetFile.id)?.content || '';
+          await fetch(`/api/v1/projects/${projectId}/files/${targetFile.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: currentContent }),
+          });
+        } catch (e) {}
       }
 
+      const detectedLangId = detectLanguage(
+        targetFile.name,
+        targetFile.content,
+        fileLanguageOverrides[targetFile.id],
+        currentLang.id
+      );
+      const executionLang = getLanguageConfig(detectedLangId) || currentLang;
+
       const syncedFiles = files.map((f) =>
-        f.id === activeFileId ? { ...f, content: activeFile.content } : f
+        f.id === targetFile.id ? { ...f, content: targetFile.content } : f
       );
 
       const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
         {
           projectId: projectId || undefined,
-          language: currentLang.id,
+          language: executionLang.id,
           files: syncedFiles,
-          entrypoint: activeFile.name,
+          entrypoint: targetFile.name,
         },
         testCases
       );
@@ -936,29 +1006,38 @@ function CloudIDEPageInner() {
 
   // Benchmark Runner
   const handleRunBenchmark = async () => {
-    if (!activeFile || files.length === 0) return;
-    
-      if (projectId && activeFileId) {
-         try {
-           const currentContent = files.find(f => f.id === activeFileId)?.content || '';
-           await fetch(`/api/v1/projects/${projectId}/files/${activeFileId}`, {
-             method: 'PATCH',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ content: currentContent })
-           });
-         } catch(e) {}
-      }
+    const targetFile = files.find((f) => f.id === activeFileId && !f.isFolder) || activeFile;
+    if (!targetFile || files.length === 0) return;
 
-      const syncedFiles = files.map((f) =>
-        f.id === activeFileId ? { ...f, content: activeFile.content } : f
-      );
+    if (projectId && targetFile.id) {
+      try {
+        const currentContent = files.find((f) => f.id === targetFile.id)?.content || '';
+        await fetch(`/api/v1/projects/${projectId}/files/${targetFile.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: currentContent }),
+        });
+      } catch (e) {}
+    }
 
-      const res = await benchmarkExecution({
-        projectId: projectId || undefined,
-        language: currentLang.id,
-        files: syncedFiles,
-        entrypoint: activeFile.name,
-      });
+    const detectedLangId = detectLanguage(
+      targetFile.name,
+      targetFile.content,
+      fileLanguageOverrides[targetFile.id],
+      currentLang.id
+    );
+    const executionLang = getLanguageConfig(detectedLangId) || currentLang;
+
+    const syncedFiles = files.map((f) =>
+      f.id === targetFile.id ? { ...f, content: targetFile.content } : f
+    );
+
+    const res = await benchmarkExecution({
+      projectId: projectId || undefined,
+      language: executionLang.id,
+      files: syncedFiles,
+      entrypoint: targetFile.name,
+    });
     setBenchmarkResult(res);
   };
 
@@ -1032,7 +1111,7 @@ function CloudIDEPageInner() {
     
   return (
     <AppShell onOpenSettings={() => setIsSettingsOpen(true)}>
-      <div className="flex flex-col h-full w-full bg-[#0b0c0e] text-[#e6edf3] overflow-hidden font-sans select-none">
+      <div className={`flex flex-col h-full w-full ${isDarkMode ? 'bg-[#0b0c0e] text-[#e6edf3]' : 'bg-[#f8fafc] text-[#0f172a]'} overflow-hidden font-sans select-none`}>
         {/* 1. Header Navigation (Permanently sleek Cortex dark #0b0c0e without theme toggle) */}
         <Navbar
           currentLanguage={currentLang}
@@ -1054,7 +1133,7 @@ function CloudIDEPageInner() {
         />
 
         {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
-        <div className="flex-1 flex overflow-hidden bg-[#0b0c0e]">
+        <div className={`flex-1 flex overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#f1f5f9]'}`}>
           {/* Left Contextual Sidebar (Resizable width & Collapsible with smooth sliding animation) */}
           <div 
             ref={fileExplorerRef}
@@ -1239,7 +1318,7 @@ function CloudIDEPageInner() {
                       console.error('Import failed', e);
                     }
                   }}
-                  isDarkMode={true}
+                  isDarkMode={isDarkMode}
                 />
               )}
 
@@ -1313,7 +1392,7 @@ function CloudIDEPageInner() {
           />
 
           {/* Center & Bottom Area */}
-          <div className="flex-1 flex flex-col overflow-hidden bg-[#0b0c0e]">
+          <div className={`flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-white'}`}>
             {/* Center Pane: Multi-Layout (Code, Visualize, Split View) */}
             <div className="flex-1 flex overflow-hidden relative">
               <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? 'w-1/2 border-r border-[#1f2024]' : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
@@ -1395,12 +1474,12 @@ function CloudIDEPageInner() {
             {/* Bottom Dock: Tabbed Panels with Resizable Height */}
             <div
               style={{ height: isBottomCollapsed ? 36 : dockHeight }}
-              className={`border-t border-[#1f2024] bg-[#0b0c0e] flex flex-col ${
+              className={`border-t ${isDarkMode ? 'border-[#1f2024] bg-[#0b0c0e]' : 'border-slate-200 bg-slate-50'} flex flex-col ${
                 isResizingDock ? '' : 'transition-all duration-150'
               }`}
             >
               {/* Dock Tab Selector Header */}
-              <div className="h-9 bg-[#101114] border-b border-[#1f2024] flex items-center justify-between px-2 text-xs select-none">
+              <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-slate-100 border-slate-200'} flex items-center justify-between px-2 text-xs select-none border-b`}>
                 <div className="flex items-center space-x-1">
                   {[
                     { id: 'output', label: 'Output', icon: TermIcon },

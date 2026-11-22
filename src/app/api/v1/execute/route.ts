@@ -7,7 +7,7 @@ import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
 import { ExecutionRequest, ExecutionResult } from '@/lib/execution/types';
 import { getLanguageConfig } from '@/config/languages';
 import { ALLOWED_LANGUAGES, getExecutionMode, SAFE_SYSTEM_ERROR_MESSAGE } from '@/lib/execution/config';
-import { validateProjectFiles } from '@/lib/execution/path-sanitizer';
+import { validateProjectFiles, resolveMainFile } from '@/lib/execution/path-sanitizer';
 import { executionRateLimiter } from '@/lib/execution/rate-limiter';
 import { getAdapter, hasTracingSupport } from '@/lib/visualization/registry';
 import '@/lib/visualization/adapters';
@@ -138,7 +138,8 @@ export const POST = apiHandler(async (req: NextRequest) => {
 
     const adapter = shouldTrace && hasTracingSupport(normalizedLang) ? getAdapter(normalizedLang) : undefined;
     let filesToExec = validation.sanitizedFiles!;
-    let entryToExec = entrypoint || langConfig.defaultFileName;
+    const resolvedMain = resolveMainFile(validation.sanitizedFiles!, entrypoint, langConfig);
+    let entryToExec = resolvedMain?.name || (entrypoint ? entrypoint.replace(/^\/+/, '').trim() : '') || langConfig.defaultFileName;
 
     if (adapter) {
       const tracedSetup = adapter.prepareTracedExecution(

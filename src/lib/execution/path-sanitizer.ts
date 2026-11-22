@@ -1,5 +1,6 @@
 import { ProjectFile } from './types';
 import { EXECUTION_LIMITS } from './config';
+import { LanguageConfig } from '@/config/languages';
 
 export interface PathValidationResult {
   valid: boolean;
@@ -161,4 +162,69 @@ export function validateProjectFiles(files: ProjectFile[]): ProjectValidationRes
   }
 
   return { valid: true, sanitizedFiles };
+}
+
+/**
+ * Resolves the primary entrypoint file for execution from a list of project files.
+ * Normalizes entrypoint paths, prioritizing explicit entrypoint matches, language default
+ * file names, file extensions, and aliases, while preventing cross-language stale fallbacks.
+ */
+export function resolveMainFile(
+  files: ProjectFile[],
+  entrypoint: string | undefined,
+  langConfig: LanguageConfig
+): ProjectFile | undefined {
+  const nonFolderFiles = (files || []).filter((f) => !f.isFolder);
+  if (nonFolderFiles.length === 0) return undefined;
+
+  const cleanEntry = entrypoint ? entrypoint.replace(/^\/+/, '').trim() : '';
+
+  // 1. Direct match by name, path without slash, or id
+  if (cleanEntry) {
+    const matched = nonFolderFiles.find((f) => {
+      const fName = (f.name || '').replace(/^\/+/, '').trim();
+      const fPath = (f.path || '').replace(/^\/+/, '').trim();
+      return (
+        fName === cleanEntry ||
+        fPath === cleanEntry ||
+        f.name === cleanEntry.split('/').pop() ||
+        f.id === cleanEntry ||
+        f.name === entrypoint ||
+        f.path === entrypoint
+      );
+    });
+    if (matched) return matched;
+  }
+
+  // 2. Match language default file name (e.g. main.py)
+  if (langConfig?.defaultFileName) {
+    const defaultNamed = nonFolderFiles.find((f) => {
+      const fName = (f.name || '').replace(/^\/+/, '').trim();
+      const fPath = (f.path || '').replace(/^\/+/, '').trim();
+      return fName === langConfig.defaultFileName || fPath === langConfig.defaultFileName;
+    });
+    if (defaultNamed) return defaultNamed;
+  }
+
+  // 3. Match language primary file extension (e.g. .py)
+  if (langConfig?.fileExtension) {
+    const targetExt = langConfig.fileExtension.toLowerCase();
+    const extMatched = nonFolderFiles.find((f) =>
+      (f.name || '').toLowerCase().endsWith(targetExt)
+    );
+    if (extMatched) return extMatched;
+  }
+
+  // 4. Match language aliases (e.g. .py, .python3)
+  if (langConfig?.aliases && langConfig.aliases.length > 0) {
+    const aliasMatched = nonFolderFiles.find((f) =>
+      langConfig.aliases.some((alias) =>
+        (f.name || '').toLowerCase().endsWith(`.${alias.toLowerCase()}`)
+      )
+    );
+    if (aliasMatched) return aliasMatched;
+  }
+
+  // 5. Fallback: return the first non-folder file, avoiding cross-language id: 'main' hijacking
+  return nonFolderFiles[0];
 }

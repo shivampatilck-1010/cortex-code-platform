@@ -3,7 +3,8 @@
 import { useState, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { ProjectFile, ExecutionResult, TestCase, BenchmarkMetrics } from '@/lib/execution/types';
-import { LanguageConfig } from '@/config/languages';
+import { LanguageConfig, getLanguageConfig } from '@/config/languages';
+import { detectLanguage } from '@/lib/editor/language-detector';
 import { executeInCloudSandbox, runTestCases, benchmarkExecution } from '@/lib/execution/engine';
 import { formatSqlResultsToAsciiTable } from '@/lib/sql/formatter';
 import { TraceSession } from '@/lib/visualization/types';
@@ -49,14 +50,25 @@ export function useIdeExecution({
   const [previousCodeSnapshot, setPreviousCodeSnapshot] = useState<string | null>(null);
 
   const handleRun = useCallback(async () => {
-    if (!activeFile) return;
+    // Resolve the active file to execute
+    const currentActive = files.find((f) => f.id === activeFileId && !f.isFolder) || activeFile;
+    if (!currentActive) return;
 
-    if (currentLang.executable === false) {
+    // Detect accurate language from active file's name and buffer
+    const activeFileLangId = detectLanguage(
+      currentActive.name,
+      currentActive.content,
+      undefined,
+      currentLang.id
+    );
+    const executionLang = getLanguageConfig(activeFileLangId) || currentLang;
+
+    if (executionLang.executable === false) {
       setExecutionResult({
         status: 'system_error',
         exitCode: 1,
         stdout: '',
-        stderr: `Language "${currentLang.name}" is a documentation or data format and cannot be executed as a standalone program.`,
+        stderr: `Language "${executionLang.name}" is a documentation or data format and cannot be executed as a standalone program.`,
         executionTimeMs: 0,
         memoryUsageMb: 0,
         diagnostics: [],
@@ -68,13 +80,13 @@ export function useIdeExecution({
       return;
     }
 
-    if (currentLang.id === 'html' || currentLang.id === 'css') {
+    if (executionLang.id === 'html' || executionLang.id === 'css') {
       onActivateTab('preview');
       onOpenBottom();
       return;
     }
 
-    if (currentLang.id === 'sql') {
+    if (executionLang.id === 'sql') {
       setIsRunning(true);
       onActivateTab('output');
       onOpenBottom();
@@ -85,7 +97,7 @@ export function useIdeExecution({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             projectId: projectId || 'demo_sql_project',
-            query: activeFile.content,
+            query: currentActive.content,
             dialect: 'sqlite',
           }),
         });
@@ -157,19 +169,15 @@ export function useIdeExecution({
     onOpenBottom();
 
     try {
-      const mainFile = files.find(
-        (f) => !f.isFolder && (f.name === currentLang.defaultFileName || f.id === 'main')
-      ) || activeFile;
-
       const syncedFiles = files.map((f) =>
-        f.id === activeFileId ? { ...f, content: activeFile.content } : f
+        f.id === currentActive.id ? { ...f, content: currentActive.content } : f
       );
 
       const res = await executeInCloudSandbox({
         projectId: projectId || undefined,
-        language: currentLang.id,
+        language: executionLang.id,
         files: syncedFiles,
-        entrypoint: mainFile?.name || activeFile.name,
+        entrypoint: currentActive.name,
         stdin: customStdin,
       });
 
@@ -191,6 +199,8 @@ export function useIdeExecution({
 
   const handleRunAllTests = useCallback(async () => {
     if (!activeFile) return;
+    const detectedLangId = detectLanguage(activeFile.name, activeFile.content, undefined, currentLang.id);
+    const targetLang = getLanguageConfig(detectedLangId) || currentLang;
     setIsRunningTests(true);
     try {
       const syncedFiles = files.map((f) =>
@@ -200,7 +210,7 @@ export function useIdeExecution({
       const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
         {
           projectId: projectId || undefined,
-          language: currentLang.id,
+          language: targetLang.id,
           files: syncedFiles,
           entrypoint: activeFile.name,
         },
@@ -214,25 +224,29 @@ export function useIdeExecution({
     } finally {
       setIsRunningTests(false);
     }
-  }, [activeFile, activeFileId, currentLang.id, files, projectId, testCases]);
+  }, [activeFile, activeFileId, currentLang, files, projectId, testCases]);
 
   const handleRunBenchmark = useCallback(async () => {
     if (!activeFile) return;
+    const detectedLangId = detectLanguage(activeFile.name, activeFile.content, undefined, currentLang.id);
+    const targetLang = getLanguageConfig(detectedLangId) || currentLang;
     const syncedFiles = files.map((f) =>
       f.id === activeFileId ? { ...f, content: activeFile.content } : f
     );
 
     const res = await benchmarkExecution({
       projectId: projectId || undefined,
-      language: currentLang.id,
+      language: targetLang.id,
       files: syncedFiles,
       entrypoint: activeFile.name,
     });
     setBenchmarkResult(res);
-  }, [activeFile, activeFileId, currentLang.id, files, projectId]);
+  }, [activeFile, activeFileId, currentLang, files, projectId]);
 
   const handleRunTrace = useCallback(async () => {
     if (isTracing || !activeFile) return;
+    const detectedLangId = detectLanguage(activeFile.name, activeFile.content, undefined, currentLang.id);
+    const targetLang = getLanguageConfig(detectedLangId) || currentLang;
     setIsTracing(true);
     try {
       const activeContent = activeFile.content || '';
@@ -243,7 +257,7 @@ export function useIdeExecution({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          language: currentLang.id,
+          language: targetLang.id,
           files: currentFiles,
           entrypoint: activeFile.name,
           stdin: customStdin,
@@ -270,12 +284,15 @@ export function useIdeExecution({
 
       setIsRunning(true);
       try {
+        const detectedLangId = detectLanguage(activeFile.name, fixToApply.fixedCode, undefined, currentLang.id);
+        const targetLang = getLanguageConfig(detectedLangId) || currentLang;
+
         const updatedFiles = files.map((f) =>
           f.id === activeFileId ? { ...f, content: fixToApply.fixedCode } : f
         );
         const retestRes = await executeInCloudSandbox({
           projectId: projectId || undefined,
-          language: currentLang.id,
+          language: targetLang.id,
           files: updatedFiles,
           entrypoint: activeFile.name,
           stdin: customStdin,
@@ -286,7 +303,7 @@ export function useIdeExecution({
         setIsRunning(false);
       }
     },
-    [activeFile, activeFileId, currentLang.id, files, customStdin, projectId, onContentChange]
+    [activeFile, activeFileId, currentLang, files, customStdin, projectId, onContentChange]
   );
 
   const handleUndoFix = useCallback(() => {

@@ -31,7 +31,11 @@ export async function POST(req: NextRequest) {
 
     if (trimmedCmd.startsWith('run')) {
       const arg = trimmedCmd.replace(/^run\s*/, '').trim();
-      targetFile = arg || (currentFiles.find((f) => !f.isFolder && (f.id === 'main' || f.name.startsWith('main.') || f.name.startsWith('index.')))?.name) || 'main.py';
+      targetFile =
+        arg ||
+        currentFiles.find((f) => !f.isFolder && (f.name.startsWith('main.') || f.name.startsWith('index.')))?.name ||
+        currentFiles.find((f) => !f.isFolder)?.name ||
+        'main.py';
     } else if (trimmedCmd.startsWith('python ') || trimmedCmd === 'python') {
       targetFile = trimmedCmd.replace(/^python\s*/, '').trim() || 'main.py';
       runLang = 'python';

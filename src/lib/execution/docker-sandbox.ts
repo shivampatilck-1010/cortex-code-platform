@@ -6,7 +6,7 @@ import { ExecutionRequest, ExecutionResult } from './types';
 import { getLanguageConfig } from '@/config/languages';
 import { parseDiagnostics } from './diagnostics-parser';
 import { EXECUTION_LIMITS, SAFE_SYSTEM_ERROR_MESSAGE } from './config';
-import { validateProjectFiles } from './path-sanitizer';
+import { validateProjectFiles, resolveMainFile } from './path-sanitizer';
 
 // Minimal language container images
 const DOCKER_IMAGES: Record<string, string> = {
@@ -61,7 +61,7 @@ export async function executeInDockerSandbox(req: ExecutionRequest): Promise<Exe
     }
 
     const mainFile =
-      validation.sanitizedFiles!.find((f) => !f.isFolder && (f.name === req.entrypoint || f.name === langConfig.defaultFileName)) ||
+      resolveMainFile(validation.sanitizedFiles!, req.entrypoint, langConfig) ||
       validation.sanitizedFiles![0];
 
     const entryRel = mainFile.path.replace(/^\/+/, '');

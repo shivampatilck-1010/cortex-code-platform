@@ -26,7 +26,7 @@ interface MonacoCodeEditorProps {
   diagnostics?: DiagnosticError[];
   onCursorChange?: (line: number, col: number) => void;
   isDarkMode?: boolean;
-  onToggleDarkMode?: () => void;
+  onToggleDarkMode?: (coords?: { x: number; y: number }) => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
   quickFixResult?: AIFixResult | null;
@@ -414,11 +414,11 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   }, [breakpoints, activeLine, diagnostics]);
 
   return (
-    <div className={`flex flex-col h-full bg-[#0b0c0e] border-r border-[#1f2024] ${
+    <div className={`flex flex-col h-full ${isDarkMode ? 'bg-[#0b0c0e] border-[#1f2024]' : 'bg-white border-slate-200'} border-r ${
       isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : ''
     }`}>
       {/* File Tabs Bar */}
-      <div className="h-9 bg-[#101114] flex items-center justify-between border-b border-[#1f2024] text-xs select-none">
+      <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-[#f1f3f7] border-slate-200'} flex items-center justify-between border-b text-xs select-none`}>
         <div className="flex items-center overflow-x-auto h-full">
           {files
             .filter((f) => !f.isFolder)
@@ -428,15 +428,17 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                 <div
                   key={file.id}
                   onClick={() => onSelectFile(file.id)}
-                  className={`flex items-center space-x-2 px-3.5 h-full border-r border-[#1f2024] cursor-pointer transition font-mono ${
+                  className={`flex items-center space-x-2 px-3.5 h-full border-r ${isDarkMode ? 'border-[#1f2024]' : 'border-slate-200'} cursor-pointer transition font-mono ${
                     isActive
                       ? isDarkMode
                         ? 'bg-[#0b0c0e] text-[#ff9100] font-medium border-t-2 border-t-[#ff9100]'
                         : 'bg-[#ffffff] text-[#0f172a] font-medium border-t-2 border-t-[#ff9100]'
-                      : 'text-gray-400 hover:bg-[#16171c] hover:text-gray-200'
+                      : isDarkMode
+                      ? 'text-gray-400 hover:bg-[#16171c] hover:text-gray-200'
+                      : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                   }`}
                 >
-                  <FileCode className={`w-3.5 h-3.5 ${isActive ? 'text-[#ff9100]' : 'text-gray-500'}`} />
+                  <FileCode className={`w-3.5 h-3.5 ${isActive ? 'text-[#ff9100]' : isDarkMode ? 'text-gray-500' : 'text-slate-400'}`} />
                   <span>{file.name}</span>
                   {files.filter((f) => !f.isFolder).length > 1 && (
                     <button
@@ -444,7 +446,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                         e.stopPropagation();
                         onCloseFile(file.id);
                       }}
-                      className="p-0.5 hover:bg-[#252830] rounded-full text-gray-500 hover:text-gray-200 transition ml-1"
+                      className={`p-0.5 ${isDarkMode ? 'hover:bg-[#252830] text-gray-500 hover:text-gray-200' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'} rounded-full transition ml-1`}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -454,7 +456,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             })}
           <button
             onClick={onNewFile}
-            className="p-1.5 ml-1 text-gray-400 hover:text-white hover:bg-[#1c1e24] rounded transition"
+            className={`p-1.5 ml-1 ${isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#1c1e24]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'} rounded transition`}
             title="New File"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -529,22 +531,34 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             </button>
           )}
 
-          {/* Editor Dark / Light Toggle */}
+          {/* Active Theme Toggle Button */}
           {onToggleDarkMode && (
             <button
-              onClick={onToggleDarkMode}
-              className="px-2 py-1 rounded text-gray-400 hover:text-white hover:bg-[#1f2024] transition flex items-center space-x-1.5 text-xs font-mono border border-transparent hover:border-[#2b2d35]"
-              title={isDarkMode ? 'Switch code editor to light theme' : 'Switch code editor to dark theme'}
+              type="button"
+              role="switch"
+              aria-checked={Boolean(isDarkMode)}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = typeof e.clientX === 'number' && e.clientX > 0 ? e.clientX : rect.left + rect.width / 2;
+                const y = typeof e.clientY === 'number' && e.clientY > 0 ? e.clientY : rect.top + rect.height / 2;
+                onToggleDarkMode({ x, y });
+              }}
+              className={`px-2 py-1 rounded transition flex items-center space-x-1.5 text-xs font-mono border cursor-pointer select-none ${
+                isDarkMode
+                  ? 'bg-[#15161b] hover:bg-[#1f2024] text-gray-200 border-[#2b2d35]'
+                  : 'bg-white hover:bg-gray-100 text-gray-800 border-gray-300 shadow-sm'
+              }`}
+              title={isDarkMode ? 'Current theme: Dark (Click to switch to Light)' : 'Current theme: Light (Click to switch to Dark)'}
             >
               {isDarkMode ? (
                 <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden md:inline text-[11px] text-gray-300">Editor Light</span>
+                  <Moon className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline text-[11px] font-medium text-gray-200">Dark</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-slate-300" />
-                  <span className="hidden md:inline text-[11px] text-gray-300">Editor Dark</span>
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="hidden sm:inline text-[11px] font-medium text-gray-800">Light</span>
                 </>
               )}
             </button>

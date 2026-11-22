@@ -6,7 +6,7 @@ import { ExecutionRequest, ExecutionResult, DiagnosticError } from './types';
 import { getLanguageConfig } from '@/config/languages';
 import { parseDiagnostics } from './diagnostics-parser';
 import { EXECUTION_LIMITS, ALLOWED_ENV_VARS, SAFE_SYSTEM_ERROR_MESSAGE } from './config';
-import { validateProjectFiles, validateAndSanitizePath } from './path-sanitizer';
+import { validateProjectFiles, validateAndSanitizePath, resolveMainFile } from './path-sanitizer';
 
 /**
  * DEVELOPMENT ONLY - Local sandbox execution.
@@ -73,10 +73,7 @@ export async function executeInLocalSandbox(req: ExecutionRequest): Promise<Exec
     }
 
     const mainFile =
-      validation.sanitizedFiles!.find(
-        (f) => !f.isFolder && (f.name === req.entrypoint || f.name === langConfig.defaultFileName || f.id === 'main')
-      ) ||
-      validation.sanitizedFiles!.find((f) => !f.isFolder) ||
+      resolveMainFile(validation.sanitizedFiles!, req.entrypoint, langConfig) ||
       validation.sanitizedFiles![0];
 
     const timeoutMs = Math.min(

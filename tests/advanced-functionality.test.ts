@@ -15,6 +15,9 @@ import {
 import { getLanguageConfig, SUPPORTED_LANGUAGES } from '../src/config/languages';
 import { ALLOWED_LANGUAGES, EXECUTION_LIMITS } from '../src/lib/execution/config';
 import { JUDGE0_LANGUAGE_IDS, executeInCloudRunner } from '../src/lib/execution/cloud-runner';
+import { resolveMainFile } from '../src/lib/execution/path-sanitizer';
+import { executeInLocalSandbox } from '../src/lib/execution/local-sandbox';
+import { ProjectFile } from '../src/lib/execution/types';
 
 // ---------------------------------------------------------------------------
 // 1. Language Detection & Catalog Tests
@@ -273,9 +276,121 @@ async function testSqlEnvironment() {
   console.log('======================================================\n');
 }
 
+// ---------------------------------------------------------------------------
+// 5. Multi-File Project Resolution & Execution Tests
+// ---------------------------------------------------------------------------
+
+async function testMultiFileProjectResolutionAndExecution() {
+  console.log('\n--- 5. Testing Multi-File Project Entrypoint Resolution & Execution ---');
+
+  const pythonConfig = getLanguageConfig('python');
+  const cppConfig = getLanguageConfig('cpp');
+
+  const projectFiles: ProjectFile[] = [
+    {
+      id: 'main',
+      name: 'main.cpp',
+      path: '/main.cpp',
+      content: '#include <iostream>\nint main() { std::cout << "CPP" << std::endl; return 0; }',
+    },
+    {
+      id: 'readme',
+      name: 'README.md',
+      path: '/README.md',
+      content: '# Sample Project',
+    },
+    {
+      id: 'f_py_1',
+      name: 'file_1.py',
+      path: '/file_1.py',
+      content: 'print("Active Python file executed cleanly")',
+    },
+    {
+      id: 'f_py_utils',
+      name: 'utils.py',
+      path: '/utils.py',
+      content: 'def get_message(): return "Utils loaded"',
+    },
+  ];
+
+  // 1. Direct entrypoint match by name
+  const matchDirect = resolveMainFile(projectFiles, 'file_1.py', pythonConfig);
+  assert.ok(matchDirect, 'Should resolve file_1.py by exact name');
+  assert.strictEqual(matchDirect?.name, 'file_1.py');
+  console.log('[PASS] Exact entrypoint name resolution verified');
+
+  // 2. Direct entrypoint match with leading slash normalization
+  const matchSlash = resolveMainFile(projectFiles, '/file_1.py', pythonConfig);
+  assert.ok(matchSlash, 'Should resolve /file_1.py by normalized path');
+  assert.strictEqual(matchSlash?.name, 'file_1.py');
+  console.log('[PASS] Leading slash normalization for entrypoints verified');
+
+  // 3. Fallback matching language extension without cross-language id: "main" hijacking
+  const matchExtensionFallback = resolveMainFile(projectFiles, undefined, pythonConfig);
+  assert.ok(matchExtensionFallback, 'Should resolve python file when entrypoint is undefined');
+  assert.strictEqual(matchExtensionFallback?.name, 'file_1.py');
+  assert.notStrictEqual(matchExtensionFallback?.id, 'main', 'Must not hijack with C++ starter file id: "main"');
+  console.log('[PASS] Language extension fallback without cross-language hijacking verified');
+
+  // 4. Fallback matching defaultFileName when present
+  const projectWithMainPy: ProjectFile[] = [
+    {
+      id: 'main',
+      name: 'main.cpp',
+      path: '/main.cpp',
+      content: '#include <iostream>\nint main() { return 0; }',
+    },
+    {
+      id: 'f_main_py',
+      name: 'main.py',
+      path: '/main.py',
+      content: 'print("Main python entry")',
+    },
+    {
+      id: 'f_py_1',
+      name: 'file_1.py',
+      path: '/file_1.py',
+      content: 'print("Secondary python file")',
+    },
+  ];
+  const matchDefaultFile = resolveMainFile(projectWithMainPy, undefined, pythonConfig);
+  assert.ok(matchDefaultFile, 'Should resolve main.py by defaultFileName');
+  assert.strictEqual(matchDefaultFile?.name, 'main.py');
+  console.log('[PASS] Default file name resolution for target language verified');
+
+  // 5. C++ language config matches C++ file
+  const matchCpp = resolveMainFile(projectFiles, undefined, cppConfig);
+  assert.ok(matchCpp, 'Should resolve main.cpp for C++ language');
+  assert.strictEqual(matchCpp?.name, 'main.cpp');
+  console.log('[PASS] C++ language file resolution verified');
+
+  // 6. Live multi-file local sandbox execution in development mode
+  process.env.EXECUTION_MODE = 'development';
+  (process.env as any).NODE_ENV = 'test';
+
+  const executionResult = await executeInLocalSandbox({
+    language: 'python',
+    files: projectFiles,
+    entrypoint: 'file_1.py',
+  });
+
+  assert.strictEqual(executionResult.status, 'success', 'Multi-file execution status should be success');
+  assert.strictEqual(executionResult.exitCode, 0, 'Exit code should be 0');
+  assert.ok(
+    executionResult.stdout.includes('Active Python file executed cleanly'),
+    'Execution stdout must contain the active python file output'
+  );
+  assert.ok(
+    !executionResult.stderr.includes('SyntaxError'),
+    'Execution stderr must not contain phantom C++ syntax errors'
+  );
+  console.log('[PASS] Live multi-file sandbox execution succeeds with zero phantom syntax errors');
+}
+
 async function runAllTests() {
   await testCloudRunnerMemoryClamping();
   await testSqlEnvironment();
+  await testMultiFileProjectResolutionAndExecution();
 }
 
 runAllTests().catch(err => {
