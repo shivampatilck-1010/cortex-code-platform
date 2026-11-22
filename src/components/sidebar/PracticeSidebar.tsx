@@ -62,13 +62,21 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
       case 'Easy':
-        return 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40';
+        return isDarkMode
+          ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40'
+          : 'text-emerald-700 bg-emerald-50 border-emerald-200';
       case 'Medium':
-        return 'text-amber-400 bg-amber-950/60 border-amber-800/40';
+        return isDarkMode
+          ? 'text-amber-400 bg-amber-950/60 border-amber-800/40'
+          : 'text-amber-700 bg-amber-50 border-amber-200';
       case 'Hard':
-        return 'text-rose-400 bg-rose-950/60 border-rose-800/40';
+        return isDarkMode
+          ? 'text-rose-400 bg-rose-950/60 border-rose-800/40'
+          : 'text-rose-700 bg-rose-50 border-rose-200';
       default:
-        return 'text-gray-400 bg-gray-800 border-gray-700';
+        return isDarkMode
+          ? 'text-gray-400 bg-gray-800 border-gray-700'
+          : 'text-slate-600 bg-slate-100 border-slate-200';
     }
   };
 
@@ -120,7 +128,7 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
             className={`w-full pl-8 pr-2.5 py-1.5 rounded-md text-xs focus:outline-none focus:border-[#ff9100] border transition-colors ${
               isDarkMode
                 ? 'bg-[#14151b] border-[#232530] text-gray-200 placeholder-gray-500'
-                : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400'
+                : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 shadow-inner'
             }`}
           />
         </div>
@@ -133,8 +141,10 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
               onClick={() => setSelectedDifficulty(diff)}
               className={`flex-1 py-1 text-[10px] font-medium rounded transition ${
                 selectedDifficulty === diff
-                  ? 'bg-[#ff9100] text-black font-semibold'
-                  : 'bg-[#15161d] text-gray-400 hover:text-gray-200 hover:bg-[#1a1c24]'
+                  ? 'bg-[#ff9100] text-slate-950 font-semibold shadow-sm'
+                  : isDarkMode
+                    ? 'bg-[#15161d] text-gray-400 hover:text-gray-200 hover:bg-[#1a1c24]'
+                    : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 shadow-xs'
               }`}
             >
               {diff}
@@ -161,10 +171,16 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
           filteredChallenges.map((challenge) => (
             <div
               key={challenge.id}
-              className="p-2.5 bg-[#121318] hover:bg-[#15161e] border border-[#1e2026] hover:border-[#2a2c38] rounded-lg transition group"
+              className={`p-2.5 rounded-lg transition group border ${
+                isDarkMode
+                  ? 'bg-[#121318] hover:bg-[#15161e] border-[#1e2026] hover:border-[#2a2c38]'
+                  : 'bg-slate-50 hover:bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              }`}
             >
               <div className="flex items-start justify-between gap-1 mb-1.5">
-                <span className="font-semibold text-gray-200 text-xs group-hover:text-[#ff9100] transition line-clamp-1">
+                <span className={`font-semibold text-xs group-hover:text-[#ff9100] transition line-clamp-1 ${
+                  isDarkMode ? 'text-gray-200' : 'text-slate-800'
+                }`}>
                   {challenge.title}
                 </span>
                 <span
@@ -176,26 +192,38 @@ export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
                 </span>
               </div>
 
-              <div className="text-[10px] text-gray-400 line-clamp-2 mb-2 leading-relaxed">
+              <div className={`text-[10px] line-clamp-2 mb-2 leading-relaxed ${
+                isDarkMode ? 'text-gray-400' : 'text-slate-500'
+              }`}>
                 {challenge.description.replace(/```[\s\S]*?```/g, '').replace(/`/g, '')}
               </div>
 
-              <div className="flex items-center justify-between text-[10px] pt-1 border-t border-[#1a1c22]">
-                <span className="text-gray-500 font-mono text-[9px]">
+              <div className={`flex items-center justify-between text-[10px] pt-1 border-t ${
+                isDarkMode ? 'border-[#1a1c22]' : 'border-slate-200'
+              }`}>
+                <span className={`font-mono text-[9px] ${
+                  isDarkMode ? 'text-gray-500' : 'text-slate-500'
+                }`}>
                   Pass: {challenge.acceptanceRate}
                 </span>
 
                 <div className="flex items-center space-x-1.5">
                   <button
                     onClick={() => handleSelectChallenge(challenge)}
-                    className="px-2 py-0.5 bg-[#1a1c24] hover:bg-[#ff9100] hover:text-black text-gray-300 rounded font-medium text-[10px] transition border border-[#2b2d3a] flex items-center space-x-1"
+                    className={`px-2 py-0.5 rounded font-medium text-[10px] transition border flex items-center space-x-1 ${
+                      isDarkMode
+                        ? 'bg-[#1a1c24] hover:bg-[#ff9100] hover:text-black text-gray-300 border-[#2b2d3a]'
+                        : 'bg-white hover:bg-[#ff9100] hover:text-black text-slate-700 border-slate-200 shadow-sm'
+                    }`}
                   >
                     <Code2 className="w-3 h-3" />
                     <span>Load</span>
                   </button>
                   <Link
                     href={`/challenges/${challenge.slug}`}
-                    className="p-1 text-gray-400 hover:text-white transition"
+                    className={`p-1 transition ${
+                      isDarkMode ? 'text-gray-400 hover:text-white' : 'text-slate-400 hover:text-slate-800'
+                    }`}
                     title="View Problem Details"
                   >
                     <ExternalLink className="w-3 h-3" />

@@ -236,7 +236,9 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
 
         {/* Presets List */}
         <div className="space-y-1.5">
-          <div className="text-[10px] uppercase font-semibold tracking-wider text-gray-500 px-1">
+          <div className={`text-[10px] uppercase font-semibold tracking-wider px-1 ${
+            isDarkMode ? 'text-gray-400' : 'text-slate-500'
+          }`}>
             Algorithm Presets ({BENCHMARK_PRESETS.length})
           </div>
           {BENCHMARK_PRESETS.map((preset) => {
@@ -247,24 +249,42 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
                 onClick={() => setSelectedPresetId(preset.id)}
                 className={`w-full text-left p-2.5 rounded-lg border transition-all ${
                   isSelected
-                    ? 'bg-[#181920] border-[#ff9100]/50 shadow-sm'
-                    : 'bg-[#121318] border-[#1e2026] hover:border-[#2a2c38] hover:bg-[#15161d]'
+                    ? isDarkMode
+                      ? 'bg-[#181920] border-[#ff9100]/50 shadow-sm'
+                      : 'bg-amber-50/70 border-[#ff9100] shadow-sm'
+                    : isDarkMode
+                      ? 'bg-[#121318] border-[#1e2026] hover:border-[#2a2c38] hover:bg-[#15161d]'
+                      : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100/70'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className={`font-semibold text-xs truncate ${isSelected ? 'text-[#ff9100]' : 'text-gray-200'}`}>
+                  <span className={`font-semibold text-xs truncate ${
+                    isSelected
+                      ? 'text-[#ff9100]'
+                      : isDarkMode ? 'text-gray-200' : 'text-slate-800'
+                  }`}>
                     {preset.name}
                   </span>
                 </div>
-                <div className="text-[10px] text-gray-400 line-clamp-1 mb-2">
+                <div className={`text-[10px] line-clamp-1 mb-2 ${
+                  isDarkMode ? 'text-gray-400' : 'text-slate-500'
+                }`}>
                   {preset.description}
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="px-1.5 py-0.5 rounded bg-[#1c1d24] text-rose-300 font-mono text-[9px] border border-rose-900/30">
+                  <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] border ${
+                    isDarkMode
+                      ? 'bg-[#1c1d24] text-rose-300 border-rose-900/30'
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
                     {preset.complexityA}
                   </span>
-                  <span className="text-gray-500 text-[10px]">vs</span>
-                  <span className="px-1.5 py-0.5 rounded bg-[#1c1d24] text-emerald-300 font-mono text-[9px] border border-emerald-900/30">
+                  <span className={`text-[10px] ${isDarkMode ? 'text-gray-500' : 'text-slate-400'}`}>vs</span>
+                  <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] border ${
+                    isDarkMode
+                      ? 'bg-[#1c1d24] text-emerald-300 border-emerald-900/30'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
                     {preset.complexityB}
                   </span>
                 </div>
@@ -275,37 +295,51 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
 
         {/* Selected Preset Details & Action */}
         {selectedPreset && (
-          <div className="p-3 bg-[#13141a] border border-[#232530] rounded-lg space-y-2.5">
+          <div className={`p-3 rounded-lg space-y-2.5 border transition-colors ${
+            isDarkMode ? 'bg-[#13141a] border-[#232530]' : 'bg-slate-50 border-slate-200 shadow-sm'
+          }`}>
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-gray-200 text-xs">
+              <span className={`font-semibold text-xs ${isDarkMode ? 'text-gray-200' : 'text-slate-800'}`}>
                 {selectedPreset.name}
               </span>
-              <span className="text-[10px] font-mono text-gray-400 uppercase">
+              <span className={`text-[10px] font-mono uppercase ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                 {selectedPreset.langA}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-[10px]">
-              <div className="p-2 bg-[#0c0d10] border border-[#1f2026] rounded">
-                <div className="text-rose-400 font-semibold mb-0.5">Algorithm A</div>
-                <div className="font-mono text-gray-400 text-[9px]">{selectedPreset.complexityA}</div>
+              <div className={`p-2 rounded border transition-colors ${
+                isDarkMode ? 'bg-[#0c0d10] border-[#1f2026]' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className={`${isDarkMode ? 'text-rose-400' : 'text-rose-600'} font-semibold mb-0.5`}>Algorithm A</div>
+                <div className={`font-mono text-[9px] ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>{selectedPreset.complexityA}</div>
                 <button
                   onClick={() => handleQuickLoad(selectedPreset.codeA, selectedPreset.langA, 'Algorithm A')}
-                  className="mt-2 w-full py-1 px-1.5 bg-[#1a1b22] hover:bg-[#252733] text-gray-200 rounded font-medium text-[10px] flex items-center justify-center space-x-1 border border-[#2b2d3a] transition"
+                  className={`mt-2 w-full py-1 px-1.5 rounded font-medium text-[10px] flex items-center justify-center space-x-1 border transition ${
+                    isDarkMode
+                      ? 'bg-[#1a1b22] hover:bg-[#252733] text-gray-200 border-[#2b2d3a]'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 shadow-sm'
+                  }`}
                 >
-                  <Code2 className="w-3 h-3 text-rose-400" />
+                  <Code2 className="w-3 h-3 text-rose-500" />
                   <span>Load A</span>
                 </button>
               </div>
 
-              <div className="p-2 bg-[#0c0d10] border border-[#1f2026] rounded">
-                <div className="text-emerald-400 font-semibold mb-0.5">Algorithm B</div>
-                <div className="font-mono text-gray-400 text-[9px]">{selectedPreset.complexityB}</div>
+              <div className={`p-2 rounded border transition-colors ${
+                isDarkMode ? 'bg-[#0c0d10] border-[#1f2026]' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className={`${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'} font-semibold mb-0.5`}>Algorithm B</div>
+                <div className={`font-mono text-[9px] ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>{selectedPreset.complexityB}</div>
                 <button
                   onClick={() => handleQuickLoad(selectedPreset.codeB, selectedPreset.langB, 'Algorithm B')}
-                  className="mt-2 w-full py-1 px-1.5 bg-[#1a1b22] hover:bg-[#252733] text-gray-200 rounded font-medium text-[10px] flex items-center justify-center space-x-1 border border-[#2b2d3a] transition"
+                  className={`mt-2 w-full py-1 px-1.5 rounded font-medium text-[10px] flex items-center justify-center space-x-1 border transition ${
+                    isDarkMode
+                      ? 'bg-[#1a1b22] hover:bg-[#252733] text-gray-200 border-[#2b2d3a]'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 shadow-sm'
+                  }`}
                 >
-                  <Code2 className="w-3 h-3 text-emerald-400" />
+                  <Code2 className="w-3 h-3 text-emerald-500" />
                   <span>Load B</span>
                 </button>
               </div>
@@ -314,9 +348,9 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
             {/* Launch Compare Route Button */}
             <Link
               href="/compare"
-              className="w-full py-2 px-3 bg-[#ff9100] hover:bg-[#ffa726] text-black font-semibold rounded-lg flex items-center justify-center space-x-1.5 transition shadow"
+              className="w-full py-2 px-3 bg-[#ff9100] hover:bg-[#ffa726] text-slate-950 font-semibold rounded-lg flex items-center justify-center space-x-1.5 transition shadow"
             >
-              <Zap className="w-3.5 h-3.5 fill-black" />
+              <Zap className="w-3.5 h-3.5 fill-current" />
               <span>Launch Comparative Benchmark</span>
             </Link>
           </div>

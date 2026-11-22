@@ -47,13 +47,21 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'Beginner':
-        return 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40';
+        return isDarkMode
+          ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40'
+          : 'text-emerald-700 bg-emerald-50 border-emerald-200';
       case 'Intermediate':
-        return 'text-amber-400 bg-amber-950/60 border-amber-800/40';
+        return isDarkMode
+          ? 'text-amber-400 bg-amber-950/60 border-amber-800/40'
+          : 'text-amber-700 bg-amber-50 border-amber-200';
       case 'Advanced':
-        return 'text-rose-400 bg-rose-950/60 border-rose-800/40';
+        return isDarkMode
+          ? 'text-rose-400 bg-rose-950/60 border-rose-800/40'
+          : 'text-rose-700 bg-rose-50 border-rose-200';
       default:
-        return 'text-gray-400 bg-gray-800 border-gray-700';
+        return isDarkMode
+          ? 'text-gray-400 bg-gray-800 border-gray-700'
+          : 'text-slate-600 bg-slate-100 border-slate-200';
     }
   };
 
@@ -122,12 +130,16 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
           return (
             <div
               key={course.id}
-              className="border border-[#1e2026] rounded-lg overflow-hidden bg-[#121318]"
+              className={`border rounded-lg overflow-hidden transition-colors ${
+                isDarkMode ? 'border-[#1e2026] bg-[#121318]' : 'border-slate-200 bg-slate-50 shadow-sm'
+              }`}
             >
               {/* Course Title Header */}
               <button
                 onClick={() => toggleCourse(course.id)}
-                className="w-full p-2.5 flex items-center justify-between text-left hover:bg-[#15161e] transition"
+                className={`w-full p-2.5 flex items-center justify-between text-left transition ${
+                  isDarkMode ? 'hover:bg-[#15161e]' : 'hover:bg-slate-100'
+                }`}
               >
                 <div className="flex-1 pr-2">
                   <div className="flex items-center space-x-1.5 mb-1">
@@ -138,16 +150,18 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
                     >
                       {course.level}
                     </span>
-                    <span className="text-[10px] text-gray-500 font-mono">
+                    <span className={`text-[10px] font-mono ${isDarkMode ? 'text-gray-500' : 'text-slate-500'}`}>
                       {course.lessonsCount} lessons
                     </span>
                   </div>
-                  <div className="font-semibold text-gray-200 text-xs line-clamp-1">
+                  <div className={`font-semibold text-xs line-clamp-1 ${
+                    isDarkMode ? 'text-gray-200' : 'text-slate-800'
+                  }`}>
                     {course.title}
                   </div>
                 </div>
 
-                <div className="text-gray-400">
+                <div className={isDarkMode ? 'text-gray-400' : 'text-slate-500'}>
                   {isExpanded ? (
                     <ChevronDown className="w-4 h-4 text-[#ff9100]" />
                   ) : (
@@ -158,21 +172,33 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
 
               {/* Expanded Lessons */}
               {isExpanded && (
-                <div className="p-2 border-t border-[#1b1c24] bg-[#0d0e12] space-y-1.5">
-                  <div className="text-[10px] text-gray-400 mb-2 leading-relaxed px-1">
+                <div className={`p-2 border-t space-y-1.5 ${
+                  isDarkMode ? 'border-[#1b1c24] bg-[#0d0e12]' : 'border-slate-200 bg-white'
+                }`}>
+                  <div className={`text-[10px] mb-2 leading-relaxed px-1 ${
+                    isDarkMode ? 'text-gray-400' : 'text-slate-600'
+                  }`}>
                     {course.description}
                   </div>
 
                   {course.lessons.map((lesson) => (
                     <div
                       key={lesson.id}
-                      className="p-2 bg-[#14151b] hover:bg-[#181922] border border-[#20222c] rounded-md transition flex items-center justify-between"
+                      className={`p-2 border rounded-md transition flex items-center justify-between ${
+                        isDarkMode
+                          ? 'bg-[#14151b] hover:bg-[#181922] border-[#20222c]'
+                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-xs'
+                      }`}
                     >
                       <div className="flex-1 pr-2">
-                        <div className="font-medium text-gray-200 text-[11px] line-clamp-1">
+                        <div className={`font-medium text-[11px] line-clamp-1 ${
+                          isDarkMode ? 'text-gray-200' : 'text-slate-800'
+                        }`}>
                           {lesson.title}
                         </div>
-                        <div className="flex items-center space-x-1 text-[9px] text-gray-500 mt-0.5 font-mono">
+                        <div className={`flex items-center space-x-1 text-[9px] mt-0.5 font-mono ${
+                          isDarkMode ? 'text-gray-500' : 'text-slate-500'
+                        }`}>
                           <Clock className="w-2.5 h-2.5" />
                           <span>{lesson.durationMinutes}m</span>
                           <span>•</span>
@@ -183,7 +209,11 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
                       <div className="flex items-center space-x-1 shrink-0">
                         <button
                           onClick={() => handleSelectLesson(lesson, course)}
-                          className="px-2 py-1 bg-[#1e2028] hover:bg-[#ff9100] hover:text-black text-gray-300 rounded text-[10px] font-medium transition flex items-center space-x-1 border border-[#2b2d3a]"
+                          className={`px-2 py-1 rounded text-[10px] font-medium transition flex items-center space-x-1 border ${
+                            isDarkMode
+                              ? 'bg-[#1e2028] hover:bg-[#ff9100] hover:text-black text-gray-300 border-[#2b2d3a]'
+                              : 'bg-white hover:bg-[#ff9100] hover:text-black text-slate-700 border-slate-200 shadow-sm'
+                          }`}
                           title="Load lesson starter code into IDE"
                         >
                           <Code2 className="w-3 h-3" />
@@ -196,7 +226,11 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
                   <div className="pt-1.5">
                     <Link
                       href={`/learn/${course.slug}`}
-                      className="w-full py-1.5 px-2 bg-[#191a22] hover:bg-[#222430] text-gray-300 hover:text-white rounded text-[10px] font-medium flex items-center justify-center space-x-1 border border-[#252834] transition"
+                      className={`w-full py-1.5 px-2 rounded text-[10px] font-medium flex items-center justify-center space-x-1 border transition ${
+                        isDarkMode
+                          ? 'bg-[#191a22] hover:bg-[#222430] text-gray-300 hover:text-white border-[#252834]'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-200 shadow-sm'
+                      }`}
                     >
                       <span>Open Full Course</span>
                       <ExternalLink className="w-3 h-3 text-[#ff9100]" />

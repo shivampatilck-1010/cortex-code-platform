@@ -28,7 +28,7 @@ export async function runTier5AdversarialHardening(projectRoot = process.cwd()):
   // ---------------------------------------------------------------------------
   harness.startTest('TC5.1 - SQL Sandbox Security & Administrative Escape Defense');
   try {
-    const testProjectId = 'tier5_adv_sql_test';
+    const testProjectId = `tier5_adv_sql_test_${Date.now()}`;
     await resetPracticeDb(testProjectId);
 
     // 1. Forbidden PRAGMA execution attempts
