@@ -1,0 +1,195 @@
+'use client';
+
+import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
+import { 
+  Swords, 
+  Search, 
+  ExternalLink, 
+  CheckCircle2, 
+  Code2 
+} from 'lucide-react';
+import { CHALLENGES, Challenge } from '@/lib/challenges/challenges-data';
+
+interface PracticeSidebarProps {
+  width?: number;
+  currentLanguage?: string;
+  onLoadChallenge?: (code: string, language: string, title: string) => void;
+  onClose?: () => void;
+}
+
+export const PracticeSidebar: React.FC<PracticeSidebarProps> = ({
+  width = 240,
+  currentLanguage = 'python',
+  onLoadChallenge,
+  onClose,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<'All' | 'Easy' | 'Medium' | 'Hard'>('All');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const filteredChallenges = useMemo(() => {
+    return CHALLENGES.filter((c) => {
+      const matchesDifficulty =
+        selectedDifficulty === 'All' || c.difficulty === selectedDifficulty;
+      const matchesQuery =
+        !searchQuery ||
+        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      return matchesDifficulty && matchesQuery;
+    });
+  }, [searchQuery, selectedDifficulty]);
+
+  const handleSelectChallenge = (challenge: Challenge) => {
+    const langKey =
+      currentLanguage && challenge.starterTemplates[currentLanguage]
+        ? currentLanguage
+        : challenge.starterTemplates['python']
+        ? 'python'
+        : Object.keys(challenge.starterTemplates)[0] || 'python';
+
+    const code = challenge.starterTemplates[langKey] || '';
+    if (onLoadChallenge) {
+      onLoadChallenge(code, langKey, challenge.title);
+      setStatusMessage(`Loaded "${challenge.title}"`);
+      setTimeout(() => setStatusMessage(null), 2500);
+    }
+  };
+
+  const getDifficultyColor = (diff: string) => {
+    switch (diff) {
+      case 'Easy':
+        return 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40';
+      case 'Medium':
+        return 'text-amber-400 bg-amber-950/60 border-amber-800/40';
+      case 'Hard':
+        return 'text-rose-400 bg-rose-950/60 border-rose-800/40';
+      default:
+        return 'text-gray-400 bg-gray-800 border-gray-700';
+    }
+  };
+
+  return (
+    <div
+      style={{ width: `${width}px` }}
+      className="h-full flex flex-col bg-[#101114] text-[#e6edf3] select-none text-xs"
+    >
+      {/* Header */}
+      <div className="h-10 px-3.5 border-b border-[#1f2024] flex items-center justify-between shrink-0 bg-[#0d0e11]">
+        <div className="flex items-center space-x-2">
+          <Swords className="w-4 h-4 text-[#ff9100]" />
+          <span className="font-semibold uppercase tracking-wider text-[11px] text-gray-200">
+            Practice
+          </span>
+          <span className="px-1.5 py-0.2 bg-[#ff9100]/15 text-[#ff9100] text-[10px] rounded font-mono font-medium">
+            {CHALLENGES.length}
+          </span>
+        </div>
+        <Link
+          href="/challenges"
+          className="flex items-center space-x-1 text-[11px] text-[#ff9100] hover:text-[#ffaa33] transition"
+          title="Open Challenges Hub"
+        >
+          <span>All</span>
+          <ExternalLink className="w-3 h-3" />
+        </Link>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="p-2.5 border-b border-[#1f2024] bg-[#0c0d10] space-y-2 shrink-0">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search problems, tags..."
+            className="w-full pl-8 pr-2.5 py-1.5 bg-[#14151b] border border-[#232530] rounded-md text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#ff9100]"
+          />
+        </div>
+
+        {/* Difficulty Filter Tabs */}
+        <div className="flex items-center space-x-1">
+          {(['All', 'Easy', 'Medium', 'Hard'] as const).map((diff) => (
+            <button
+              key={diff}
+              onClick={() => setSelectedDifficulty(diff)}
+              className={`flex-1 py-1 text-[10px] font-medium rounded transition ${
+                selectedDifficulty === diff
+                  ? 'bg-[#ff9100] text-black font-semibold'
+                  : 'bg-[#15161d] text-gray-400 hover:text-gray-200 hover:bg-[#1a1c24]'
+              }`}
+            >
+              {diff}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Status notification */}
+      {statusMessage && (
+        <div className="mx-2.5 mt-2 px-2.5 py-1.5 bg-emerald-950/60 border border-emerald-700/50 rounded text-[11px] text-emerald-300 flex items-center space-x-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="truncate">{statusMessage}</span>
+        </div>
+      )}
+
+      {/* Challenges List */}
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-2 custom-scrollbar">
+        {filteredChallenges.length === 0 ? (
+          <div className="p-4 text-center text-gray-500 text-[11px]">
+            No challenges match your filter.
+          </div>
+        ) : (
+          filteredChallenges.map((challenge) => (
+            <div
+              key={challenge.id}
+              className="p-2.5 bg-[#121318] hover:bg-[#15161e] border border-[#1e2026] hover:border-[#2a2c38] rounded-lg transition group"
+            >
+              <div className="flex items-start justify-between gap-1 mb-1.5">
+                <span className="font-semibold text-gray-200 text-xs group-hover:text-[#ff9100] transition line-clamp-1">
+                  {challenge.title}
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-medium border shrink-0 ${getDifficultyColor(
+                    challenge.difficulty
+                  )}`}
+                >
+                  {challenge.difficulty}
+                </span>
+              </div>
+
+              <div className="text-[10px] text-gray-400 line-clamp-2 mb-2 leading-relaxed">
+                {challenge.description.replace(/```[\s\S]*?```/g, '').replace(/`/g, '')}
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] pt-1 border-t border-[#1a1c22]">
+                <span className="text-gray-500 font-mono text-[9px]">
+                  Pass: {challenge.acceptanceRate}
+                </span>
+
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    onClick={() => handleSelectChallenge(challenge)}
+                    className="px-2 py-0.5 bg-[#1a1c24] hover:bg-[#ff9100] hover:text-black text-gray-300 rounded font-medium text-[10px] transition border border-[#2b2d3a] flex items-center space-x-1"
+                  >
+                    <Code2 className="w-3 h-3" />
+                    <span>Load</span>
+                  </button>
+                  <Link
+                    href={`/challenges/${challenge.slug}`}
+                    className="p-1 text-gray-400 hover:text-white transition"
+                    title="View Problem Details"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};

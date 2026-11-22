@@ -11,13 +11,13 @@ import {
   Settings,
   User,
   LogOut,
-  GraduationCap,
-  Code2,
 } from 'lucide-react';
 import { CortexLogo } from '@/components/brand/CortexLogo';
 import { SettingsModal } from '@/components/modals/SettingsModal';
 import { Badge } from '@/components/ui/Badge';
 import { AISettings, DEFAULT_AI_SETTINGS } from '@/lib/ai/assistant';
+
+export type SidebarTab = 'files' | 'benchmark' | 'practice' | 'learn';
 
 interface GlobalSidebarProps {
   onOpenSettings?: () => void;
@@ -31,12 +31,32 @@ interface UserProfile {
   professionalEmail?: string;
 }
 
+interface NavItem {
+  id: SidebarTab;
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  functionality?: string;
+}
+
 export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) => {
   const pathname = usePathname() || '/';
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAccountOpen, setIsAccountOpen] = useState<boolean>(false);
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+
+  // Tab & Open State for Adjacent Contextual Sidebar
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>('files');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+
+  // Floating tooltip window tracking cursor position
+  const [floatingTooltip, setFloatingTooltip] = useState<{
+    title: string;
+    description?: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Local fallback for SettingsModal if onOpenSettings not supplied
   const [localSettingsOpen, setLocalSettingsOpen] = useState(false);
@@ -45,6 +65,49 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
   const [localTheme, setLocalTheme] = useState<string>('cortex-dark');
 
   const accountRef = useRef<HTMLDivElement>(null);
+
+  // Sync sidebar tab and open state with localStorage and custom event broadcasts
+  useEffect(() => {
+    try {
+      const savedTab = localStorage.getItem('cortex_active_sidebar_tab') as SidebarTab;
+      if (savedTab && ['files', 'benchmark', 'practice', 'learn'].includes(savedTab)) {
+        setActiveSidebarTab(savedTab);
+      }
+      const savedOpen = localStorage.getItem('cortex_sidebar_open');
+      const savedCollapsed = localStorage.getItem('cortex_file_explorer_collapsed');
+      if (savedOpen !== null) {
+        setIsSidebarOpen(savedOpen === 'true');
+      } else if (savedCollapsed !== null) {
+        setIsSidebarOpen(savedCollapsed !== 'true');
+      }
+    } catch {}
+
+    const handleSidebarState = (e: Event) => {
+      const customEvent = e as CustomEvent<{ activeTab: SidebarTab; isOpen: boolean }>;
+      if (customEvent.detail) {
+        if (typeof customEvent.detail.isOpen === 'boolean') {
+          setIsSidebarOpen(customEvent.detail.isOpen);
+        }
+        if (customEvent.detail.activeTab) {
+          setActiveSidebarTab(customEvent.detail.activeTab);
+        }
+      }
+    };
+
+    const handleFileExplorerState = (e: Event) => {
+      const customEvent = e as CustomEvent<{ isCollapsed: boolean }>;
+      if (customEvent.detail && typeof customEvent.detail.isCollapsed === 'boolean') {
+        setIsSidebarOpen(!customEvent.detail.isCollapsed);
+      }
+    };
+
+    window.addEventListener('cortex:sidebar-state', handleSidebarState);
+    window.addEventListener('cortex:file-explorer-state', handleFileExplorerState);
+    return () => {
+      window.removeEventListener('cortex:sidebar-state', handleSidebarState);
+      window.removeEventListener('cortex:file-explorer-state', handleFileExplorerState);
+    };
+  }, []);
 
   // Fetch current user from /api/v1/auth/me
   useEffect(() => {
@@ -104,43 +167,84 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
     }
   };
 
-  // Reorganized navigation:
-  // 1. Files (/ide) - clicking again on /ide toggles the file explorer sidebar
+  // Hover handlers for floating window right next to the cursor
+  const showFloatingTooltip = (title: string, description: string | undefined, e: React.MouseEvent) => {
+    setFloatingTooltip({
+      title,
+      description,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  const moveFloatingTooltip = (e: React.MouseEvent) => {
+    setFloatingTooltip((prev) => (prev ? { ...prev, x: e.clientX, y: e.clientY } : null));
+  };
+
+  const hideFloatingTooltip = () => {
+    setFloatingTooltip(null);
+  };
+
+  const handleNavClick = (item: NavItem, e: React.MouseEvent) => {
+    const isFilesRoute = pathname === '/ide' || pathname.startsWith('/ide');
+
+    if (isFilesRoute) {
+      e.preventDefault();
+      // On /ide:
+      // If currently active tab is open, clicking it toggles it closed
+      // If closed or a different tab is clicked, switch tab and open the sidebar
+      window.dispatchEvent(
+        new CustomEvent('cortex:sidebar-tab-toggle', {
+          detail: { tab: item.id },
+        })
+      );
+    } else {
+      // On other routes: remember tab so when returning to /ide it opens directly
+      try {
+        localStorage.setItem('cortex_active_sidebar_tab', item.id);
+        localStorage.setItem('cortex_sidebar_open', 'true');
+        localStorage.setItem('cortex_file_explorer_collapsed', 'false');
+      } catch {}
+    }
+  };
+
+  // Strictly reordered nav items:
+  // 1. Files (/ide)
   // 2. Benchmark (/compare)
   // 3. Practice (/challenges)
   // 4. Learn (/learn)
-  const navItems = [
+  const navItems: NavItem[] = [
     {
+      id: 'files',
       name: 'Files',
       href: '/ide',
       icon: FolderOpen,
-      functionality: 'Project Explorer & Files (Click to toggle)',
-      onClick: (e: React.MouseEvent) => {
-        if (pathname === '/ide' || pathname.startsWith('/ide')) {
-          e.preventDefault();
-          window.dispatchEvent(new CustomEvent('cortex:toggle-file-explorer'));
-        }
-      },
+      functionality: 'Project Explorer & Workspace Files',
     },
     {
+      id: 'benchmark',
       name: 'Benchmark',
       href: '/compare',
       icon: BarChart3,
       functionality: 'Multi-Language Performance & Profiling',
     },
     {
+      id: 'practice',
       name: 'Practice',
       href: '/challenges',
       icon: Swords,
       functionality: 'Coding Challenges & Problem Sets',
     },
     {
+      id: 'learn',
       name: 'Learn',
       href: '/learn',
       icon: BookOpen,
       functionality: 'Interactive Courses & Tutorials',
     },
   ];
+
+  const isIdeRoute = pathname === '/ide' || pathname.startsWith('/ide');
 
   return (
     <>
@@ -158,14 +262,13 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
           <div className="h-14 flex items-center justify-center px-2 border-b border-[#1f2024]/60">
             <Link
               href="/ide"
-              className="group relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-[#14151a] transition"
+              onMouseEnter={(e) => showFloatingTooltip('Cortex', 'Code Beyond Limits', e)}
+              onMouseMove={moveFloatingTooltip}
+              onMouseLeave={hideFloatingTooltip}
+              className="relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-[#14151a] transition"
               title="Cortex — Code Beyond Limits"
             >
               <CortexLogo variant="icon" size="sm" />
-              <div className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#14151b] text-[#e6edf3] text-xs rounded-md shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-[100] border border-[#2b2d3a] flex flex-col items-start gap-0.5">
-                <span className="font-semibold text-white tracking-wide">Cortex</span>
-                <span className="text-[10px] text-[#ffb300] font-normal">Code Beyond Limits</span>
-              </div>
             </Link>
           </div>
 
@@ -173,17 +276,21 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
           <nav className="flex-1 py-3 px-2 space-y-2 overflow-visible">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive =
-                item.href === '/ide'
-                  ? pathname === '/ide' || pathname.startsWith('/ide')
-                  : pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+
+              // Active icon highlight: amber accent and left indicator bar appear ONLY when isSidebarOpen is true on /ide
+              const isActive = isIdeRoute
+                ? isSidebarOpen && activeSidebarTab === item.id
+                : pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
 
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  onClick={item.onClick}
-                  className={`group relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium ${
+                  onClick={(e) => handleNavClick(item, e)}
+                  onMouseEnter={(e) => showFloatingTooltip(item.name, item.functionality, e)}
+                  onMouseMove={moveFloatingTooltip}
+                  onMouseLeave={hideFloatingTooltip}
+                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium ${
                     isActive
                       ? 'bg-[#1e1f26] text-[#ff9100]'
                       : 'text-gray-400 hover:text-[#e6edf3] hover:bg-[#14151a]'
@@ -196,15 +303,9 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
 
                   <Icon
                     className={`w-5 h-5 shrink-0 transition-colors ${
-                      isActive ? 'text-[#ff9100]' : 'text-gray-400 group-hover:text-gray-200'
+                      isActive ? 'text-[#ff9100]' : 'text-gray-400 hover:text-gray-200'
                     }`}
                   />
-
-                  {/* High-visibility tooltip on hover showing full name and functionality */}
-                  <div className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#14151b] text-[#e6edf3] text-xs rounded-md shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-[100] border border-[#2b2d3a] flex flex-col items-start gap-0.5">
-                    <span className="font-semibold text-white tracking-wide">{item.name}</span>
-                    <span className="text-[10px] text-gray-400 font-normal">{item.functionality}</span>
-                  </div>
                 </Link>
               );
             })}
@@ -216,13 +317,12 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
           {/* Settings Button */}
           <button
             onClick={handleSettingsClick}
-            className="group relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium text-gray-400 hover:text-white hover:bg-[#14151a]"
+            onMouseEnter={(e) => showFloatingTooltip('Settings', 'Editor, AI Assistant & Theme', e)}
+            onMouseMove={moveFloatingTooltip}
+            onMouseLeave={hideFloatingTooltip}
+            className="relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium text-gray-400 hover:text-white hover:bg-[#14151a]"
           >
-            <Settings className="w-5 h-5 shrink-0 text-gray-400 group-hover:text-gray-200" />
-            <div className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#14151b] text-[#e6edf3] text-xs rounded-md shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-[100] border border-[#2b2d3a] flex flex-col items-start gap-0.5">
-              <span className="font-semibold text-white tracking-wide">Settings</span>
-              <span className="text-[10px] text-gray-400 font-normal">Editor, AI Assistant & Theme</span>
-            </div>
+            <Settings className="w-5 h-5 shrink-0 text-gray-400 hover:text-gray-200" />
           </button>
 
           {/* Account / User Section */}
@@ -231,7 +331,10 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
               <>
                 <button
                   onClick={() => setIsAccountOpen((prev) => !prev)}
-                  className={`group relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs text-gray-300 hover:text-white hover:bg-[#14151a] ${
+                  onMouseEnter={(e) => showFloatingTooltip(user.name, user.role || 'Student', e)}
+                  onMouseMove={moveFloatingTooltip}
+                  onMouseLeave={hideFloatingTooltip}
+                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs text-gray-300 hover:text-white hover:bg-[#14151a] ${
                     isAccountOpen ? 'bg-[#16171d]' : ''
                   }`}
                 >
@@ -241,11 +344,6 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
                       {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
                     </div>
                     <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border border-[#0a0b0d]" />
-                  </div>
-
-                  <div className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#14151b] text-[#e6edf3] text-xs rounded-md shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-[100] border border-[#2b2d3a] flex flex-col items-start gap-0.5">
-                    <span className="font-semibold text-white tracking-wide">{user.name}</span>
-                    <span className="text-[10px] text-[#ff9100] font-mono uppercase">{user.role || 'Student'}</span>
                   </div>
                 </button>
 
@@ -264,27 +362,6 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
                       </div>
                     </div>
 
-                    <div className="space-y-0.5">
-                      <Link
-                        href="/ide"
-                        onClick={() => setIsAccountOpen(false)}
-                        className="flex items-center px-2 py-1.5 rounded text-gray-300 hover:text-white hover:bg-[#1a1b22] transition"
-                      >
-                        <Code2 className="w-3.5 h-3.5 mr-2 text-gray-400" />
-                        <span>Cloud IDE</span>
-                      </Link>
-                      <Link
-                        href="/classroom"
-                        onClick={() => setIsAccountOpen(false)}
-                        className="flex items-center px-2 py-1.5 rounded text-gray-300 hover:text-white hover:bg-[#1a1b22] transition"
-                      >
-                        <GraduationCap className="w-3.5 h-3.5 mr-2 text-gray-400" />
-                        <span>Classroom Hub</span>
-                      </Link>
-                    </div>
-
-                    <div className="border-t border-[#1f2024] my-1" />
-
                     <button
                       onClick={handleLogout}
                       disabled={isLoggingOut}
@@ -299,18 +376,45 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings }) 
             ) : (
               <Link
                 href="/login"
-                className="group relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-semibold text-gray-300 hover:text-white hover:bg-[#14151a] border border-[#232530] bg-[#121318]"
+                onMouseEnter={(e) => showFloatingTooltip('Sign In', 'Sync your projects & progress', e)}
+                onMouseMove={moveFloatingTooltip}
+                onMouseLeave={hideFloatingTooltip}
+                className="relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-semibold text-gray-300 hover:text-white hover:bg-[#14151a] border border-[#232530] bg-[#121318]"
               >
                 <User className="w-5 h-5 shrink-0 text-[#ff9100]" />
-                <div className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#14151b] text-[#e6edf3] text-xs rounded-md shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-[100] border border-[#2b2d3a] flex flex-col items-start gap-0.5">
-                  <span className="font-semibold text-white tracking-wide">Sign In</span>
-                  <span className="text-[10px] text-gray-400 font-normal">Sync your projects & progress</span>
-                </div>
               </Link>
             )}
           </div>
         </div>
       </aside>
+
+      {/* Floating Tooltip Window displayed right next to the cursor on hover */}
+      {floatingTooltip && (
+        <div
+          style={{
+            left: `${floatingTooltip.x + 16}px`,
+            top: `${Math.min(
+              Math.max(floatingTooltip.y - 18, 10),
+              typeof window !== 'undefined' ? window.innerHeight - 80 : 600
+            )}px`,
+          }}
+          className="fixed pointer-events-none z-[9999] select-none transition-opacity duration-150"
+        >
+          <div className="bg-[#121318]/95 backdrop-blur-md text-[#e6edf3] text-xs rounded-lg shadow-2xl px-3.5 py-2 border border-[#2b2d3a] flex flex-col items-start gap-1 min-w-[130px] max-w-[260px] animate-in fade-in duration-100">
+            <div className="flex items-center space-x-1.5 w-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ff9100] shrink-0" />
+              <span className="font-semibold text-white tracking-wide text-xs">
+                {floatingTooltip.title}
+              </span>
+            </div>
+            {floatingTooltip.description && (
+              <span className="text-[11px] text-gray-400 font-normal leading-tight">
+                {floatingTooltip.description}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Standalone fallback SettingsModal if onOpenSettings was not provided */}
       {!onOpenSettings && (

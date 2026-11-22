@@ -21,6 +21,9 @@ import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
 import { CodeVisualizationWorkspace } from '@/components/visualization/CodeVisualizationWorkspace';
 import { TraceSession } from '@/lib/visualization/types';
 import { FileExplorer } from '@/components/sidebar/FileExplorer';
+import { BenchmarkSidebar } from '@/components/sidebar/BenchmarkSidebar';
+import { PracticeSidebar } from '@/components/sidebar/PracticeSidebar';
+import { LearnSidebar } from '@/components/sidebar/LearnSidebar';
 import { OutputPanel } from '@/components/panels/OutputPanel';
 import { TerminalPanel } from '@/components/panels/TerminalPanel';
 import { TestCasesPanel } from '@/components/panels/TestCasesPanel';
@@ -237,6 +240,10 @@ function CloudIDEPageInner() {
     setDockHeight,
     isExplorerCollapsed,
     setIsExplorerCollapsed,
+    isSidebarOpen,
+    setIsSidebarOpen,
+    activeSidebarTab,
+    setActiveSidebarTab,
     isBottomCollapsed,
     setIsBottomCollapsed,
     editorLayoutMode,
@@ -246,10 +253,12 @@ function CloudIDEPageInner() {
     isFullscreen,
     setIsFullscreen,
     fileExplorerRef,
+    isResizingSidebar,
     isResizingDock,
     startResizingSidebar,
     startResizingDock,
     toggleFileExplorer,
+    toggleSidebarTab,
   } = useIdeLayout();
 
   const {
@@ -1046,531 +1055,609 @@ function CloudIDEPageInner() {
 
         {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
         <div className="flex-1 flex overflow-hidden bg-[#0b0c0e]">
-          {/* Left Sidebar: File Explorer (Resizable width & Collapsible) */}
-          {!isExplorerCollapsed && (
-            <>
-              <div 
-                ref={fileExplorerRef}
-                style={{ width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px`, maxWidth: `${sidebarWidth}px` }} 
-                className="border-r border-[#1f2024] bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0"
-              >
-          <FileExplorer
-            width={sidebarWidth}
-            files={files}
-            activeFileId={activeFileId}
-            onSelectFile={handleSelectFile}
-            currentLanguage={currentLang}
-            onOpenFeedback={() => setIsFeedbackOpen(true)}
-            hasActiveError={Boolean((executionResult && executionResult.status !== 'success') || executionResult?.stderr?.trim())}
-            onUploadFiles={handleUploadFiles}
-            onDownloadFile={handleDownloadFile}
-            onCreateFile={async (name, isFolder, parentFolderId) => {
-            const parent = parentFolderId ? files.find((f) => f.id === parentFolderId) : null;
-            const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
-            const detectedLangId = detectLanguage(name, '');
-            const detectedLang = getLanguageConfig(detectedLangId);
-            const starter = getStarterContentForFile(name, detectedLang);
-            const initialContent = isFolder ? '' : (starter || detectedLang.starterCode || '');
-            const path = parent ? `${parentPath}/${name}` : `/${name}`;
-            
-            if (projectId) {
-              try {
-                const res = await fetch(`/api/v1/projects/${projectId}/files`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name, path, content: initialContent, isFolder })
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  const newF = data.file;
-                  setFiles((prev) => [...prev, newF]);
-                  if (newF.updatedAt) lastFetchTimestampRef.current[newF.id] = newF.updatedAt;
-                  if (!isFolder) {
-                    setActiveFileId(newF.id);
-                    setCurrentLang(detectedLang);
-                  }
-                }
-              } catch (e) { console.error(e); }
-            } else {
-              const newF: ProjectFile = {
-                id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                name,
-                path,
-                content: initialContent,
-                isFolder,
-                parentId: parentFolderId,
-              };
-              setFiles((prev) => [...prev, newF]);
-              if (!isFolder) {
-                setActiveFileId(newF.id);
-                setCurrentLang(detectedLang);
-              }
-            }
-          }}
-          onDeleteFile={async (id) => {
-            if (projectId) {
-               try {
-                 await fetch(`/api/v1/projects/${projectId}/files/${id}`, { method: 'DELETE' });
-               } catch (e) { console.error(e); }
-            }
-            const getDescendantIds = (targetId: string): string[] => {
-              const children = files.filter((f) => f.parentId === targetId);
-              return [targetId, ...children.flatMap((c) => getDescendantIds(c.id))];
-            };
-            const toDelete = getDescendantIds(id);
-            setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
-            if (toDelete.includes(activeFileId)) {
-              const remaining = files.filter((f) => !toDelete.includes(f.id) && !f.isFolder);
-              if (remaining[0]) handleSelectFile(remaining[0].id);
-              else setActiveFileId('');
-            }
-          }}
-          onRenameFile={async (id, newName) => {
-            const f = files.find((x) => x.id === id);
-            const parentPath = f ? f.path.substring(0, f.path.lastIndexOf('/')) : '';
-            const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
-
-            if (projectId) {
-              try {
-                await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: newName, path: newPath }),
-                });
-              } catch (e) { console.error(e); }
-            }
-
-            if (id === activeFileId && f && !f.isFolder) {
-              // Clear override so new extension takes effect
-              setFileLanguageOverrides((prev) => {
-                const next = { ...prev };
-                delete next[id];
-                try {
-                  localStorage.setItem('cortex_file_language_overrides', JSON.stringify(next));
-                } catch {}
-                return next;
-              });
-
-              // Re-detect language from new filename without explicit override
-              const detected = detectLanguage(newName, f.content, undefined, currentLang.id);
-              const conf = getLanguageConfig(detected);
-              if (conf) {
-                setCurrentLang(conf);
-              }
-            }
-
-            setFiles((prev) =>
-              prev.map((file) => {
-                if (file.id !== id) return file;
-                return {
-                  ...file,
-                  name: newName,
-                  path: newPath,
-                };
-              })
-            );
-          }}
-          onExportProject={() => {
-            const zipData: Record<string, Uint8Array> = {};
-            files.forEach((f) => {
-              if (!f.isFolder) {
-                const cleanPath = f.path.replace(/^\/+/, '') || f.name;
-                const content = f.id === activeFileId ? (activeFile?.content || f.content || '') : (f.content || '');
-                zipData[cleanPath] = strToU8(content);
-              }
-            });
-            const zipped = zipSync(zipData);
-            const blob = new Blob([zipped as any], { type: 'application/zip' });
-            const url = URL.createObjectURL(blob);
-            const dl = document.createElement('a');
-            dl.href = url;
-            dl.download = `${projectId || 'cortex-project'}.zip`;
-            document.body.appendChild(dl);
-            dl.click();
-            document.body.removeChild(dl);
-            URL.revokeObjectURL(url);
-          }}
-          onImportProject={async (file) => {
-            if (!projectId) return;
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            try {
-              const res = await fetch(`/api/v1/projects/${projectId}/import`, {
-                method: 'POST',
-                body: formData,
-              });
-              if (res.ok) {
-                const data = await res.json();
-                setFiles(data.files || []);
-                if (data.files && data.files.length > 0) {
-                   const firstFile = data.files.find((f: ProjectFile) => !f.isFolder);
-                   if (firstFile) setActiveFileId(firstFile.id);
-                }
-              }
-            } catch (e) {
-              console.error('Import failed', e);
-            }
-          }}
-          isDarkMode={true}
-        />
-        </div>
-
-        {/* Horizontal Resize Splitter */}
-        <div
-          onMouseDown={startResizingSidebar}
-          className="w-1 hover:w-1.5 bg-[#1f2024] hover:bg-[#ff9100] active:bg-[#ff9100] cursor-col-resize transition-all z-20 select-none flex-shrink-0"
-          title="Drag to adjust sidebar size"
-        />
-        </>
-        )}
-
-        {/* Center & Bottom Area */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0b0c0e]">
-          {/* Center Pane: Multi-Layout (Code, Visualize, Split View) */}
-          <div className="flex-1 flex overflow-hidden relative">
-            <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? 'w-1/2 border-r border-[#1f2024]' : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
-                <MonacoCodeEditor
+          {/* Left Contextual Sidebar (Resizable width & Collapsible with smooth sliding animation) */}
+          <div 
+            ref={fileExplorerRef}
+            style={{ 
+              width: isSidebarOpen ? `${sidebarWidth}px` : 0, 
+              minWidth: isSidebarOpen ? `${sidebarWidth}px` : 0, 
+              maxWidth: isSidebarOpen ? `${sidebarWidth}px` : 0,
+              opacity: isSidebarOpen ? 1 : 0,
+            }} 
+            className={`bg-[#101114] flex flex-col h-full shadow-md overflow-hidden shrink-0 ${
+              !isSidebarOpen ? 'border-r-0 pointer-events-none' : 'border-r border-[#1f2024]'
+            } ${
+              isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'
+            }`}
+          >
+            <div 
+              style={{ 
+                width: `${sidebarWidth}px`, 
+                minWidth: `${sidebarWidth}px`,
+                transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+              }} 
+              className={`h-full flex flex-col shrink-0 ${
+                isResizingSidebar ? '' : 'transition-transform duration-300 ease-in-out'
+              }`}
+            >
+              {activeSidebarTab === 'files' && (
+                <FileExplorer
+                  width={sidebarWidth}
                   files={files}
                   activeFileId={activeFileId}
                   onSelectFile={handleSelectFile}
-                  saveStatus={saveStatus}
-                  onForceSave={handleForceSave}
-                  onCloseFile={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
-                  onNewFile={() => {
-                    const nonFolders = files.filter((f) => !f.isFolder);
-                    const fileName = `file_${nonFolders.length + 1}${currentLang.fileExtension}`;
-                    const newF: ProjectFile = {
-                      id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                      name: fileName,
-                      path: `/${fileName}`,
-                      content: getStarterContentForFile(fileName, currentLang),
-                    };
-                    setFiles((prev) => [...prev, newF]);
-                    setActiveFileId(newF.id);
-                  }}
-                  onContentChange={handleContentChange}
-                  language={getMonacoLanguage(currentLang.id || activeFile?.name || '')}
-                  theme={theme}
-                  fontSize={fontSize}
-                  breakpoints={breakpoints}
-                  onToggleBreakpoint={toggleBreakpoint}
-                  activeLine={activeDebugLine}
-                  diagnostics={executionResult?.diagnostics}
-                  onCursorChange={(l, c) => {
-                    if (collabBrokerRef.current) {
-                      collabBrokerRef.current.updateCursor(activeFileId, l, c);
+                  currentLanguage={currentLang}
+                  onOpenFeedback={() => setIsFeedbackOpen(true)}
+                  hasActiveError={Boolean((executionResult && executionResult.status !== 'success') || executionResult?.stderr?.trim())}
+                  onUploadFiles={handleUploadFiles}
+                  onDownloadFile={handleDownloadFile}
+                  onCreateFile={async (name, isFolder, parentFolderId) => {
+                    const parent = parentFolderId ? files.find((f) => f.id === parentFolderId) : null;
+                    const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
+                    const detectedLangId = detectLanguage(name, '');
+                    const detectedLang = getLanguageConfig(detectedLangId);
+                    const starter = getStarterContentForFile(name, detectedLang);
+                    const initialContent = isFolder ? '' : (starter || detectedLang.starterCode || '');
+                    const path = parent ? `${parentPath}/${name}` : `/${name}`;
+                    
+                    if (projectId) {
+                      try {
+                        const res = await fetch(`/api/v1/projects/${projectId}/files`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ name, path, content: initialContent, isFolder })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          const newF = data.file;
+                          setFiles((prev) => [...prev, newF]);
+                          if (newF.updatedAt) lastFetchTimestampRef.current[newF.id] = newF.updatedAt;
+                          if (!isFolder) {
+                            setActiveFileId(newF.id);
+                            setCurrentLang(detectedLang);
+                          }
+                        }
+                      } catch (e) { console.error(e); }
+                    } else {
+                      const newF: ProjectFile = {
+                        id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                        name,
+                        path,
+                        content: initialContent,
+                        isFolder,
+                        parentId: parentFolderId,
+                      };
+                      setFiles((prev) => [...prev, newF]);
+                      if (!isFolder) {
+                        setActiveFileId(newF.id);
+                        setCurrentLang(detectedLang);
+                      }
                     }
                   }}
-                  isDarkMode={isDarkMode}
-                  onToggleDarkMode={handleToggleDarkMode}
-                  isFullscreen={isFullscreen}
-                  onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
-                  quickFixResult={fixResult}
-                  isQuickFixOpen={isQuickFixOpen}
-                  onCloseQuickFix={() => setIsQuickFixOpen(false)}
-                  onApplyExplanationComment={handleApplyExplanationComment}
-                  onApplyLiveFix={handleApplyLiveFix}
-                  aiProvider={aiSettings.provider === 'gemini' || Boolean(aiSettings.apiKey) ? 'gemini' : 'offline'}
-                  apiKey={aiSettings.apiKey || ''}
-                  onSaveApiKey={handleSaveApiKey}
-                  isAnalyzingFix={isAnalyzingFix}
-                  onReanalyzeWithKey={handleReanalyzeWithKey}
-                  enableInlineSuggestions={enableInlineSuggestions}
-                  onToggleInlineSuggestions={handleToggleInlineSuggestions}
-                />
-            </div>
+                  onDeleteFile={async (id) => {
+                    if (projectId) {
+                       try {
+                         await fetch(`/api/v1/projects/${projectId}/files/${id}`, { method: 'DELETE' });
+                       } catch (e) { console.error(e); }
+                    }
+                    const getDescendantIds = (targetId: string): string[] => {
+                      const children = files.filter((f) => f.parentId === targetId);
+                      return [targetId, ...children.flatMap((c) => getDescendantIds(c.id))];
+                    };
+                    const toDelete = getDescendantIds(id);
+                    setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
+                    if (toDelete.includes(activeFileId)) {
+                      const remaining = files.filter((f) => !toDelete.includes(f.id) && !f.isFolder);
+                      if (remaining[0]) handleSelectFile(remaining[0].id);
+                      else setActiveFileId('');
+                    }
+                  }}
+                  onRenameFile={async (id, newName) => {
+                    const f = files.find((x) => x.id === id);
+                    const parentPath = f ? f.path.substring(0, f.path.lastIndexOf('/')) : '';
+                    const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
 
-            {(editorLayoutMode === 'visualize' || editorLayoutMode === 'split') && (
-              <div className={`${editorLayoutMode === 'split' ? 'w-1/2' : 'w-full'} h-full overflow-hidden relative`}>
-                <CodeVisualizationWorkspace
-                  traceSession={traceSession}
-                  isLoading={isTracing}
-                  language={currentLang.id}
-                  sourceCode={activeFile?.content || ''}
-                  onRunTrace={handleRunTrace}
-                  onStepChange={(line) => setActiveDebugLine(line)}
-                  showSourcePane={editorLayoutMode === 'visualize'}
+                    if (projectId) {
+                      try {
+                        await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ name: newName, path: newPath }),
+                        });
+                      } catch (e) { console.error(e); }
+                    }
+
+                    if (id === activeFileId && f && !f.isFolder) {
+                      // Clear override so new extension takes effect
+                      setFileLanguageOverrides((prev) => {
+                        const next = { ...prev };
+                        delete next[id];
+                        try {
+                          localStorage.setItem('cortex_file_language_overrides', JSON.stringify(next));
+                        } catch {}
+                        return next;
+                      });
+
+                      // Re-detect language from new filename without explicit override
+                      const detected = detectLanguage(newName, f.content, undefined, currentLang.id);
+                      const conf = getLanguageConfig(detected);
+                      if (conf) {
+                        setCurrentLang(conf);
+                      }
+                    }
+
+                    setFiles((prev) =>
+                      prev.map((file) => {
+                        if (file.id !== id) return file;
+                        return {
+                          ...file,
+                          name: newName,
+                          path: newPath,
+                        };
+                      })
+                    );
+                  }}
+                  onExportProject={() => {
+                    const zipData: Record<string, Uint8Array> = {};
+                    files.forEach((f) => {
+                      if (!f.isFolder) {
+                        const cleanPath = f.path.replace(/^\/+/, '') || f.name;
+                        const content = f.id === activeFileId ? (activeFile?.content || f.content || '') : (f.content || '');
+                        zipData[cleanPath] = strToU8(content);
+                      }
+                    });
+                    const zipped = zipSync(zipData);
+                    const blob = new Blob([zipped as any], { type: 'application/zip' });
+                    const url = URL.createObjectURL(blob);
+                    const dl = document.createElement('a');
+                    dl.href = url;
+                    dl.download = `${projectId || 'cortex-project'}.zip`;
+                    document.body.appendChild(dl);
+                    dl.click();
+                    document.body.removeChild(dl);
+                    URL.revokeObjectURL(url);
+                  }}
+                  onImportProject={async (file) => {
+                    if (!projectId) return;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    try {
+                      const res = await fetch(`/api/v1/projects/${projectId}/import`, {
+                        method: 'POST',
+                        body: formData,
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        setFiles(data.files || []);
+                        if (data.files && data.files.length > 0) {
+                           const firstFile = data.files.find((f: ProjectFile) => !f.isFolder);
+                           if (firstFile) setActiveFileId(firstFile.id);
+                        }
+                      }
+                    } catch (e) {
+                      console.error('Import failed', e);
+                    }
+                  }}
+                  isDarkMode={true}
                 />
-              </div>
-            )}
+              )}
+
+              {activeSidebarTab === 'benchmark' && (
+                <BenchmarkSidebar
+                  width={sidebarWidth}
+                  onLoadCode={(code, lang) => {
+                    const foundLang = SUPPORTED_LANGUAGES.find(
+                      (l) => l.id === lang || l.monacoLang === lang
+                    );
+                    if (foundLang) handleLanguageChange(foundLang);
+                    if (activeFile) {
+                      setFiles((prev) =>
+                        prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
+                      );
+                    }
+                  }}
+                />
+              )}
+
+              {activeSidebarTab === 'practice' && (
+                <PracticeSidebar
+                  width={sidebarWidth}
+                  currentLanguage={currentLang?.id}
+                  onLoadChallenge={(code, lang, title) => {
+                    const foundLang = SUPPORTED_LANGUAGES.find(
+                      (l) => l.id === lang || l.monacoLang === lang
+                    );
+                    if (foundLang) handleLanguageChange(foundLang);
+                    if (activeFile) {
+                      setFiles((prev) =>
+                        prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
+                      );
+                    }
+                  }}
+                />
+              )}
+
+              {activeSidebarTab === 'learn' && (
+                <LearnSidebar
+                  width={sidebarWidth}
+                  currentLanguage={currentLang?.id}
+                  onLoadLesson={(code, lang, title) => {
+                    const foundLang = SUPPORTED_LANGUAGES.find(
+                      (l) => l.id === lang || l.monacoLang === lang
+                    );
+                    if (foundLang) handleLanguageChange(foundLang);
+                    if (activeFile) {
+                      setFiles((prev) =>
+                        prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
+                      );
+                    }
+                  }}
+                />
+              )}
+            </div>
           </div>
 
-          {/* Vertical Resize Splitter */}
-          {!isBottomCollapsed && (
-            <div
-              onMouseDown={startResizingDock}
-              className="h-1 hover:h-1.5 bg-[#1f2024] hover:bg-[#ff9100] active:bg-[#ff9100] cursor-row-resize transition-all z-20 select-none flex-shrink-0"
-              title="Drag to adjust bottom bar size"
-            />
-          )}
-
-          {/* Bottom Dock: Tabbed Panels with Resizable Height */}
+          {/* Horizontal Resize Splitter */}
           <div
-            style={{ height: isBottomCollapsed ? 36 : dockHeight }}
-            className={`border-t border-[#1f2024] bg-[#0b0c0e] flex flex-col ${
-              isResizingDock ? '' : 'transition-all duration-150'
-            }`}
-          >
-            {/* Dock Tab Selector Header */}
-            <div className="h-9 bg-[#101114] border-b border-[#1f2024] flex items-center justify-between px-2 text-xs select-none">
-              <div className="flex items-center space-x-1">
-                {[
-                  { id: 'output', label: 'Output', icon: TermIcon },
-                  { id: 'terminal', label: 'Terminal', icon: TermIcon },
-                  { id: 'tests', label: 'Tests', icon: CheckSquare },
-                  { id: 'ai', label: 'Assistant', icon: Sparkles },
-                  { id: 'debug', label: 'Debugger', icon: Bug },
-                  { id: 'preview', label: 'Preview', icon: Globe },
-                ].map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = activeBottomTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        setActiveBottomTab(tab.id as any);
-                        setIsBottomCollapsed(false);
-                      }}
-                      className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded transition font-heading font-semibold text-xs tracking-wide ${
-                        isActive && !isBottomCollapsed
-                          ? 'bg-[#18191f] text-[#ff9100] border-b-2 border-[#ff9100]'
-                          : 'text-gray-400 hover:text-gray-200 hover:bg-[#14151a]'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+            onMouseDown={startResizingSidebar}
+            style={{
+              width: !isSidebarOpen ? 0 : undefined,
+              opacity: !isSidebarOpen ? 0 : 1,
+              pointerEvents: !isSidebarOpen ? 'none' : 'auto',
+            }}
+            className={`hover:w-1.5 bg-[#1f2024] hover:bg-[#ff9100] active:bg-[#ff9100] cursor-col-resize z-20 select-none flex-shrink-0 ${
+              !isSidebarOpen ? 'w-0 overflow-hidden' : 'w-1'
+            } ${isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'}`}
+            title="Drag to adjust sidebar size"
+          />
 
-              {/* Right Side: Status Summary & Collapse Toggle */}
-              <div className="flex items-center space-x-2">
-                {executionResult && !isBottomCollapsed && (
-                  <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-gray-300 pr-2 border-r border-[#1f2024]">
-                    <Badge variant={executionResult.status === 'success' ? 'emerald' : 'rose'} dot size="sm">
-                      Exit {executionResult.exitCode}
-                    </Badge>
-                    <span>•</span>
-                    <span>{executionResult.executionTimeMs}ms</span>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
-                  className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#1c1e24] transition"
-                  title={isBottomCollapsed ? 'Expand Dock' : 'Collapse Dock'}
-                >
-                  {isBottomCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Panel View Container */}
-            {!isBottomCollapsed && (
-              <div className="flex-1 overflow-hidden">
-                {activeBottomTab === 'output' && (
-                  <OutputPanel
-                    result={executionResult}
-                    isRunning={isRunning}
-                    onTriggerAutoFix={() => {
-                      if (!activeFile) return;
-                      processAutoFix(
-                        activeFile.content,
-                        executionResult?.stderr || '',
-                        executionResult?.diagnostics || []
-                      );
+          {/* Center & Bottom Area */}
+          <div className="flex-1 flex flex-col overflow-hidden bg-[#0b0c0e]">
+            {/* Center Pane: Multi-Layout (Code, Visualize, Split View) */}
+            <div className="flex-1 flex overflow-hidden relative">
+              <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? 'w-1/2 border-r border-[#1f2024]' : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
+                  <MonacoCodeEditor
+                    files={files}
+                    activeFileId={activeFileId}
+                    onSelectFile={handleSelectFile}
+                    saveStatus={saveStatus}
+                    onForceSave={handleForceSave}
+                    onCloseFile={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
+                    onNewFile={() => {
+                      const nonFolders = files.filter((f) => !f.isFolder);
+                      const fileName = `file_${nonFolders.length + 1}${currentLang.fileExtension}`;
+                      const newF: ProjectFile = {
+                        id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                        name: fileName,
+                        path: `/${fileName}`,
+                        content: getStarterContentForFile(fileName, currentLang),
+                      };
+                      setFiles((prev) => [...prev, newF]);
+                      setActiveFileId(newF.id);
                     }}
-                  />
-                )}
-                {activeBottomTab === 'terminal' && (
-                  <TerminalPanel files={files} onSyncFiles={setFiles} />
-                )}
-                {activeBottomTab === 'tests' && (
-                  <TestCasesPanel
-                    testCases={testCases}
-                    onAddTestCase={(tc) =>
-                      setTestCases((prev) => [...prev, { ...tc, id: `tc_${Date.now()}` }])
-                    }
-                    onDeleteTestCase={(id) =>
-                      setTestCases((prev) => prev.filter((t) => t.id !== id))
-                    }
-                    onRunAllTests={handleRunAllTests}
-                    onRunBenchmark={handleRunBenchmark}
-                    isRunningTests={isRunningTests}
-                    benchmarkResult={benchmarkResult}
-                    customStdin={customStdin}
-                    onChangeCustomStdin={setCustomStdin}
-                  />
-                )}
-                {activeBottomTab === 'ai' && (
-                  <AIAssistantPanel
-                    currentCode={activeFile?.content || ''}
-                    language={currentLang.id}
-                    settings={aiSettings}
-                    onUpdateSettings={(s) => setAiSettings((prev) => ({ ...prev, ...s }))}
-                    onTriggerExplain={async () => {
-                      if (!activeFile) return;
-                      setAnalysisMode('explain');
-                      setIsAnalyzingAI(true);
-                      const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'explain');
-                      setAiAnalysis(res);
-                      setIsAnalyzingAI(false);
-                    }}
-                    onTriggerOptimize={async () => {
-                      if (!activeFile) return;
-                      setAnalysisMode('optimize');
-                      setIsAnalyzingAI(true);
-                      const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'optimize');
-                      setAiAnalysis(res);
-                      setIsAnalyzingAI(false);
-                    }}
-                    onTriggerRefactor={async () => {
-                      if (!activeFile) return;
-                      setAnalysisMode('refactor');
-                      setIsAnalyzingAI(true);
-                      const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'refactor');
-                      setAiAnalysis(res);
-                      setIsAnalyzingAI(false);
-                    }}
-                    onTriggerConvert={async (toLang) => {
-                      if (!activeFile) return;
-                      const res = await convertCode(activeFile.content, currentLang.id, toLang);
-                      const targetLangConfig = getLanguageConfig(toLang);
-                      setCurrentLang(targetLangConfig);
-                      handleContentChange(res.convertedCode);
-                    }}
-                    onTriggerAutoFix={() => {
-                      if (!activeFile) return;
-                      processAutoFix(
-                        activeFile.content,
-                        executionResult?.stderr || '',
-                        executionResult?.diagnostics || []
-                      );
-                    }}
-                    analysisResult={aiAnalysis}
-                    isAnalyzing={isAnalyzingAI}
-                    analysisMode={analysisMode}
-                  />
-                )}
-                {activeBottomTab === 'debug' && (
-                  <DebuggerPanel
-                    isDebugging={isDebugging}
-                    onStartDebug={handleStartDebug}
-                    onStopDebug={handleStopDebug}
-                    onStepOver={handleStepOver}
-                    onStepInto={() => handleStepOver()}
-                    onStepOut={() => handleStepOver()}
-                    onResume={() => handleStepOver()}
+                    onContentChange={handleContentChange}
+                    language={getMonacoLanguage(currentLang.id || activeFile?.name || '')}
+                    theme={theme}
+                    fontSize={fontSize}
                     breakpoints={breakpoints}
                     onToggleBreakpoint={toggleBreakpoint}
                     activeLine={activeDebugLine}
-                    variables={parsedDebugInfo.variables}
-                    callStack={parsedDebugInfo.callStack}
+                    diagnostics={executionResult?.diagnostics}
+                    onCursorChange={(l, c) => {
+                      if (collabBrokerRef.current) {
+                        collabBrokerRef.current.updateCursor(activeFileId, l, c);
+                      }
+                    }}
+                    isDarkMode={isDarkMode}
+                    onToggleDarkMode={handleToggleDarkMode}
+                    isFullscreen={isFullscreen}
+                    onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+                    quickFixResult={fixResult}
+                    isQuickFixOpen={isQuickFixOpen}
+                    onCloseQuickFix={() => setIsQuickFixOpen(false)}
+                    onApplyExplanationComment={handleApplyExplanationComment}
+                    onApplyLiveFix={handleApplyLiveFix}
+                    aiProvider={aiSettings.provider === 'gemini' || Boolean(aiSettings.apiKey) ? 'gemini' : 'offline'}
+                    apiKey={aiSettings.apiKey || ''}
+                    onSaveApiKey={handleSaveApiKey}
+                    isAnalyzingFix={isAnalyzingFix}
+                    onReanalyzeWithKey={handleReanalyzeWithKey}
+                    enableInlineSuggestions={enableInlineSuggestions}
+                    onToggleInlineSuggestions={handleToggleInlineSuggestions}
                   />
-                )}
-                {activeBottomTab === 'preview' && <WebPreviewPanel files={files} />}
               </div>
+
+              {(editorLayoutMode === 'visualize' || editorLayoutMode === 'split') && (
+                <div className={`${editorLayoutMode === 'split' ? 'w-1/2' : 'w-full'} h-full overflow-hidden relative`}>
+                  <CodeVisualizationWorkspace
+                    traceSession={traceSession}
+                    isLoading={isTracing}
+                    language={currentLang.id}
+                    sourceCode={activeFile?.content || ''}
+                    onRunTrace={handleRunTrace}
+                    onStepChange={(line) => setActiveDebugLine(line)}
+                    showSourcePane={editorLayoutMode === 'visualize'}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Vertical Resize Splitter */}
+            {!isBottomCollapsed && (
+              <div
+                onMouseDown={startResizingDock}
+                className="h-1 hover:h-1.5 bg-[#1f2024] hover:bg-[#ff9100] active:bg-[#ff9100] cursor-row-resize transition-all z-20 select-none flex-shrink-0"
+                title="Drag to adjust bottom bar size"
+              />
             )}
+
+            {/* Bottom Dock: Tabbed Panels with Resizable Height */}
+            <div
+              style={{ height: isBottomCollapsed ? 36 : dockHeight }}
+              className={`border-t border-[#1f2024] bg-[#0b0c0e] flex flex-col ${
+                isResizingDock ? '' : 'transition-all duration-150'
+              }`}
+            >
+              {/* Dock Tab Selector Header */}
+              <div className="h-9 bg-[#101114] border-b border-[#1f2024] flex items-center justify-between px-2 text-xs select-none">
+                <div className="flex items-center space-x-1">
+                  {[
+                    { id: 'output', label: 'Output', icon: TermIcon },
+                    { id: 'terminal', label: 'Terminal', icon: TermIcon },
+                    { id: 'tests', label: 'Tests', icon: CheckSquare },
+                    { id: 'ai', label: 'Assistant', icon: Sparkles },
+                    { id: 'debug', label: 'Debugger', icon: Bug },
+                    { id: 'preview', label: 'Preview', icon: Globe },
+                  ].map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeBottomTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          setActiveBottomTab(tab.id as any);
+                          setIsBottomCollapsed(false);
+                        }}
+                        className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded transition font-heading font-semibold text-xs tracking-wide ${
+                          isActive && !isBottomCollapsed
+                            ? 'bg-[#18191f] text-[#ff9100] border-b-2 border-[#ff9100]'
+                            : 'text-gray-400 hover:text-gray-200 hover:bg-[#14151a]'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Right Side: Status Summary & Collapse Toggle */}
+                <div className="flex items-center space-x-2">
+                  {executionResult && !isBottomCollapsed && (
+                    <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-gray-300 pr-2 border-r border-[#1f2024]">
+                      <Badge variant={executionResult.status === 'success' ? 'emerald' : 'rose'} dot size="sm">
+                        Exit {executionResult.exitCode}
+                      </Badge>
+                      <span>•</span>
+                      <span>{executionResult.executionTimeMs}ms</span>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
+                    className="p-1 text-gray-400 hover:text-white rounded hover:bg-[#1c1e24] transition"
+                    title={isBottomCollapsed ? 'Expand Dock' : 'Collapse Dock'}
+                  >
+                    {isBottomCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Panel View Container */}
+              {!isBottomCollapsed && (
+                <div className="flex-1 overflow-hidden">
+                  {activeBottomTab === 'output' && (
+                    <OutputPanel
+                      result={executionResult}
+                      isRunning={isRunning}
+                      onTriggerAutoFix={() => {
+                        if (!activeFile) return;
+                        processAutoFix(
+                          activeFile.content,
+                          executionResult?.stderr || '',
+                          executionResult?.diagnostics || []
+                        );
+                      }}
+                    />
+                  )}
+                  {activeBottomTab === 'terminal' && (
+                    <TerminalPanel files={files} onSyncFiles={setFiles} />
+                  )}
+                  {activeBottomTab === 'tests' && (
+                    <TestCasesPanel
+                      testCases={testCases}
+                      onAddTestCase={(tc) =>
+                        setTestCases((prev) => [...prev, { ...tc, id: `tc_${Date.now()}` }])
+                      }
+                      onDeleteTestCase={(id) =>
+                        setTestCases((prev) => prev.filter((t) => t.id !== id))
+                      }
+                      onRunAllTests={handleRunAllTests}
+                      onRunBenchmark={handleRunBenchmark}
+                      isRunningTests={isRunningTests}
+                      benchmarkResult={benchmarkResult}
+                      customStdin={customStdin}
+                      onChangeCustomStdin={setCustomStdin}
+                    />
+                  )}
+                  {activeBottomTab === 'ai' && (
+                    <AIAssistantPanel
+                      currentCode={activeFile?.content || ''}
+                      language={currentLang.id}
+                      settings={aiSettings}
+                      onUpdateSettings={(s) => setAiSettings((prev) => ({ ...prev, ...s }))}
+                      onTriggerExplain={async () => {
+                        if (!activeFile) return;
+                        setAnalysisMode('explain');
+                        setIsAnalyzingAI(true);
+                        const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'explain');
+                        setAiAnalysis(res);
+                        setIsAnalyzingAI(false);
+                      }}
+                      onTriggerOptimize={async () => {
+                        if (!activeFile) return;
+                        setAnalysisMode('optimize');
+                        setIsAnalyzingAI(true);
+                        const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'optimize');
+                        setAiAnalysis(res);
+                        setIsAnalyzingAI(false);
+                      }}
+                      onTriggerRefactor={async () => {
+                        if (!activeFile) return;
+                        setAnalysisMode('refactor');
+                        setIsAnalyzingAI(true);
+                        const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'refactor');
+                        setAiAnalysis(res);
+                        setIsAnalyzingAI(false);
+                      }}
+                      onTriggerConvert={async (toLang) => {
+                        if (!activeFile) return;
+                        const res = await convertCode(activeFile.content, currentLang.id, toLang);
+                        const targetLangConfig = getLanguageConfig(toLang);
+                        setCurrentLang(targetLangConfig);
+                        handleContentChange(res.convertedCode);
+                      }}
+                      onTriggerAutoFix={() => {
+                        if (!activeFile) return;
+                        processAutoFix(
+                          activeFile.content,
+                          executionResult?.stderr || '',
+                          executionResult?.diagnostics || []
+                        );
+                      }}
+                      analysisResult={aiAnalysis}
+                      isAnalyzing={isAnalyzingAI}
+                      analysisMode={analysisMode}
+                    />
+                  )}
+                  {activeBottomTab === 'debug' && (
+                    <DebuggerPanel
+                      isDebugging={isDebugging}
+                      onStartDebug={handleStartDebug}
+                      onStopDebug={handleStopDebug}
+                      onStepOver={handleStepOver}
+                      onStepInto={() => handleStepOver()}
+                      onStepOut={() => handleStepOver()}
+                      onResume={() => handleStepOver()}
+                      breakpoints={breakpoints}
+                      onToggleBreakpoint={toggleBreakpoint}
+                      activeLine={activeDebugLine}
+                      variables={parsedDebugInfo.variables}
+                      callStack={parsedDebugInfo.callStack}
+                    />
+                  )}
+                  {activeBottomTab === 'preview' && <WebPreviewPanel files={files} />}
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* 3. Global Modals */}
+        <DiffModal
+          isOpen={isDiffModalOpen}
+          onClose={() => setIsDiffModalOpen(false)}
+          fixResult={fixResult}
+          onApplyFix={() => fixResult && applyFixAndReverify(fixResult)}
+          onUndo={handleUndoFix}
+          canUndo={previousCodeSnapshot !== null}
+        />
+
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          aiSettings={aiSettings}
+          onUpdateAISettings={(s) => {
+            setAiSettings((prev) => ({ ...prev, ...s }));
+            if (s.enableInlineSuggestions !== undefined) {
+              setEnableInlineSuggestions(s.enableInlineSuggestions);
+            }
+          }}
+          fontSize={fontSize}
+          onChangeFontSize={setFontSize}
+          theme={theme}
+          onChangeTheme={setTheme}
+        />
+
+        <ShareModal
+          isOpen={isShareOpen}
+          onClose={() => setIsShareOpen(false)}
+          projectName={`${currentLang.name} Sandbox`}
+        />
+
+        <FeedbackModal
+          isOpen={isFeedbackOpen}
+          onClose={() => setIsFeedbackOpen(false)}
+          diagnostics={{
+            language: currentLang.name,
+            activeFile: activeFile?.name || 'none',
+            executionStatus: executionResult?.status,
+            exitCode: executionResult?.exitCode,
+            stderr: executionResult?.stderr,
+            diagnosticsList: executionResult?.diagnostics,
+            codeSnippet: activeFile?.content ? activeFile.content.slice(0, 2000) : undefined,
+            systemInfo: typeof window !== 'undefined' ? {
+              userAgent: navigator.userAgent,
+              platform: navigator.platform,
+              url: window.location.href,
+            } : undefined,
+          }}
+        />
+
+        {/* Semantic Search Engine Crawler Content (Screen-reader & Search Engine Indexable) */}
+        <section className="sr-only" aria-label="Cortex Platform Semantic SEO Overview">
+          <h1>Free Online Compiler, Cloud IDE & AI Code Debugger — Cortex</h1>
+          <p>
+            Cortex is an advanced online code compiler, free online programming environment, and cloud IDE supporting 16+ programming languages. Execute code online, run Python online, compile C++ online, test Java online, and transpile TypeScript in your browser with zero installation.
+          </p>
+
+          <h2>Supported Online Compilers & Runtimes</h2>
+          <ul>
+            <li><a href="/python-online-compiler">Python Online Compiler & Cloud IDE (Python 3.12)</a> - run Python online, online Python debugger, free Python compiler.</li>
+            <li><a href="/cpp-online-compiler">C++ Online Compiler (C++20/C++23 GCC)</a> - online C++ compiler, compile C++ online, free C++ IDE.</li>
+            <li><a href="/c-online-compiler">C Online Compiler (GCC)</a> - run C online, online C compiler with stdin and memory inspection.</li>
+            <li><a href="/java-online-compiler">Java Online Compiler (OpenJDK 21 LTS)</a> - online Java compiler, Java online IDE, run Java code online.</li>
+            <li><a href="/javascript-online-compiler">JavaScript Online Compiler & Node.js IDE</a> - execute JavaScript online with live Web Preview and npm runner.</li>
+            <li><a href="/typescript-online-compiler">TypeScript Online Compiler & Playground</a> - run TypeScript online with strict type checking.</li>
+            <li><a href="/rust-online-compiler">Rust Online Compiler & Cargo Playground</a> - compile Rust online with borrow checker auto-fix.</li>
+            <li><a href="/go-online-compiler">Go Online Compiler (Golang)</a> - online Go compiler with concurrency and goroutines.</li>
+            <li><a href="/csharp-online-compiler">C# Online Compiler (.NET 8)</a> - run C# online with LINQ and async/await.</li>
+            <li><a href="/php-online-compiler">PHP Online Compiler (PHP 8.3)</a> - online PHP script runner.</li>
+            <li><a href="/ruby-online-compiler">Ruby Online Compiler (Ruby 3.3)</a> - run Ruby online with interactive terminal.</li>
+            <li><a href="/kotlin-online-compiler">Kotlin Online Compiler & Playground</a> - compile Kotlin online for JVM.</li>
+            <li><a href="/swift-online-compiler">Swift Online Compiler</a> - write Swift online without a Mac.</li>
+            <li><a href="/dart-online-compiler">Dart Online Compiler</a> - compile Dart 3 with null safety.</li>
+            <li><a href="/r-online-compiler">R Online Compiler & Statistics IDE</a> - run R online for statistical computing.</li>
+            <li><a href="/sql-online-editor">SQL Online Editor & Database Compiler</a> - execute ANSI SQL queries online with table outputs.</li>
+          </ul>
+
+          <h2>AI Coding Assistant & Error Fixer</h2>
+          <p>
+            Fix coding errors with AI, explain compiler errors, automatic code fixing, AI code debugger, and algorithm performance analyzer powered by Google Gemini 2.5 Flash.
+          </p>
+
+          <h2>Cloud Development & Competitive Programming Practice</h2>
+          <p>
+            Practice competitive programming challenges, online coding tests, algorithm practice, and benchmark execution latency and memory consumption.
+          </p>
+          <nav aria-label="Core Navigation">
+            <a href="/ide">Universal Online IDE & Cloud Compiler</a>
+            <a href="/compare">Algorithm Benchmark & Dual Code Comparison</a>
+          </nav>
+        </section>
       </div>
-
-      {/* 3. Global Modals */}
-      <DiffModal
-        isOpen={isDiffModalOpen}
-        onClose={() => setIsDiffModalOpen(false)}
-        fixResult={fixResult}
-        onApplyFix={() => fixResult && applyFixAndReverify(fixResult)}
-        onUndo={handleUndoFix}
-        canUndo={previousCodeSnapshot !== null}
-      />
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        aiSettings={aiSettings}
-        onUpdateAISettings={(s) => {
-          setAiSettings((prev) => ({ ...prev, ...s }));
-          if (s.enableInlineSuggestions !== undefined) {
-            setEnableInlineSuggestions(s.enableInlineSuggestions);
-          }
-        }}
-        fontSize={fontSize}
-        onChangeFontSize={setFontSize}
-        theme={theme}
-        onChangeTheme={setTheme}
-      />
-
-      <ShareModal
-        isOpen={isShareOpen}
-        onClose={() => setIsShareOpen(false)}
-        projectName={`${currentLang.name} Sandbox`}
-      />
-
-      <FeedbackModal
-        isOpen={isFeedbackOpen}
-        onClose={() => setIsFeedbackOpen(false)}
-        diagnostics={{
-          language: currentLang.name,
-          activeFile: activeFile?.name || 'none',
-          executionStatus: executionResult?.status,
-          exitCode: executionResult?.exitCode,
-          stderr: executionResult?.stderr,
-          diagnosticsList: executionResult?.diagnostics,
-          codeSnippet: activeFile?.content ? activeFile.content.slice(0, 2000) : undefined,
-          systemInfo: typeof window !== 'undefined' ? {
-            userAgent: navigator.userAgent,
-            platform: navigator.platform,
-            url: window.location.href,
-          } : undefined,
-        }}
-      />
-
-      {/* Semantic Search Engine Crawler Content (Screen-reader & Search Engine Indexable) */}
-      <section className="sr-only" aria-label="Cortex Platform Semantic SEO Overview">
-        <h1>Free Online Compiler, Cloud IDE & AI Code Debugger — Cortex</h1>
-        <p>
-          Cortex is an advanced online code compiler, free online programming environment, and cloud IDE supporting 16+ programming languages. Execute code online, run Python online, compile C++ online, test Java online, and transpile TypeScript in your browser with zero installation.
-        </p>
-
-        <h2>Supported Online Compilers & Runtimes</h2>
-        <ul>
-          <li><a href="/python-online-compiler">Python Online Compiler & Cloud IDE (Python 3.12)</a> - run Python online, online Python debugger, free Python compiler.</li>
-          <li><a href="/cpp-online-compiler">C++ Online Compiler (C++20/C++23 GCC)</a> - online C++ compiler, compile C++ online, free C++ IDE.</li>
-          <li><a href="/c-online-compiler">C Online Compiler (GCC)</a> - run C online, online C compiler with stdin and memory inspection.</li>
-          <li><a href="/java-online-compiler">Java Online Compiler (OpenJDK 21 LTS)</a> - online Java compiler, Java online IDE, run Java code online.</li>
-          <li><a href="/javascript-online-compiler">JavaScript Online Compiler & Node.js IDE</a> - execute JavaScript online with live Web Preview and npm runner.</li>
-          <li><a href="/typescript-online-compiler">TypeScript Online Compiler & Playground</a> - run TypeScript online with strict type checking.</li>
-          <li><a href="/rust-online-compiler">Rust Online Compiler & Cargo Playground</a> - compile Rust online with borrow checker auto-fix.</li>
-          <li><a href="/go-online-compiler">Go Online Compiler (Golang)</a> - online Go compiler with concurrency and goroutines.</li>
-          <li><a href="/csharp-online-compiler">C# Online Compiler (.NET 8)</a> - run C# online with LINQ and async/await.</li>
-          <li><a href="/php-online-compiler">PHP Online Compiler (PHP 8.3)</a> - online PHP script runner.</li>
-          <li><a href="/ruby-online-compiler">Ruby Online Compiler (Ruby 3.3)</a> - run Ruby online with interactive terminal.</li>
-          <li><a href="/kotlin-online-compiler">Kotlin Online Compiler & Playground</a> - compile Kotlin online for JVM.</li>
-          <li><a href="/swift-online-compiler">Swift Online Compiler</a> - write Swift online without a Mac.</li>
-          <li><a href="/dart-online-compiler">Dart Online Compiler</a> - compile Dart 3 with null safety.</li>
-          <li><a href="/r-online-compiler">R Online Compiler & Statistics IDE</a> - run R online for statistical computing.</li>
-          <li><a href="/sql-online-editor">SQL Online Editor & Database Compiler</a> - execute ANSI SQL queries online with table outputs.</li>
-        </ul>
-
-        <h2>AI Coding Assistant & Error Fixer</h2>
-        <p>
-          Fix coding errors with AI, explain compiler errors, automatic code fixing, AI code debugger, and algorithm performance analyzer powered by Google Gemini 2.5 Flash.
-        </p>
-
-        <h2>Cloud Development & Competitive Programming Practice</h2>
-        <p>
-          Practice competitive programming challenges, online coding tests, algorithm practice, and benchmark execution latency and memory consumption.
-        </p>
-        <nav aria-label="Core Navigation">
-          <a href="/ide">Universal Online IDE & Cloud Compiler</a>
-          <a href="/compare">Algorithm Benchmark & Dual Code Comparison</a>
-        </nav>
-      </section>
-    </div>
-  </AppShell>
+    </AppShell>
   );
 }
 

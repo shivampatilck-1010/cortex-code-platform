@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { EditorLayoutMode, BottomPanelTab } from '@/types/ide';
 
+export type SidebarTab = 'files' | 'benchmark' | 'practice' | 'learn';
+
 export interface UseIdeLayoutReturn {
   sidebarWidth: number;
   setSidebarWidth: React.Dispatch<React.SetStateAction<number>>;
@@ -10,6 +12,10 @@ export interface UseIdeLayoutReturn {
   setDockHeight: React.Dispatch<React.SetStateAction<number>>;
   isExplorerCollapsed: boolean;
   setIsExplorerCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  activeSidebarTab: SidebarTab;
+  setActiveSidebarTab: React.Dispatch<React.SetStateAction<SidebarTab>>;
   isBottomCollapsed: boolean;
   setIsBottomCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   editorLayoutMode: EditorLayoutMode;
@@ -24,11 +30,13 @@ export interface UseIdeLayoutReturn {
   startResizingSidebar: (e: React.MouseEvent) => void;
   startResizingDock: (e: React.MouseEvent) => void;
   toggleFileExplorer: () => void;
+  toggleSidebarTab: (tab: SidebarTab) => void;
 }
 
 export function useIdeLayout(): UseIdeLayoutReturn {
   const [sidebarWidth, setSidebarWidth] = useState<number>(240);
-  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>('files');
   const [dockHeight, setDockHeight] = useState<number>(280);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
   const [editorLayoutMode, setEditorLayoutMode] = useState<EditorLayoutMode>('code');
@@ -38,6 +46,37 @@ export function useIdeLayout(): UseIdeLayoutReturn {
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingDock, setIsResizingDock] = useState(false);
   const fileExplorerRef = useRef<HTMLDivElement>(null);
+
+  // Derived legacy boolean for backward compatibility
+  const isExplorerCollapsed = !isSidebarOpen;
+  const setIsExplorerCollapsed = useCallback<React.Dispatch<React.SetStateAction<boolean>>>(
+    (valOrFn) => {
+      setIsSidebarOpen((prev) => {
+        const nextCollapsed = typeof valOrFn === 'function' ? valOrFn(!prev) : valOrFn;
+        return !nextCollapsed;
+      });
+    },
+    []
+  );
+
+  const toggleSidebarTab = useCallback((tab: SidebarTab) => {
+    if (isSidebarOpen && activeSidebarTab === tab) {
+      setIsSidebarOpen(false);
+    } else {
+      setActiveSidebarTab(tab);
+      setIsSidebarOpen(true);
+    }
+  }, [isSidebarOpen, activeSidebarTab]);
+
+  const toggleFileExplorer = useCallback(() => {
+    toggleSidebarTab('files');
+  }, [toggleSidebarTab]);
+
+  // Keep a ref to toggleSidebarTab for event handlers to avoid stale closures
+  const toggleSidebarTabRef = useRef(toggleSidebarTab);
+  useEffect(() => {
+    toggleSidebarTabRef.current = toggleSidebarTab;
+  }, [toggleSidebarTab]);
 
   // Hydration-safe localStorage persistence for layout
   useEffect(() => {
@@ -49,6 +88,7 @@ export function useIdeLayout(): UseIdeLayoutReturn {
           setSidebarWidth(val);
         }
       }
+
       const savedDock = localStorage.getItem('cortex_dock_height');
       if (savedDock) {
         const val = parseInt(savedDock, 10);
@@ -56,25 +96,57 @@ export function useIdeLayout(): UseIdeLayoutReturn {
           setDockHeight(val);
         }
       }
+
+      const savedTab = localStorage.getItem('cortex_active_sidebar_tab') as SidebarTab;
+      if (savedTab && ['files', 'benchmark', 'practice', 'learn'].includes(savedTab)) {
+        setActiveSidebarTab(savedTab);
+      }
+
+      const savedSidebarOpen = localStorage.getItem('cortex_sidebar_open');
       const savedCollapsed = localStorage.getItem('cortex_file_explorer_collapsed');
-      if (savedCollapsed !== null) {
-        setIsExplorerCollapsed(savedCollapsed === 'true');
+      if (savedSidebarOpen !== null) {
+        setIsSidebarOpen(savedSidebarOpen === 'true');
+      } else if (savedCollapsed !== null) {
+        setIsSidebarOpen(savedCollapsed !== 'true');
       }
     } catch {}
 
-    const handleToggle = () => {
-      setIsExplorerCollapsed((prev) => {
-        const next = !prev;
-        try {
-          localStorage.setItem('cortex_file_explorer_collapsed', String(next));
-        } catch {}
-        return next;
-      });
+    const handleToggleFileExplorer = () => {
+      toggleSidebarTabRef.current('files');
     };
 
-    window.addEventListener('cortex:toggle-file-explorer', handleToggle);
-    return () => window.removeEventListener('cortex:toggle-file-explorer', handleToggle);
+    const handleSidebarTabToggle = (e: Event) => {
+      const customEvent = e as CustomEvent<{ tab: SidebarTab }>;
+      const targetTab = customEvent.detail?.tab;
+      if (targetTab) {
+        toggleSidebarTabRef.current(targetTab);
+      }
+    };
+
+    window.addEventListener('cortex:toggle-file-explorer', handleToggleFileExplorer);
+    window.addEventListener('cortex:sidebar-tab-toggle', handleSidebarTabToggle);
+    return () => {
+      window.removeEventListener('cortex:toggle-file-explorer', handleToggleFileExplorer);
+      window.removeEventListener('cortex:sidebar-tab-toggle', handleSidebarTabToggle);
+    };
   }, []);
+
+  // Broadcast state changes for GlobalSidebar synchronization
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('cortex:sidebar-state', {
+        detail: { 
+          activeTab: activeSidebarTab, 
+          isOpen: isSidebarOpen 
+        },
+      })
+    );
+    window.dispatchEvent(
+      new CustomEvent('cortex:file-explorer-state', {
+        detail: { isCollapsed: !isSidebarOpen },
+      })
+    );
+  }, [isSidebarOpen, activeSidebarTab]);
 
   useEffect(() => {
     try {
@@ -88,6 +160,14 @@ export function useIdeLayout(): UseIdeLayoutReturn {
     } catch {}
   }, [dockHeight]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('cortex_sidebar_open', String(isSidebarOpen));
+      localStorage.setItem('cortex_file_explorer_collapsed', String(!isSidebarOpen));
+      localStorage.setItem('cortex_active_sidebar_tab', activeSidebarTab);
+    } catch {}
+  }, [isSidebarOpen, activeSidebarTab]);
+
   const startResizingSidebar = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizingSidebar(true);
@@ -96,16 +176,6 @@ export function useIdeLayout(): UseIdeLayoutReturn {
   const startResizingDock = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizingDock(true);
-  }, []);
-
-  const toggleFileExplorer = useCallback(() => {
-    setIsExplorerCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('cortex_file_explorer_collapsed', String(next));
-      } catch {}
-      return next;
-    });
   }, []);
 
   // Window resize mousemove listener
@@ -151,6 +221,10 @@ export function useIdeLayout(): UseIdeLayoutReturn {
     setDockHeight,
     isExplorerCollapsed,
     setIsExplorerCollapsed,
+    isSidebarOpen,
+    setIsSidebarOpen,
+    activeSidebarTab,
+    setActiveSidebarTab,
     isBottomCollapsed,
     setIsBottomCollapsed,
     editorLayoutMode,
@@ -165,5 +239,6 @@ export function useIdeLayout(): UseIdeLayoutReturn {
     startResizingSidebar,
     startResizingDock,
     toggleFileExplorer,
+    toggleSidebarTab,
   };
 }
