@@ -8,12 +8,13 @@ import { AIFixResult, fetchInlineSuggestion } from '@/lib/ai/assistant';
 import { registerMonacoSnippets } from '@/lib/editor/snippets';
 import { InlineQuickFixWidget } from './InlineQuickFixWidget';
 
-interface MonacoCodeEditorProps {
+export interface MonacoCodeEditorProps {
   files: ProjectFile[];
+  openFileIds?: string[];
   activeFileId: string;
   onSelectFile: (id: string) => void;
   onCloseFile: (id: string) => void;
-  onNewFile: () => void;
+  onNewFile?: () => void;
   onContentChange: (newContent: string) => void;
   language: string;
   theme?: string;
@@ -53,6 +54,7 @@ interface MonacoCodeEditorProps {
 
 export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   files,
+  openFileIds,
   activeFileId,
   onSelectFile,
   onCloseFile,
@@ -126,14 +128,29 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   
   
 
-  const activeFile = files.find((f) => f.id === activeFileId) || files[0];
+  const tabFiles = openFileIds
+    ? files.filter((f) => !f.isFolder && openFileIds.includes(f.id))
+    : files.filter((f) => !f.isFolder);
+
+  const activeFile = tabFiles.find((f) => f.id === activeFileId) || (tabFiles.length > 0 ? tabFiles[0] : null);
   const snippetsRegisteredRef = useRef(false);
   const lastReportedValueRef = useRef<string>(activeFile?.content || '');
   const pendingReportedValuesRef = useRef<Set<string>>(new Set());
   const prevFileIdRef = useRef(activeFileId);
 
+  // Synchronize active selection if activeFileId was reset but tabFiles are available
+  useEffect(() => {
+    if (tabFiles.length > 0 && (!activeFileId || !tabFiles.some((f) => f.id === activeFileId))) {
+      onSelectFile(tabFiles[0].id);
+    }
+  }, [activeFileId, tabFiles, onSelectFile]);
+
   // Sync external file content / file switches without fighting user keystrokes
   useEffect(() => {
+    if (!activeFile) {
+      prevFileIdRef.current = '';
+      return;
+    }
     if (!editorRef.current) return;
     const currentVal = editorRef.current.getValue();
     
@@ -452,9 +469,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       {/* File Tabs Bar */}
       <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-[#f1f3f7] border-slate-200'} flex items-center justify-between border-b text-xs select-none`}>
         <div className="flex items-center overflow-x-auto h-full">
-          {files
-            .filter((f) => !f.isFolder)
-            .map((file) => {
+          {tabFiles.map((file) => {
               const isActive = file.id === activeFile?.id;
               return (
                 <div
@@ -472,21 +487,22 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                 >
                   <FileCode className={`w-3.5 h-3.5 ${isActive ? 'text-[#ff9100]' : isDarkMode ? 'text-gray-500' : 'text-slate-400'}`} />
                   <span>{file.name}</span>
-                  {files.filter((f) => !f.isFolder).length > 1 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCloseFile(file.id);
-                      }}
-                      className={`p-0.5 rounded-full transition ml-1 border border-transparent ${
-                        isDarkMode
-                          ? 'hover:bg-[#252830] text-gray-500 hover:text-gray-200'
-                          : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300'
-                      }`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseFile(file.id);
+                    }}
+                    className={`p-0.5 rounded-full transition ml-1 border border-transparent ${
+                      isDarkMode
+                        ? 'hover:bg-[#252830] text-gray-500 hover:text-gray-200'
+                        : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                    title="Close file"
+                    aria-label={`Close ${file.name}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               );
             })}
@@ -536,9 +552,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
               <button
                 type="button"
                 onClick={onRun}
-                disabled={isRunning || !isExecutable}
+                disabled={isRunning || !isExecutable || !activeFile}
                 className={`h-[26px] flex items-center space-x-1.5 px-2.5 rounded-l-md text-xs font-bold font-heading tracking-wide transition active:scale-95 border ${
-                  !isExecutable
+                  !isExecutable || !activeFile
                     ? isDarkMode
                       ? 'bg-[#181920] text-gray-500 border-[#252830] cursor-not-allowed'
                       : 'bg-slate-100 text-slate-400 border-slate-300 cursor-not-allowed'
@@ -549,13 +565,15 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                     : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 hover:border-emerald-700'
                 }`}
                 title={
-                  !isExecutable
+                  !activeFile
+                    ? 'No file open'
+                    : !isExecutable
                     ? 'Syntax Highlighting Only (Non-executable format)'
                     : 'Run File (Ctrl+Enter)'
                 }
               >
-                <Play className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin' : !isExecutable ? 'text-gray-400' : 'fill-current'}`} />
-                <span>{!isExecutable ? 'Preview Only' : (isRunning ? 'Running...' : 'Run')}</span>
+                <Play className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin' : (!isExecutable || !activeFile) ? 'text-gray-400' : 'fill-current'}`} />
+                <span>{!activeFile ? 'Run' : !isExecutable ? 'Preview Only' : (isRunning ? 'Running...' : 'Run')}</span>
               </button>
 
               {/* Adjacent Downward-Facing Arrow Button */}
@@ -563,11 +581,11 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (isExecutable) {
+                  if (isExecutable && activeFile) {
                     setIsRunDropdownOpen((prev) => !prev);
                   }
                 }}
-                disabled={!isExecutable}
+                disabled={!isExecutable || !activeFile}
                 className={`h-[26px] px-1.5 rounded-r-md border-t border-b border-r transition flex items-center justify-center ${
                   !isExecutable
                     ? isDarkMode
@@ -744,66 +762,90 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           />
         )}
 
-        <Editor
-          height="100%"
-          language={language}
-          path={activeFile?.id}
-          defaultValue={activeFile?.content || ''}
-          theme={theme}
-                    onChange={(value) => {
-            const nextVal = value || '';
-            lastReportedValueRef.current = nextVal;
-            pendingReportedValuesRef.current.add(nextVal);
-            if (pendingReportedValuesRef.current.size > 100) {
-              const first = pendingReportedValuesRef.current.values().next().value;
-              if (first !== undefined) pendingReportedValuesRef.current.delete(first);
-            }
-            onContentChange(nextVal);
-          }}
-          onMount={handleEditorMount}
-          options={{
-            fontFamily: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
-            fontSize,
-            fontLigatures: true,
-            wordWrap,
-            minimap: { enabled: true },
-            glyphMargin: true,
-            scrollBeyondLastLine: false,
-            smoothScrolling: true,
-            automaticLayout: true,
-            formatOnPaste: false,
-            formatOnType: false,
-            tabSize: 4,
-            cursorBlinking: 'smooth',
-            lineNumbersMinChars: 3,
-            renderLineHighlight: 'all',
-            selectOnLineNumbers: true,
-            contextmenu: true,
-            dragAndDrop: true,
-            multiCursorModifier: 'alt',
-            copyWithSyntaxHighlighting: true,
-            emptySelectionClipboard: false,
-            selectionHighlight: true,
-            autoClosingBrackets: 'always',
-            autoClosingQuotes: 'always',
-            autoSurround: 'languageDefined',
-            bracketPairColorization: { enabled: true },
-            inlineSuggest: {
-              enabled: Boolean(enableInlineSuggestions),
-              mode: 'subwordSmart',
-              showToolbar: 'onHover',
-            },
-            quickSuggestions: {
-              other: true,
-              comments: false,
-              strings: true,
-            },
-            suggestOnTriggerCharacters: true,
-            tabCompletion: 'on',
-            snippetSuggestions: 'top',
-            wordBasedSuggestions: 'currentDocument',
-          }}
-        />
+        {!activeFile ? (
+          <div className={`flex flex-col items-center justify-center h-full text-center p-8 select-none ${
+            isDarkMode ? 'text-zinc-500 bg-[#0b0c0e]' : 'text-slate-400 bg-white'
+          }`}>
+            <FileCode className="w-12 h-12 mb-3 opacity-30 text-[#ff9100]" />
+            <h3 className={`text-base font-semibold mb-1 ${isDarkMode ? 'text-zinc-200' : 'text-slate-800'}`}>
+              No Files Open
+            </h3>
+            <p className={`text-xs max-w-sm mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-slate-500'}`}>
+              Select a file from the explorer on the left or create a new file to begin editing.
+            </p>
+            {onNewFile && (
+              <button
+                type="button"
+                onClick={onNewFile}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-[#ff9100] hover:bg-[#ffa726] text-black transition shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New File</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <Editor
+            height="100%"
+            language={language}
+            path={activeFile.id}
+            defaultValue={activeFile.content || ''}
+            theme={theme}
+            onChange={(value) => {
+              const nextVal = value || '';
+              lastReportedValueRef.current = nextVal;
+              pendingReportedValuesRef.current.add(nextVal);
+              if (pendingReportedValuesRef.current.size > 100) {
+                const first = pendingReportedValuesRef.current.values().next().value;
+                if (first !== undefined) pendingReportedValuesRef.current.delete(first);
+              }
+              onContentChange(nextVal);
+            }}
+            onMount={handleEditorMount}
+            options={{
+              fontFamily: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
+              fontSize,
+              fontLigatures: true,
+              wordWrap,
+              minimap: { enabled: true },
+              glyphMargin: true,
+              scrollBeyondLastLine: false,
+              smoothScrolling: true,
+              automaticLayout: true,
+              formatOnPaste: false,
+              formatOnType: false,
+              tabSize: 4,
+              cursorBlinking: 'smooth',
+              lineNumbersMinChars: 3,
+              renderLineHighlight: 'all',
+              selectOnLineNumbers: true,
+              contextmenu: true,
+              dragAndDrop: true,
+              multiCursorModifier: 'alt',
+              copyWithSyntaxHighlighting: true,
+              emptySelectionClipboard: false,
+              selectionHighlight: true,
+              autoClosingBrackets: 'always',
+              autoClosingQuotes: 'always',
+              autoSurround: 'languageDefined',
+              bracketPairColorization: { enabled: true },
+              inlineSuggest: {
+                enabled: Boolean(enableInlineSuggestions),
+                mode: 'subwordSmart',
+                showToolbar: 'onHover',
+              },
+              quickSuggestions: {
+                other: true,
+                comments: false,
+                strings: true,
+              },
+              suggestOnTriggerCharacters: true,
+              tabCompletion: 'on',
+              snippetSuggestions: 'top',
+              wordBasedSuggestions: 'currentDocument',
+            }}
+          />
+        )}
       </div>
     </div>
   );

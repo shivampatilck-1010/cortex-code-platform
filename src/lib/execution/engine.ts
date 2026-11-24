@@ -59,6 +59,7 @@ export async function executeInCloudSandbox(req: ExecutionRequest): Promise<Exec
       diagnostics: data.diagnostics || parseDiagnostics(data.stderr || '', langConfig.id),
       timestamp: data.timestamp || new Date().toISOString(),
       provider: data.provider || 'cloud_sandbox',
+      stdin: data.stdin !== undefined ? data.stdin : (req.stdin || ''),
     };
   } catch (err: any) {
     return {

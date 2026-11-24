@@ -325,6 +325,8 @@ export async function runTier5AdversarialHardening(projectRoot = process.cwd()):
 
     harness.assertIncludes(editorContent, 'saveStatus', 'MonacoCodeEditor must accept saveStatus prop');
     harness.assertIncludes(editorContent, 'onForceSave', 'MonacoCodeEditor must accept onForceSave prop');
+    harness.assertIncludes(editorContent, 'openFileIds', 'MonacoCodeEditor must accept openFileIds prop');
+    harness.assertIncludes(editorContent, 'No Files Open', 'MonacoCodeEditor must render No Files Open placeholder');
 
     // 2. FileExplorer language icons & version history integration
     const explorerPath = path.join(projectRoot, 'src', 'components', 'sidebar', 'FileExplorer.tsx');

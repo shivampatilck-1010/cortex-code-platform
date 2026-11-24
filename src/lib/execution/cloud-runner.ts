@@ -158,6 +158,7 @@ async function executeInPistonRunner(
         diagnostics: parseDiagnostics(compileErr, langConfig.id),
         timestamp: new Date().toISOString(),
         provider: 'cloud_sandbox',
+        stdin: req.stdin || '',
       };
     }
 
@@ -177,6 +178,7 @@ async function executeInPistonRunner(
       diagnostics: parseDiagnostics(runStderr || compileErr, langConfig.id),
       timestamp: new Date().toISOString(),
       provider: 'cloud_sandbox',
+      stdin: req.stdin || '',
     };
   } catch {
     return null;
@@ -336,6 +338,7 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
       diagnostics,
       timestamp: new Date().toISOString(),
       provider: 'cloud_sandbox',
+      stdin: req.stdin || '',
     };
   } catch (err: any) {
     // If Judge0 failed, attempt resilient fallback
@@ -357,6 +360,7 @@ export async function executeInCloudRunner(req: ExecutionRequest): Promise<Execu
       diagnostics: [],
       timestamp: new Date().toISOString(),
       provider: 'cloud_sandbox',
+      stdin: req.stdin || '',
     };
   }
 }

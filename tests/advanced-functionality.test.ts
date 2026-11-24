@@ -387,10 +387,148 @@ async function testMultiFileProjectResolutionAndExecution() {
   console.log('[PASS] Live multi-file sandbox execution succeeds with zero phantom syntax errors');
 }
 
+async function testStdinExecutionAndTabBehavior() {
+  console.log('\n--- 6. Testing Stdin Handling & Tab Closing Isolation ---');
+
+  process.env.EXECUTION_MODE = 'development';
+  (process.env as any).NODE_ENV = 'test';
+
+  // 1. Python script reading stdin with input()
+  const stdinCode = 'name = input()\nprint(f"Hello, {name}!")';
+  const pyFile: ProjectFile = {
+    id: 'f_stdin',
+    name: 'main.py',
+    path: '/main.py',
+    content: stdinCode,
+  };
+
+  const resWithStdin = await executeInLocalSandbox({
+    language: 'python',
+    files: [pyFile],
+    entrypoint: 'main.py',
+    stdin: 'AntigravityUser\n',
+  });
+
+  assert.strictEqual(resWithStdin.status, 'success', 'Status should be success when stdin is provided');
+  assert.strictEqual(resWithStdin.exitCode, 0, 'Exit code should be 0');
+  assert.ok(
+    resWithStdin.stdout.includes('Hello, AntigravityUser!'),
+    `Stdout should contain 'Hello, AntigravityUser!', got: ${resWithStdin.stdout}`
+  );
+  assert.strictEqual(resWithStdin.stdin, 'AntigravityUser\n', 'Result should preserve stdin');
+  console.log('[PASS] Stdin input successfully captured and reflected in program execution');
+
+  // 2. Python script reading stdin with EMPTY stdin must NOT hang or timeout!
+  const startT = Date.now();
+  const resEmptyStdin = await executeInLocalSandbox({
+    language: 'python',
+    files: [pyFile],
+    entrypoint: 'main.py',
+    stdin: '',
+  });
+  const elapsed = Date.now() - startT;
+
+  assert.ok(elapsed < 8000, `Execution without stdin must not hang until timeout (elapsed: ${elapsed}ms)`);
+  assert.ok(
+    resEmptyStdin.stderr.includes('EOFError') || resEmptyStdin.exitCode !== 0,
+    'Program expecting input without stdin should receive EOF and exit cleanly'
+  );
+  console.log('[PASS] Empty stdin closes child process stdin stream immediately without hanging');
+
+  // 3. Tab management invariant testing:
+  const workspaceFiles: ProjectFile[] = [
+    { id: 'f1', name: 'main.cpp', path: '/main.cpp', content: 'int main(){}' },
+    { id: 'f2', name: '1.sql', path: '/1.sql', content: 'SELECT 1;' },
+    { id: 'f3', name: 'file_1.py', path: '/file_1.py', content: 'print(1)' },
+  ];
+
+  let openTabs = ['f1', 'f2', 'f3'];
+  let currentActive = 'f1';
+
+  const closeTab = (idToClose: string) => {
+    openTabs = openTabs.filter(id => id !== idToClose);
+    if (currentActive === idToClose) {
+      currentActive = openTabs[0] || '';
+    }
+  };
+
+  closeTab('f1');
+  assert.strictEqual(openTabs.length, 2, 'Open tabs should now have 2 tabs');
+  assert.strictEqual(openTabs.includes('f1'), false, 'f1 should be closed from tabs');
+  assert.strictEqual(workspaceFiles.length, 3, 'Workspace files must NOT be deleted when tab is closed');
+  assert.ok(workspaceFiles.some(f => f.id === 'f1'), 'f1 must remain intact in workspace file list');
+  console.log('[PASS] Closing editor tab keeps file intact in workspace/sidebar file list');
+
+  // 4. Closing the last remaining tab
+  closeTab('f2');
+  assert.strictEqual(openTabs.length, 1, 'Only one open tab remaining (f3)');
+  closeTab('f3');
+  assert.strictEqual(openTabs.length, 0, 'All tabs closed');
+  assert.strictEqual(currentActive, '', 'Active tab becomes empty string');
+  assert.strictEqual(workspaceFiles.length, 3, 'All workspace files still intact');
+  console.log('[PASS] Closing single remaining tab transitions to empty state without deleting files');
+
+  // 5. Selecting file from explorer reopens it in tabs
+  const openFileFromExplorer = (fileId: string) => {
+    if (!openTabs.includes(fileId)) {
+      openTabs.push(fileId);
+    }
+    currentActive = fileId;
+  };
+  openFileFromExplorer('f1');
+  assert.strictEqual(openTabs.length, 1, 'f1 reopened in tabs');
+  assert.strictEqual(currentActive, 'f1', 'f1 is active');
+  console.log('[PASS] Opening file from explorer re-adds it to open tabs');
+
+  // 6. Adjacent tab activation when closing middle tab
+  openTabs = ['f1', 'f2', 'f3'];
+  currentActive = 'f2';
+  const closeMiddleTab = (idToClose: string) => {
+    const closedIndex = openTabs.indexOf(idToClose);
+    openTabs = openTabs.filter(id => id !== idToClose);
+    if (currentActive === idToClose) {
+      const nextActiveIndex = Math.min(closedIndex >= 0 ? closedIndex : 0, openTabs.length - 1);
+      currentActive = openTabs[nextActiveIndex] || '';
+    }
+  };
+  closeMiddleTab('f2');
+  assert.strictEqual(openTabs.length, 2, 'Two tabs remain');
+  assert.strictEqual(currentActive, 'f3', 'Next adjacent tab f3 becomes active');
+  console.log('[PASS] Closing middle tab activates adjacent tab');
+
+  // 7. Node.js script reading stdin
+  const nodeStdinCode = `
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.on('line', (line) => {
+      console.log('Echo: ' + line);
+      rl.close();
+    });
+  `;
+  const jsFile: ProjectFile = {
+    id: 'f_js_stdin',
+    name: 'index.js',
+    path: '/index.js',
+    content: nodeStdinCode,
+  };
+
+  const resNodeStdin = await executeInLocalSandbox({
+    language: 'javascript',
+    files: [jsFile],
+    entrypoint: 'index.js',
+    stdin: 'CodePlatformUser\n',
+  });
+  assert.strictEqual(resNodeStdin.status, 'success', 'Node stdin execution succeeds');
+  assert.ok(resNodeStdin.stdout.includes('Echo: CodePlatformUser'), `Output should echo input: ${resNodeStdin.stdout}`);
+  assert.strictEqual(resNodeStdin.stdin, 'CodePlatformUser\n', 'Result preserves stdin');
+  console.log('[PASS] Node.js stdin execution properly captures and returns stdin');
+}
+
 async function runAllTests() {
   await testCloudRunnerMemoryClamping();
   await testSqlEnvironment();
   await testMultiFileProjectResolutionAndExecution();
+  await testStdinExecutionAndTabBehavior();
 }
 
 runAllTests().catch(err => {

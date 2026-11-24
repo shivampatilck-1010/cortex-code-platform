@@ -13,16 +13,21 @@ import {
 } from 'lucide-react';
 import { ProjectFile } from '@/lib/execution/types';
 
-interface TerminalPanelProps {
+export interface TerminalPanelProps {
   files: ProjectFile[];
+  activeFileId?: string;
   onSyncFiles?: (files: ProjectFile[]) => void;
   onExecuteCommand?: (cmd: string) => void;
   isDarkMode?: boolean;
+  customStdin?: string;
+  onChangeCustomStdin?: (stdin: string) => void;
+  stdin?: string;
+  onStdinChange?: (stdin: string) => void;
 }
 
 interface TerminalLine {
   id: string;
-  type: 'system' | 'prompt' | 'stdout' | 'stderr' | 'warning' | 'success' | 'info';
+  type: 'system' | 'prompt' | 'stdout' | 'stderr' | 'warning' | 'success' | 'info' | 'stdin';
   content: string;
   rawCommand?: string;
   timestamp?: string;
@@ -35,6 +40,39 @@ interface TerminalTab {
   lines: TerminalLine[];
 }
 
+function codeRequiresStdin(content: string, filename: string): boolean {
+  if (!content) return false;
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'py') {
+    return /input\s*\(|sys\.stdin/.test(content);
+  }
+  if (ext === 'cpp' || ext === 'cc' || ext === 'cxx' || ext === 'c') {
+    return /cin\s*>>|scanf\s*\(|getline\s*\(|getchar\s*\(|fgets\s*\(|cin\./.test(content);
+  }
+  if (ext === 'java') {
+    return /System\.in|Scanner\s*\(/.test(content);
+  }
+  if (ext === 'js' || ext === 'ts' || ext === 'mjs') {
+    return /readline|process\.stdin/.test(content);
+  }
+  if (ext === 'go') {
+    return /fmt\.Scan|bufio\.New/.test(content);
+  }
+  if (ext === 'rs') {
+    return /stdin\s*\(|read_line/.test(content);
+  }
+  if (ext === 'cs') {
+    return /Console\.Read/.test(content);
+  }
+  if (ext === 'rb') {
+    return /gets|readline/.test(content);
+  }
+  if (ext === 'php') {
+    return /fgets\s*\(STDIN|readline/.test(content);
+  }
+  return false;
+}
+
 const DEFAULT_WELCOME_LINES: TerminalLine[] = [
   {
     id: 'sys-1',
@@ -44,16 +82,24 @@ const DEFAULT_WELCOME_LINES: TerminalLine[] = [
   {
     id: 'sys-2',
     type: 'stdout',
-    content: "Type 'help' for available commands.",
+    content: "Type 'help' for available commands. Stdin input is supported via prompt or pipes (e.g. echo 'text' | run).",
   },
 ];
 
 export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   files,
+  activeFileId,
   onSyncFiles,
   onExecuteCommand,
   isDarkMode = true,
+  customStdin = '',
+  onChangeCustomStdin,
+  stdin,
+  onStdinChange,
 }) => {
+  const activeFile = files.find((f) => f.id === activeFileId && !f.isFolder);
+  const effectiveStdin = stdin !== undefined ? stdin : customStdin;
+  const handleStdinChange = onStdinChange || onChangeCustomStdin;
   const [tabs, setTabs] = useState<TerminalTab[]>([
     {
       id: 'tab-1',
@@ -66,6 +112,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const [inputVal, setInputVal] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [pendingStdinCommand, setPendingStdinCommand] = useState<{
+    command: string;
+    targetFile: string;
+  } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -119,6 +169,18 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === 'c' && (e.ctrlKey || e.metaKey)) || e.key === 'Escape') {
+      if (pendingStdinCommand) {
+        e.preventDefault();
+        setPendingStdinCommand(null);
+        addLinesToActiveTab([
+          { id: `info-${Date.now()}`, type: 'info', content: '^C (Input canceled)' },
+        ]);
+        setInputVal('');
+        return;
+      }
+    }
+
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (history.length === 0) return;
@@ -166,70 +228,34 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   };
 
-  const handleCommand = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cmd = inputVal.trim();
-    if (!cmd) return;
-
-    setHistory((prev) => [...prev, cmd]);
-    setHistoryIndex(-1);
-    setInputVal('');
-
-    const promptLine: TerminalLine = {
-      id: `prompt-${Date.now()}`,
-      type: 'prompt',
-      content: cmd,
-      rawCommand: cmd,
-    };
-
-    if (cmd === 'clear') {
-      clearActiveTab();
-      return;
-    }
-
-    if (cmd === 'help') {
-      addLinesToActiveTab([
-        promptLine,
-        {
-          id: `out-${Date.now()}-1`,
-          type: 'info',
-          content: 'Cortex Interactive Workspace Terminal (Execution Only):',
-        },
-        {
-          id: `out-${Date.now()}-2`,
-          type: 'stdout',
-          content: `  run [file]            Compile and execute active program
-  python [file] [args]  Execute Python script (e.g. python main.py)
-  node [file] [args]    Execute JavaScript script (e.g. node index.js)
-  g++ [files...]        Compile C++ files with G++
-  gcc [files...]        Compile C files with GCC
-  clear                 Clear terminal output
-  
-  Note: Interactive filesystem commands (ls, cat, mkdir, rm) are NOT supported in this stateless edge execution environment.`,
-        },
-      ]);
-      return;
-    }
-
-    // Immediately display prompt line for instant feedback
-    addLinesToActiveTab([promptLine]);
-
-    if (onExecuteCommand) {
-      onExecuteCommand(cmd);
-    }
-
+  const executeTerminalCommand = async (
+    commandToRun: string,
+    stdinToSend: string,
+    echoStdin: boolean = true,
+    entrypointFile?: string
+  ) => {
     try {
       const response = await fetch('/api/v1/terminal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          command: cmd,
+          command: commandToRun,
           files,
+          stdin: stdinToSend,
+          entrypoint: entrypointFile,
         }),
       });
 
       const data = await response.json();
       const newLines: TerminalLine[] = [];
+
+      if (echoStdin && data.stdin && data.stdin.trim()) {
+        newLines.push({
+          id: `stdin-${Date.now()}`,
+          type: 'stdin',
+          content: data.stdin.trim(),
+        });
+      }
 
       if (data.stdout && data.stdout.trim()) {
         newLines.push({
@@ -272,6 +298,147 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         },
       ]);
     }
+  };
+
+  const handleCommand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rawVal = inputVal;
+    setInputVal('');
+
+    // If waiting for stdin for a pending command:
+    if (pendingStdinCommand) {
+      const activePending = pendingStdinCommand;
+      setPendingStdinCommand(null);
+      const userStdin = rawVal;
+
+      addLinesToActiveTab([
+        {
+          id: `stdin-${Date.now()}`,
+          type: 'stdin',
+          content: userStdin || '(empty input)',
+        },
+      ]);
+
+      if (handleStdinChange && userStdin) {
+        handleStdinChange(userStdin);
+      }
+
+      await executeTerminalCommand(
+        activePending.command,
+        userStdin ? userStdin + '\n' : '',
+        false,
+        activePending.targetFile
+      );
+      return;
+    }
+
+    const cmd = rawVal.trim();
+    if (!cmd) return;
+
+    setHistory((prev) => [...prev, cmd]);
+    setHistoryIndex(-1);
+
+    const promptLine: TerminalLine = {
+      id: `prompt-${Date.now()}`,
+      type: 'prompt',
+      content: cmd,
+      rawCommand: cmd,
+    };
+
+    if (cmd === 'clear') {
+      clearActiveTab();
+      return;
+    }
+
+    if (cmd === 'help') {
+      addLinesToActiveTab([
+        promptLine,
+        {
+          id: `out-${Date.now()}-1`,
+          type: 'info',
+          content: 'Cortex Interactive Workspace Terminal (Execution Only):',
+        },
+        {
+          id: `out-${Date.now()}-2`,
+          type: 'stdout',
+          content: `  run [file]            Compile and execute active program (interactive stdin supported)
+  python [file] [args]  Execute Python script (e.g. python main.py)
+  node [file] [args]    Execute JavaScript script (e.g. node index.js)
+  g++ [files...]        Compile C++ files with G++
+  gcc [files...]        Compile C files with GCC
+  echo 'data' | run     Pass piped stdin to program execution
+  clear                 Clear terminal output
+  
+  Note: Programs reading user input (cin, input, scanf) will prompt for stdin interactively or accept piped input.`,
+        },
+      ]);
+      return;
+    }
+
+    // Immediately display prompt line for instant feedback
+    addLinesToActiveTab([promptLine]);
+
+    if (onExecuteCommand) {
+      onExecuteCommand(cmd);
+    }
+
+    // Check if command is an execution command that might need stdin
+    const isExecutionCmd =
+      cmd.startsWith('run') ||
+      cmd.startsWith('python') ||
+      cmd.startsWith('node') ||
+      cmd.startsWith('gcc') ||
+      cmd.startsWith('g++') ||
+      cmd.startsWith('./');
+
+    const hasExplicitInput = cmd.includes('|') || cmd.includes('<') || cmd.includes('-i') || cmd.includes('--stdin');
+
+    let resolvedTargetFile = '';
+    if (cmd.startsWith('run')) {
+      const arg = cmd.replace(/^run\s*/, '').trim();
+      resolvedTargetFile =
+        arg ||
+        (activeFile ? activeFile.name : '') ||
+        files.find((f) => !f.isFolder && (f.name.startsWith('main.') || f.name.startsWith('index.')))?.name ||
+        files.find((f) => !f.isFolder)?.name ||
+        'main.py';
+    } else if (cmd.startsWith('python')) {
+      resolvedTargetFile = cmd.replace(/^python\s*/, '').split(' ')[0].trim() || 'main.py';
+    } else if (cmd.startsWith('node')) {
+      resolvedTargetFile = cmd.replace(/^node\s*/, '').split(' ')[0].trim() || 'index.js';
+    } else if (cmd.startsWith('g++') || cmd.startsWith('gcc')) {
+      const isCpp = cmd.startsWith('g++');
+      resolvedTargetFile = cmd.replace(/^(gcc|g\+\+)\s*/, '').replace(/-o\s+\S+/, '').split(' ')[0].trim() || (isCpp ? 'main.cpp' : 'main.c');
+    } else if (cmd.startsWith('./main') || cmd.startsWith('./a.out')) {
+      resolvedTargetFile = (activeFile && (activeFile.name.endsWith('.cpp') || activeFile.name.endsWith('.c')))
+        ? activeFile.name
+        : files.find((f) => !f.isFolder && (f.name.endsWith('.cpp') || f.name.endsWith('.c')))?.name || 'main.cpp';
+    }
+
+    if (isExecutionCmd && !hasExplicitInput && resolvedTargetFile) {
+      const foundFile = files.find((f) => !f.isFolder && f.name === resolvedTargetFile);
+      const expectsStdin = foundFile ? codeRequiresStdin(foundFile.content, foundFile.name) : false;
+
+      if (expectsStdin) {
+        addLinesToActiveTab([
+          {
+            id: `info-${Date.now()}`,
+            type: 'info',
+            content: `Program (${resolvedTargetFile}) expects user input via stdin. Enter input below and press Enter:`,
+          },
+        ]);
+        setPendingStdinCommand({ command: cmd, targetFile: resolvedTargetFile });
+        return;
+      }
+    }
+
+    // Execute directly
+    await executeTerminalCommand(
+      cmd,
+      effectiveStdin || '',
+      true,
+      resolvedTargetFile || (activeFile ? activeFile.name : undefined)
+    );
   };
 
   const renderLineContent = (item: TerminalLine) => {
@@ -324,6 +491,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         return (
           <div className={`font-mono leading-[22px] text-[13.5px] whitespace-pre-wrap ${isDarkMode ? 'text-[#89d185]' : 'text-emerald-600'}`}>
             {item.content}
+          </div>
+        );
+
+      case 'stdin':
+        return (
+          <div className="flex items-start font-mono leading-[22px] text-[13.5px]">
+            <span className={isDarkMode ? 'text-amber-400 font-semibold' : 'text-amber-600 font-semibold'}>&gt; [stdin]: </span>
+            <span className={isDarkMode ? 'text-amber-200 font-medium' : 'text-amber-900 font-medium'}>{item.content}</span>
           </div>
         );
 
@@ -436,14 +611,24 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
         {/* Active Command Prompt Line */}
         <form onSubmit={handleCommand} className="flex items-center pt-0.5 leading-[20px]">
-          <span className={isDarkMode ? 'text-[#ff9100] font-semibold' : 'text-[#d97706] font-semibold'}>sandbox</span>
-          <span className={isDarkMode ? 'text-[#6b7280]' : 'text-slate-500'}>:~/workspace $ </span>
+          {pendingStdinCommand ? (
+            <>
+              <span className={isDarkMode ? 'text-amber-400 font-semibold' : 'text-amber-600 font-semibold'}>stdin</span>
+              <span className={isDarkMode ? 'text-[#6b7280]' : 'text-slate-500'}> (input) &gt; </span>
+            </>
+          ) : (
+            <>
+              <span className={isDarkMode ? 'text-[#ff9100] font-semibold' : 'text-[#d97706] font-semibold'}>sandbox</span>
+              <span className={isDarkMode ? 'text-[#6b7280]' : 'text-slate-500'}>:~/workspace $ </span>
+            </>
+          )}
           <input
             ref={inputRef}
             type="text"
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={handleKeyDown}
+            placeholder={pendingStdinCommand ? 'Type input and press Enter (or Esc to cancel)...' : undefined}
             autoFocus
             spellCheck={false}
             autoComplete="off"

@@ -201,6 +201,7 @@ export async function executeInLocalSandbox(req: ExecutionRequest): Promise<Exec
       diagnostics,
       timestamp: new Date().toISOString(),
       provider: 'local_worker',
+      stdin: req.stdin || '',
     };
   } catch (err: any) {
     cleanup(tmpDir);
@@ -214,6 +215,7 @@ export async function executeInLocalSandbox(req: ExecutionRequest): Promise<Exec
       memoryUsageMb: 0,
       timestamp: new Date().toISOString(),
       provider: 'local_worker',
+      stdin: req.stdin || '',
     };
   }
 }
@@ -282,8 +284,12 @@ function runProcess(
       }, 400);
     }, timeoutMs);
 
-    if (stdin && proc.stdin) {
-      proc.stdin.write(stdin, 'utf-8');
+    if (proc.stdin) {
+      proc.stdin.on('error', () => {});
+      if (stdin !== undefined && stdin !== null && stdin !== '') {
+        const normalizedStdin = stdin.endsWith('\n') ? stdin : stdin + '\n';
+        proc.stdin.write(normalizedStdin, 'utf-8');
+      }
       proc.stdin.end();
     }
 

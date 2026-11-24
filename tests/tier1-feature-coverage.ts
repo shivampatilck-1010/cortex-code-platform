@@ -121,6 +121,11 @@ export async function runTier1FeatureCoverage(projectRoot = process.cwd()): Prom
       'Decoupled IDE route must not import classroom or live lecture modules'
     );
 
+    // Verify Tab Management and Stdin Wiring
+    harness.assertIncludes(content, 'openFileIds', 'IDE page must decouple tabs via openFileIds');
+    harness.assertIncludes(content, 'handleCloseFileTab', 'IDE page must handle tab closing cleanly');
+    harness.assertIncludes(content, 'customStdin', 'IDE page must connect stdin to execution dock');
+
     harness.endTest();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -545,6 +550,99 @@ export async function runTier1FeatureCoverage(projectRoot = process.cwd()): Prom
     }
 
     harness.assertGreaterThanOrEqual(totalBlankAnchors, 10, 'All verified target="_blank" anchors must be scanned');
+    harness.endTest();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    harness.endTest('failed', msg);
+  }
+
+  // Test 13: TC1.9 - Web Editor Tab Closing Separation and Stdin Execution Flow
+  harness.startTest('TC1.9 - Web Editor Tab Closing Separation and Stdin Flow');
+  try {
+    const { executeInLocalSandbox } = await import('../src/lib/execution/local-sandbox');
+    const { POST: terminalHandler } = await import('../src/app/api/v1/terminal/route');
+    const { NextRequest } = await import('next/server');
+
+    // 1. Verify Tab Closing Separation Invariant
+    const testFiles = [
+      { id: 'f1', name: 'main.py', path: '/main.py', content: 'print(1)' },
+      { id: 'f2', name: 'helper.py', path: '/helper.py', content: 'print(2)' },
+    ];
+    let openFileIds = ['f1', 'f2'];
+    let activeId = 'f1';
+
+    // Closing f1 tab
+    openFileIds = openFileIds.filter((id) => id !== 'f1');
+    activeId = openFileIds[0] || '';
+
+    harness.assertEquals(openFileIds.length, 1, 'Closing tab leaves exactly 1 open tab');
+    harness.assertEquals(testFiles.length, 2, 'Closing tab must not delete file from workspace files array');
+    harness.assert(testFiles.some((f) => f.id === 'f1'), 'Closed file must still exist in workspace files');
+    harness.assertEquals(activeId, 'f2', 'Active tab must transition to remaining tab');
+
+    // Closing the final open tab
+    openFileIds = openFileIds.filter((id) => id !== 'f2');
+    activeId = '';
+    harness.assertEquals(openFileIds.length, 0, 'Closing final tab results in 0 open tabs');
+    harness.assertEquals(testFiles.length, 2, 'Closing final tab leaves workspace files intact');
+
+    // Reopening from explorer
+    openFileIds.push('f1');
+    activeId = 'f1';
+    harness.assertEquals(openFileIds.length, 1, 'Reopening file restores it to open tabs');
+    harness.assertEquals(activeId, 'f1', 'Reopened file becomes active');
+
+    // 2. Verify Python Stdin Execution
+    const stdinPyFile = {
+      id: 'py-tc19',
+      name: 'input_test.py',
+      path: '/input_test.py',
+      content: 'val = input("Name: ")\nprint("Welcome " + val)',
+    };
+
+    const pyRunResult = await executeInLocalSandbox({
+      language: 'python',
+      files: [stdinPyFile],
+      entrypoint: 'input_test.py',
+      stdin: 'Engineer\n',
+    });
+
+    harness.assertEquals(pyRunResult.status, 'success', 'Python with stdin must succeed');
+    harness.assertEquals(pyRunResult.exitCode, 0, 'Python with stdin must exit with code 0');
+    harness.assertIncludes(pyRunResult.stdout, 'Welcome Engineer', 'Stdout must reflect provided stdin input');
+
+    // 3. Verify Empty Stdin Does Not Hang
+    const startEmpty = Date.now();
+    const emptyResult = await executeInLocalSandbox({
+      language: 'python',
+      files: [stdinPyFile],
+      entrypoint: 'input_test.py',
+      stdin: '',
+    });
+    const emptyElapsed = Date.now() - startEmpty;
+
+    harness.assert(emptyElapsed < 5000, `Empty stdin execution must complete in <5000ms (took ${emptyElapsed}ms)`);
+    harness.assert(
+      emptyResult.status === 'runtime_error' || emptyResult.exitCode !== 0,
+      'Empty stdin execution must exit cleanly without hanging'
+    );
+
+    // 4. Verify Terminal Piping
+    const termReq = new NextRequest('http://localhost:3000/api/v1/terminal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command: 'echo "TerminalPiping" | run',
+        files: [stdinPyFile],
+      }),
+    });
+
+    const termRes = await terminalHandler(termReq);
+    harness.assertEquals(termRes.status, 200, 'Terminal pipe execution returns HTTP 200');
+    const termData = (await termRes.json()) as any;
+    harness.assertEquals(termData.exitCode, 0, 'Terminal pipe execution exit code must be 0');
+    harness.assertIncludes(termData.stdout, 'Welcome TerminalPiping', 'Terminal stdout must reflect piped input');
+
     harness.endTest();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -141,12 +141,16 @@ function CloudIDEPageInner() {
                  let languageConfigured = false;
                  if (main) {
                    setActiveFileId(main.id);
+                   setOpenFileIds([main.id]);
                    const detected = detectLanguage(main.name, main.content, undefined, data.project?.language);
                    const conf = getLanguageConfig(detected);
                    if (conf) {
                      setCurrentLang(conf);
                      languageConfigured = true;
                    }
+                 } else {
+                   setActiveFileId('');
+                   setOpenFileIds([]);
                  }
                  if (!languageConfigured) {
                    const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
@@ -210,6 +214,7 @@ function CloudIDEPageInner() {
       content: `# Cortex — Code Beyond Limits\n**COMPILE | CREATE | COLLABORATE | DEPLOY**\n\nFast multi-language cloud development & sandbox environment across 16+ runtimes with autonomous AI Auto-Fix.\n\nPress **Ctrl+Enter** to compile & execute code.`,
     },
   ]);
+  const [openFileIds, setOpenFileIds] = useState<string[]>(['main', 'readme']);
   const [activeFileId, setActiveFileId] = useState('main');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'conflict'>('saved');
   const [fileLanguageOverrides, setFileLanguageOverrides] = useState<Record<string, string>>({});
@@ -414,7 +419,15 @@ function CloudIDEPageInner() {
     };
   }, []);
 
-  const activeFile = files.find((f) => f.id === activeFileId && !f.isFolder) || files.find((f) => !f.isFolder) || files[0];
+  const openFiles = useMemo(() => {
+    return files.filter((f) => !f.isFolder && openFileIds.includes(f.id));
+  }, [files, openFileIds]);
+
+  const activeFile = useMemo(() => {
+    return files.find((f) => f.id === activeFileId && !f.isFolder && openFileIds.includes(f.id))
+      || openFiles[0]
+      || null;
+  }, [files, activeFileId, openFileIds, openFiles]);
 
   // Auto-Save / Content Update
   const saveFileRef = useRef<NodeJS.Timeout | null>(null);
@@ -461,20 +474,92 @@ function CloudIDEPageInner() {
   }, [handleForceSave]);
 
   const handleSelectFile = (fileId: string) => {
-    setActiveFileId(fileId);
     const selected = files.find(f => f.id === fileId);
-    if (selected && !selected.isFolder) {
-      const detected = detectLanguage(
-        selected.name,
-        selected.content,
-        fileLanguageOverrides[selected.id],
-        currentLang.id
-      );
-      const conf = getLanguageConfig(detected);
-      if (conf) {
-        setCurrentLang(conf);
+    if (!selected || selected.isFolder) return;
+
+    setOpenFileIds((prev) => {
+      if (!prev.includes(fileId)) {
+        return [...prev, fileId];
+      }
+      return prev;
+    });
+    setActiveFileId(fileId);
+
+    const detected = detectLanguage(
+      selected.name,
+      selected.content,
+      fileLanguageOverrides[selected.id],
+      currentLang.id
+    );
+    const conf = getLanguageConfig(detected);
+    if (conf) {
+      setCurrentLang(conf);
+    }
+  };
+
+  const handleCloseFileTab = (idToClose: string) => {
+    const closedIndex = openFileIds.indexOf(idToClose);
+    const nextOpen = openFileIds.filter((id) => id !== idToClose);
+    setOpenFileIds(nextOpen);
+
+    if (activeFileId === idToClose) {
+      if (nextOpen.length > 0) {
+        const nextActiveIndex = Math.min(closedIndex >= 0 ? closedIndex : 0, nextOpen.length - 1);
+        const nextActiveId = nextOpen[nextActiveIndex];
+        setActiveFileId(nextActiveId);
+        const nextActiveFile = files.find((f) => f.id === nextActiveId);
+        if (nextActiveFile && !nextActiveFile.isFolder) {
+          const detected = detectLanguage(
+            nextActiveFile.name,
+            nextActiveFile.content,
+            fileLanguageOverrides[nextActiveFile.id],
+            currentLang.id
+          );
+          const conf = getLanguageConfig(detected);
+          if (conf) setCurrentLang(conf);
+        }
+      } else {
+        setActiveFileId('');
       }
     }
+  };
+
+  const handleCreateNewTabFile = async () => {
+    const nonFolders = files.filter((f) => !f.isFolder);
+    const fileName = `file_${nonFolders.length + 1}${currentLang.fileExtension}`;
+    const initialContent = getStarterContentForFile(fileName, currentLang);
+    const path = `/${fileName}`;
+
+    if (projectId) {
+      try {
+        const res = await fetch(`/api/v1/projects/${projectId}/files`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: fileName, path, content: initialContent, isFolder: false }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const newF = data.file;
+          setFiles((prev) => [...prev, newF]);
+          if (newF.updatedAt) lastFetchTimestampRef.current[newF.id] = newF.updatedAt;
+          setOpenFileIds((prev) => [...prev, newF.id]);
+          setActiveFileId(newF.id);
+          return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const newF: ProjectFile = {
+      id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: fileName,
+      path,
+      content: initialContent,
+    };
+    setFiles((prev) => [...prev, newF]);
+    setOpenFileIds((prev) => [...prev, newF.id]);
+    setActiveFileId(newF.id);
   };
 
   const handleContentChange = (newContent: string) => {
@@ -839,6 +924,7 @@ function CloudIDEPageInner() {
         stdin: customStdin,
       });
 
+      res.stdin = customStdin;
       setExecutionResult(res);
     } finally {
       setIsRunning(false);
@@ -1227,6 +1313,7 @@ function CloudIDEPageInner() {
                           setFiles((prev) => [...prev, newF]);
                           if (newF.updatedAt) lastFetchTimestampRef.current[newF.id] = newF.updatedAt;
                           if (!isFolder) {
+                            setOpenFileIds((prev) => [...prev, newF.id]);
                             setActiveFileId(newF.id);
                             setCurrentLang(detectedLang);
                           }
@@ -1243,6 +1330,7 @@ function CloudIDEPageInner() {
                       };
                       setFiles((prev) => [...prev, newF]);
                       if (!isFolder) {
+                        setOpenFileIds((prev) => [...prev, newF.id]);
                         setActiveFileId(newF.id);
                         setCurrentLang(detectedLang);
                       }
@@ -1260,10 +1348,14 @@ function CloudIDEPageInner() {
                     };
                     const toDelete = getDescendantIds(id);
                     setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
+                    setOpenFileIds((prev) => prev.filter((openId) => !toDelete.includes(openId)));
                     if (toDelete.includes(activeFileId)) {
-                      const remaining = files.filter((f) => !toDelete.includes(f.id) && !f.isFolder);
-                      if (remaining[0]) handleSelectFile(remaining[0].id);
-                      else setActiveFileId('');
+                      const remainingOpen = openFileIds.filter((openId) => !toDelete.includes(openId));
+                      if (remainingOpen[0]) {
+                        handleSelectFile(remainingOpen[0]);
+                      } else {
+                        setActiveFileId('');
+                      }
                     }
                   }}
                   onRenameFile={async (id, newName) => {
@@ -1346,7 +1438,10 @@ function CloudIDEPageInner() {
                         setFiles(data.files || []);
                         if (data.files && data.files.length > 0) {
                            const firstFile = data.files.find((f: ProjectFile) => !f.isFolder);
-                           if (firstFile) setActiveFileId(firstFile.id);
+                           if (firstFile) {
+                             setActiveFileId(firstFile.id);
+                             setOpenFileIds([firstFile.id]);
+                           }
                         }
                       }
                     } catch (e) {
@@ -1436,23 +1531,13 @@ function CloudIDEPageInner() {
               <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? (isDarkMode ? 'w-1/2 border-r border-[#1f2024]' : 'w-1/2 border-r border-slate-200') : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
                   <MonacoCodeEditor
                     files={files}
+                    openFileIds={openFileIds}
                     activeFileId={activeFileId}
                     onSelectFile={handleSelectFile}
                     saveStatus={saveStatus}
                     onForceSave={handleForceSave}
-                    onCloseFile={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
-                    onNewFile={() => {
-                      const nonFolders = files.filter((f) => !f.isFolder);
-                      const fileName = `file_${nonFolders.length + 1}${currentLang.fileExtension}`;
-                      const newF: ProjectFile = {
-                        id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                        name: fileName,
-                        path: `/${fileName}`,
-                        content: getStarterContentForFile(fileName, currentLang),
-                      };
-                      setFiles((prev) => [...prev, newF]);
-                      setActiveFileId(newF.id);
-                    }}
+                    onCloseFile={handleCloseFileTab}
+                    onNewFile={handleCreateNewTabFile}
                     onContentChange={handleContentChange}
                     language={getMonacoLanguage(currentLang.id || activeFile?.name || '')}
                     theme={theme}
@@ -1594,6 +1679,11 @@ function CloudIDEPageInner() {
                       result={executionResult}
                       isRunning={isRunning}
                       isDarkMode={isDarkMode}
+                      stdin={customStdin}
+                      customStdin={customStdin}
+                      onStdinChange={setCustomStdin}
+                      onChangeCustomStdin={setCustomStdin}
+                      onRun={handleRun}
                       onTriggerAutoFix={() => {
                         if (!activeFile) return;
                         processAutoFix(
@@ -1607,8 +1697,13 @@ function CloudIDEPageInner() {
                   {activeBottomTab === 'terminal' && (
                     <TerminalPanel
                       files={files}
+                      activeFileId={activeFileId}
                       onSyncFiles={setFiles}
                       isDarkMode={isDarkMode}
+                      stdin={customStdin}
+                      customStdin={customStdin}
+                      onStdinChange={setCustomStdin}
+                      onChangeCustomStdin={setCustomStdin}
                     />
                   )}
                   {activeBottomTab === 'tests' && (

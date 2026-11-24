@@ -15,12 +15,17 @@ import {
 } from 'lucide-react';
 import { ExecutionResult, DiagnosticError } from '@/lib/execution/types';
 
-interface OutputPanelProps {
+export interface OutputPanelProps {
   result: ExecutionResult | null;
   isRunning: boolean;
   onJumpToLine?: (line: number) => void;
   onTriggerAutoFix?: () => void;
   isDarkMode?: boolean;
+  customStdin?: string;
+  onChangeCustomStdin?: (stdin: string) => void;
+  stdin?: string;
+  onStdinChange?: (stdin: string) => void;
+  onRun?: () => void;
 }
 
 export const OutputPanel: React.FC<OutputPanelProps> = ({
@@ -29,7 +34,17 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
   onJumpToLine,
   onTriggerAutoFix,
   isDarkMode = true,
+  customStdin = '',
+  onChangeCustomStdin,
+  stdin,
+  onStdinChange,
+  onRun,
 }) => {
+  const effectiveStdin = stdin !== undefined ? stdin : customStdin;
+  const handleStdinChange = onStdinChange || onChangeCustomStdin;
+  const displayedStdin = (result?.stdin && result.stdin.trim())
+    ? result.stdin
+    : (effectiveStdin && effectiveStdin.trim() ? effectiveStdin : '');
   if (isRunning) {
     return (
       <div className={`flex items-center justify-center h-full space-x-2 ${isDarkMode ? 'bg-[#141518] text-gray-400' : 'bg-white text-slate-500'}`}>
@@ -41,9 +56,47 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 
   if (!result) {
     return (
-      <div className={`flex flex-col items-center justify-center h-full space-y-2 ${isDarkMode ? 'bg-[#141518] text-gray-500' : 'bg-white text-slate-400'}`}>
-        <Terminal className="w-6 h-6 opacity-30" />
-        <p className="text-xs font-mono">Press Run (Ctrl+Enter) to execute</p>
+      <div className={`h-full flex flex-col text-xs font-mono select-text overflow-hidden transition-colors duration-200 ${
+        isDarkMode ? 'bg-[#141518] text-gray-200' : 'bg-white text-slate-800'
+      }`}>
+        <div className="flex-1 flex flex-col items-center justify-center space-y-2 p-4">
+          <Terminal className="w-6 h-6 opacity-30" />
+          <p className="text-xs font-mono text-center">Press Run (Ctrl+Enter) to execute</p>
+        </div>
+
+        {handleStdinChange && (
+          <div className={`border-t p-3 space-y-2 shrink-0 ${
+            isDarkMode ? 'bg-[#101114] border-[#252830]' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-heading font-semibold uppercase tracking-wider ${
+                isDarkMode ? 'text-gray-300' : 'text-slate-700'
+              }`}>
+                Program Input (stdin)
+              </span>
+              {onRun && (
+                <button
+                  type="button"
+                  onClick={onRun}
+                  className="px-2.5 py-1 rounded text-xs font-semibold bg-[#ff9100] text-black hover:bg-[#ffa726] transition shadow-sm"
+                >
+                  Run with Input
+                </button>
+              )}
+            </div>
+            <textarea
+              value={effectiveStdin}
+              onChange={(e) => handleStdinChange(e.target.value)}
+              placeholder="Enter program input here (e.g. for cin >> or input())..."
+              rows={2}
+              className={`w-full p-2 text-xs font-mono rounded resize-y border outline-none ${
+                isDarkMode
+                  ? 'bg-[#18191d] border-[#262832] text-gray-200 focus:border-[#ff9100]'
+                  : 'bg-white border-slate-300 text-slate-800 focus:border-[#ff9100]'
+              }`}
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -139,6 +192,22 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
           </div>
         )}
 
+        {/* Standard Input (stdin) Display */}
+        {Boolean(displayedStdin) && (
+          <div>
+            <span className={`text-xs uppercase font-heading font-bold tracking-wider block mb-1.5 ${
+              isDarkMode ? 'text-amber-400' : 'text-amber-700'
+            }`}>
+              Standard Input (stdin):
+            </span>
+            <pre className={`p-3 rounded whitespace-pre-wrap leading-relaxed font-mono text-[13px] border ${
+              isDarkMode ? 'text-amber-300 bg-[#18191d] border-[#262832]' : 'text-amber-900 bg-amber-50/50 border-amber-200 shadow-sm'
+            }`}>
+              {displayedStdin}
+            </pre>
+          </div>
+        )}
+
         {/* Clean Empty Output Notice */}
         {isSuccess && !result.stdout && !result.stderr && (
           <div className={`text-xs py-2 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>
@@ -175,9 +244,51 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
             }`}>
               {result.stderr}
             </pre>
+            {hasErrors && (result.stderr.includes('EOFError') || result.stderr.toLowerCase().includes('eof when reading') || result.stderr.toLowerCase().includes('expected input')) && (
+              <div className={`mt-2 p-2.5 rounded text-xs border ${
+                isDarkMode ? 'bg-amber-950/20 border-amber-800/40 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}>
+                Note: This program exited while waiting for input via stdin. Enter your input in the Program Input box below and run again.
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Interactive Stdin Input Box */}
+      {handleStdinChange && (
+        <div className={`border-t p-3 space-y-2 shrink-0 ${
+          isDarkMode ? 'bg-[#101114] border-[#252830]' : 'bg-slate-50 border-slate-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-xs font-heading font-semibold uppercase tracking-wider ${
+              isDarkMode ? 'text-gray-300' : 'text-slate-700'
+            }`}>
+              Program Input (stdin)
+            </span>
+            {onRun && (
+              <button
+                type="button"
+                onClick={onRun}
+                className="px-2.5 py-1 rounded text-xs font-semibold bg-[#ff9100] text-black hover:bg-[#ffa726] transition shadow-sm"
+              >
+                Run with Input
+              </button>
+            )}
+          </div>
+          <textarea
+            value={effectiveStdin}
+            onChange={(e) => handleStdinChange(e.target.value)}
+            placeholder="Enter program input here (e.g. for cin >> or input())..."
+            rows={2}
+            className={`w-full p-2 text-xs font-mono rounded resize-y border outline-none ${
+              isDarkMode
+                ? 'bg-[#18191d] border-[#262832] text-gray-200 focus:border-[#ff9100]'
+                : 'bg-white border-slate-300 text-slate-800 focus:border-[#ff9100]'
+            }`}
+          />
+        </div>
+      )}
     </div>
   );
 };

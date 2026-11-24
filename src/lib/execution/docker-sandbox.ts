@@ -118,8 +118,12 @@ export async function executeInDockerSandbox(req: ExecutionRequest): Promise<Exe
         } catch {}
       }, timeoutSec * 1000);
 
-      if (req.stdin && proc.stdin) {
-        proc.stdin.write(req.stdin);
+      if (proc.stdin) {
+        proc.stdin.on('error', () => {});
+        if (req.stdin) {
+          const normalizedStdin = req.stdin.endsWith('\n') ? req.stdin : req.stdin + '\n';
+          proc.stdin.write(normalizedStdin);
+        }
         proc.stdin.end();
       }
 
@@ -183,6 +187,7 @@ export async function executeInDockerSandbox(req: ExecutionRequest): Promise<Exe
       memoryUsageMb: 32,
       timestamp: new Date().toISOString(),
       provider: 'docker_isolated',
+      stdin: req.stdin || '',
     };
   } catch (err: any) {
     cleanupDir(tmpDir);
@@ -196,6 +201,7 @@ export async function executeInDockerSandbox(req: ExecutionRequest): Promise<Exe
       memoryUsageMb: 0,
       timestamp: new Date().toISOString(),
       provider: 'docker_isolated',
+      stdin: req.stdin || '',
     };
   }
 }

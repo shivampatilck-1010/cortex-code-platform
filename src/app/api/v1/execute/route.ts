@@ -210,6 +210,7 @@ export const POST = apiHandler(async (req: NextRequest) => {
         provider: result.provider,
         timestamp: result.timestamp,
         securityViolation: result.securityViolation,
+        stdin: result.stdin !== undefined ? result.stdin : (typeof stdin === 'string' ? stdin : ''),
       },
       {
         status: 200,

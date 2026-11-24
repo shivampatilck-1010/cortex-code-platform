@@ -61,6 +61,7 @@ export interface ExecutionResult {
   timestamp: string;
   provider: 'cloud_sandbox' | 'local_worker' | 'docker_isolated';
   securityViolation?: SecurityViolation;
+  stdin?: string;
 }
 
 export interface TestCase {
