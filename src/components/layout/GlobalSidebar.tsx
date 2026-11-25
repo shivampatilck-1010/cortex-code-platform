@@ -214,10 +214,10 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
           detail: { tab: item.id },
         })
       );
-    } else {
-      // On other routes: remember tab so when returning to /ide it opens directly
+    } else if (item.id === 'files') {
+      // Returning to /ide via Files icon: open the Files explorer tab cleanly
       try {
-        localStorage.setItem('cortex_active_sidebar_tab', item.id);
+        localStorage.setItem('cortex_active_sidebar_tab', 'files');
         localStorage.setItem('cortex_sidebar_open', 'true');
         localStorage.setItem('cortex_file_explorer_collapsed', 'false');
       } catch {}
@@ -477,6 +477,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
           onChangeFontSize={setLocalFontSize}
           theme={localTheme}
           onChangeTheme={setLocalTheme}
+          isDarkMode={isDarkMode}
         />
       )}
     </>

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
+import { createRequire } from 'module';
 import { ExecutionRequest, ExecutionResult, DiagnosticError } from './types';
 import { getLanguageConfig } from '@/config/languages';
 import { parseDiagnostics } from './diagnostics-parser';
@@ -161,6 +162,91 @@ export async function executeInLocalSandbox(req: ExecutionRequest): Promise<Exec
     } else if (langConfig.id === 'c' || langConfig.id === 'cpp') {
       runExe = path.join(tmpDir, process.platform === 'win32' ? 'main.exe' : 'main');
       runArgs = [];
+    } else if (langConfig.id === 'sql') {
+      const sqlContent = mainFile?.content || '';
+      cleanup(tmpDir);
+      try {
+        const customReq = createRequire(import.meta.url);
+        const { DatabaseSync } = customReq('node:sqlite');
+        const { splitSqlStatements, validateSqlSandboxSecurity, isSqlDataQuery } = await import('@/lib/sql/database-engine');
+        const db = new DatabaseSync(':memory:');
+        const normalizedSql = sqlContent.trim();
+        if (!normalizedSql) {
+          db.close();
+          return {
+            status: 'runtime_error',
+            exitCode: 1,
+            stdout: '',
+            stderr: 'Empty SQL query submitted.',
+            executionTimeMs: Date.now() - startTime,
+            memoryUsageMb: 4,
+            timestamp: new Date().toISOString(),
+            provider: 'local_worker',
+          };
+        }
+
+        try {
+          validateSqlSandboxSecurity(normalizedSql);
+        } catch (secErr: any) {
+          db.close();
+          return {
+            status: 'runtime_error',
+            exitCode: 1,
+            stdout: '',
+            stderr: secErr?.message || 'Access denied: prohibited SQL administrative directive.',
+            executionTimeMs: Date.now() - startTime,
+            memoryUsageMb: 4,
+            timestamp: new Date().toISOString(),
+            provider: 'local_worker',
+          };
+        }
+
+        const statements = splitSqlStatements(normalizedSql);
+        const lastStmt = statements.length > 0 ? statements[statements.length - 1] : normalizedSql;
+        const isDataQuery = isSqlDataQuery(lastStmt);
+
+        let stdout = '';
+        if (isDataQuery) {
+          if (statements.length > 1) {
+            db.exec(statements.slice(0, -1).join('\n;\n') + '\n;');
+          }
+          const stmt = db.prepare(lastStmt);
+          const rows = stmt.all() as Record<string, unknown>[];
+          if (rows.length > 0) {
+            const cols = Object.keys(rows[0]);
+            stdout = rows
+              .map((row) => cols.map((c) => (row[c] === null || row[c] === undefined ? '' : String(row[c]))).join('|'))
+              .join('\n');
+          }
+        } else {
+          db.exec(normalizedSql);
+          stdout = 'Query executed successfully.';
+        }
+        db.close();
+        return {
+          status: 'success',
+          exitCode: 0,
+          stdout,
+          stderr: '',
+          executionTimeMs: Date.now() - startTime,
+          memoryUsageMb: 8,
+          timestamp: new Date().toISOString(),
+          provider: 'local_worker',
+          stdin: req.stdin || '',
+        };
+      } catch (sqlErr: any) {
+        return {
+          status: 'runtime_error',
+          exitCode: 1,
+          stdout: '',
+          stderr: sqlErr?.message || 'SQLite execution failed',
+          executionTimeMs: Date.now() - startTime,
+          memoryUsageMb: 4,
+          timestamp: new Date().toISOString(),
+          provider: 'local_worker',
+          stdin: req.stdin || '',
+        };
+      }
     } else {
       cleanup(tmpDir);
       return {
@@ -275,8 +361,8 @@ function runProcess(
         if (!isClosed) {
           isClosed = true;
           resolve({
-            stdout,
-            stderr,
+            stdout: stdout.replace(/\r\n/g, '\n'),
+            stderr: stderr.replace(/\r\n/g, '\n'),
             exitCode: 124,
             timedOut: true,
           });
@@ -315,7 +401,12 @@ function runProcess(
       if (isClosed) return;
       isClosed = true;
       clearTimeout(timer);
-      resolve({ stdout, stderr: stderr + err.message, exitCode: 1, timedOut: false });
+      resolve({
+        stdout: stdout.replace(/\r\n/g, '\n'),
+        stderr: (stderr + err.message).replace(/\r\n/g, '\n'),
+        exitCode: 1,
+        timedOut: false,
+      });
     });
 
     proc.on('close', (code) => {
@@ -323,8 +414,8 @@ function runProcess(
       isClosed = true;
       clearTimeout(timer);
       resolve({
-        stdout,
-        stderr,
+        stdout: stdout.replace(/\r\n/g, '\n'),
+        stderr: stderr.replace(/\r\n/g, '\n'),
         exitCode: timedOut ? 124 : (code ?? 0),
         timedOut,
       });

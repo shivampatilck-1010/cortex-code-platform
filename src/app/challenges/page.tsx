@@ -48,7 +48,7 @@ export default function ChallengesPage() {
             <CortexLogo variant="header" size="sm" />
           </Link>
           <nav className="hidden sm:flex items-center space-x-1 pl-3 border-l border-[#2a2c33]">
-            <Link href="/" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#252830] transition">
+            <Link href="/ide" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#252830] transition">
               IDE
             </Link>
             <Link href="/classroom" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
@@ -69,7 +69,7 @@ export default function ChallengesPage() {
           </nav>
         </div>
         <Link
-          href="/"
+          href="/ide"
           className="text-xs font-semibold text-[#0b0c0e] bg-[#ff9100] hover:bg-[#e07f00] px-3 py-1.5 rounded transition shadow"
         >
           Launch Cloud IDE
@@ -151,7 +151,10 @@ export default function ChallengesPage() {
                   )}
                 </div>
                 <div className="col-span-5">
-                  <Link href={`/challenges/${c.id}`} className="font-semibold text-gray-200 hover:text-cyan-400 transition">
+                  <Link
+                    href={c.track === 'SQL' ? `/ide?challenge=${encodeURIComponent(c.id)}` : `/challenges/${c.id}`}
+                    className="font-semibold text-gray-200 hover:text-cyan-400 transition"
+                  >
                     {c.title}
                   </Link>
                   <div className="flex items-center space-x-1.5 mt-1">
@@ -178,7 +181,7 @@ export default function ChallengesPage() {
                 <div className="col-span-2 text-gray-400 font-mono text-[11px]">{c.acceptanceRate}</div>
                 <div className="col-span-2 text-right">
                   <Link
-                    href={`/challenges/${c.id}`}
+                    href={c.track === 'SQL' ? `/ide?challenge=${encodeURIComponent(c.id)}` : `/challenges/${c.id}`}
                     className="inline-flex items-center space-x-1 px-3 py-1 bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white rounded text-xs font-semibold transition"
                   >
                     <span>Solve</span>

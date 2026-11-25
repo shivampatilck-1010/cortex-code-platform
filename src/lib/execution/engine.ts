@@ -49,14 +49,16 @@ export async function executeInCloudSandbox(req: ExecutionRequest): Promise<Exec
     }
 
     const data = await response.json();
+    const normalizedStdout = (data.stdout || '').replace(/\r\n/g, '\n');
+    const normalizedStderr = (data.stderr || '').replace(/\r\n/g, '\n');
     return {
       status: data.status,
       exitCode: data.exitCode,
-      stdout: data.stdout || '',
-      stderr: data.stderr || '',
+      stdout: normalizedStdout,
+      stderr: normalizedStderr,
       executionTimeMs: data.execution_time ?? executionTimeMs,
       memoryUsageMb: data.memory ?? 16,
-      diagnostics: data.diagnostics || parseDiagnostics(data.stderr || '', langConfig.id),
+      diagnostics: data.diagnostics || parseDiagnostics(normalizedStderr, langConfig.id),
       timestamp: data.timestamp || new Date().toISOString(),
       provider: data.provider || 'cloud_sandbox',
       stdin: data.stdin !== undefined ? data.stdin : (req.stdin || ''),
@@ -92,8 +94,8 @@ export async function runTestCases(
     };
 
     const res = await executeInCloudSandbox(singleReq);
-    const actual = (res.stdout || '').trim();
-    const expected = (tc.expectedStdout || '').trim();
+    const actual = (res.stdout || '').replace(/\r\n/g, '\n').trim();
+    const expected = (tc.expectedStdout || '').replace(/\r\n/g, '\n').trim();
     const passed = res.status === 'success' && actual === expected;
 
     if (passed) passedCount++;

@@ -333,12 +333,7 @@ export function stripSqlComments(sql: string): string {
     if (inBracket) {
       result += ch;
       if (ch === ']') {
-        if (next === ']') {
-          result += next;
-          i++;
-        } else {
-          inBracket = false;
-        }
+        inBracket = false;
       }
       continue;
     }
@@ -392,6 +387,123 @@ export function stripSqlComments(sql: string): string {
   }
 
   return result.trim();
+}
+
+export function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inBracket = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      current += ch;
+      if (ch === '\n' || (ch === '\r' && next !== '\n')) inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      current += ch;
+      if (ch === '*' && next === '/') {
+        current += next;
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+    if (inSingleQuote) {
+      current += ch;
+      if (ch === "'" && next === "'") {
+        current += next;
+        i++;
+      } else if (ch === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+    if (inDoubleQuote) {
+      current += ch;
+      if (ch === '"' && next === '"') {
+        current += next;
+        i++;
+      } else if (ch === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+    if (inBacktick) {
+      current += ch;
+      if (ch === '`' && next === '`') {
+        current += next;
+        i++;
+      } else if (ch === '`') {
+        inBacktick = false;
+      }
+      continue;
+    }
+    if (inBracket) {
+      current += ch;
+      if (ch === ']') {
+        inBracket = false;
+      }
+      continue;
+    }
+
+    if (ch === '-' && next === '-') {
+      inLineComment = true;
+      current += ch + next;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      current += ch + next;
+      i++;
+      continue;
+    }
+    if (ch === "'") {
+      inSingleQuote = true;
+      current += ch;
+      continue;
+    }
+    if (ch === '"') {
+      inDoubleQuote = true;
+      current += ch;
+      continue;
+    }
+    if (ch === '`') {
+      inBacktick = true;
+      current += ch;
+      continue;
+    }
+    if (ch === '[') {
+      inBracket = true;
+      current += ch;
+      continue;
+    }
+
+    if (ch === ';') {
+      if (stripSqlComments(current).length > 0) {
+        statements.push(current.trim());
+      }
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (stripSqlComments(current).length > 0) {
+    statements.push(current.trim());
+  }
+
+  return statements;
 }
 
 /**
@@ -563,37 +675,579 @@ function transpileMssqlTop(sql: string): string {
 }
 
 /**
- * Check query for dangerous operations or unsupported dialect keywords
+ * Single-pass SQL lexer for security checks and structural inspection.
+ * Replaces -- and /* *\/ comments with whitespace and '...' string literals with ''.
+ * When preserveIdentifiers is false, replaces "...", `...`, and [...] with "", ``, and [].
+ * When preserveIdentifiers is true, preserves quoted/bracketed identifier contents so
+ * quoted function/virtual-table names (e.g. "pragma_database_list", [load_extension])
+ * cannot evade security validation.
  */
-function validateAndTranspileDialect(sql: string, dialect: SqlDialect): { transSql: string; warning?: string } {
-  const trimmed = sql.trim();
-  const cleanForCheck = stripSqlComments(trimmed);
-  // Strip single-quoted string literals and quoted/bracketed identifiers when checking for prohibited commands to prevent false positives in strings and column aliases
-  const cleanWithoutStrings = cleanForCheck
-    .replace(/'(?:''|[^'])*'/g, "''")
-    .replace(/"(?:""|[^"])*"/g, '""')
-    .replace(/`[^`]*`/g, '``')
-    .replace(/\[(?:\]\]|[^\]])*\]/g, '[]');
+function scanSqlForSecurity(sqlText: string, preserveIdentifiers: boolean): string {
+  let result = '';
+  for (let i = 0; i < sqlText.length; i++) {
+    const ch = sqlText[i];
+    const next = i + 1 < sqlText.length ? sqlText[i + 1] : '';
 
-  // Prohibit dangerous SQLite meta-operations:
+    // Line comment
+    if (ch === '-' && next === '-') {
+      i += 2;
+      while (i < sqlText.length && sqlText[i] !== '\n' && sqlText[i] !== '\r') {
+        i++;
+      }
+      i--;
+      result += ' ';
+      continue;
+    }
+
+    // Block comment
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < sqlText.length && !(sqlText[i] === '*' && sqlText[i + 1] === '/')) {
+        i++;
+      }
+      if (i < sqlText.length) i++;
+      result += ' ';
+      continue;
+    }
+
+    // Single-quoted string literal
+    if (ch === "'") {
+      i++;
+      while (i < sqlText.length) {
+        if (sqlText[i] === "'" && sqlText[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        if (sqlText[i] === "'") break;
+        i++;
+      }
+      result += "''";
+      continue;
+    }
+
+    // Double-quoted identifier
+    if (ch === '"') {
+      const start = i;
+      i++;
+      while (i < sqlText.length) {
+        if (sqlText[i] === '"' && sqlText[i + 1] === '"') {
+          i += 2;
+          continue;
+        }
+        if (sqlText[i] === '"') break;
+        i++;
+      }
+      result += preserveIdentifiers ? sqlText.slice(start, i + 1) : '""';
+      continue;
+    }
+
+    // Backtick-quoted identifier
+    if (ch === '`') {
+      const start = i;
+      i++;
+      while (i < sqlText.length) {
+        if (sqlText[i] === '`' && sqlText[i + 1] === '`') {
+          i += 2;
+          continue;
+        }
+        if (sqlText[i] === '`') break;
+        i++;
+      }
+      result += preserveIdentifiers ? sqlText.slice(start, i + 1) : '``';
+      continue;
+    }
+
+    // Bracket-quoted identifier (SQLite closes at first ']')
+    if (ch === '[') {
+      const start = i;
+      i++;
+      while (i < sqlText.length && sqlText[i] !== ']') {
+        i++;
+      }
+      result += preserveIdentifiers ? sqlText.slice(start, i + 1) : '[]';
+      continue;
+    }
+
+    result += ch;
+  }
+
+  return result.trim();
+}
+
+export function sanitizeSqlForSecurityCheck(sqlText: string): string {
+  return scanSqlForSecurity(sqlText, false);
+}
+
+export function stripSqlCommentsAndStringLiterals(sqlText: string): string {
+  return scanSqlForSecurity(sqlText, true);
+}
+
+function stripNestedParens(sqlCleanNoIds: string): string {
+  let stripped = sqlCleanNoIds;
+  while (/\([^()]*\)/.test(stripped)) {
+    stripped = stripped.replace(/\([^()]*\)/g, ' ');
+  }
+  return stripped;
+}
+
+const MAX_RECURSIVE_CTE_LIMIT = 10000;
+
+function hasTopLevelLimit(sqlFragment: string, maxRows: number = MAX_RECURSIVE_CTE_LIMIT): boolean {
+  const cleanNoIds = sanitizeSqlForSecurityCheck(sqlFragment);
+  const topLevel = stripNestedParens(cleanNoIds);
+  const limitMatch = topLevel.match(/\bLIMIT\s+([^\s,;]+)(?:\s*,\s*([^\s,;]+))?/i);
+  if (!limitMatch) return false;
+
+  const firstExpr = limitMatch[1];
+  const secondExpr = limitMatch[2];
+  // In SQLite, "LIMIT a, b" treats b as row count; "LIMIT a" treats a as row count
+  const countExpr = secondExpr !== undefined ? secondExpr : firstExpr;
+
+  // Reject scientific notation (e.g. 1e9), negatives (e.g. -1), expressions, or overly large integers
+  if (!/^\d+$/.test(countExpr)) return false;
+  const count = Number(countExpr);
+  return Number.isSafeInteger(count) && count >= 0 && count <= maxRows;
+}
+
+function canOuterLimitBoundCte(mainQuery: string): boolean {
+  if (!hasTopLevelLimit(mainQuery)) return false;
+  const cleanNoIds = sanitizeSqlForSecurityCheck(mainQuery);
+  const topLevel = stripNestedParens(cleanNoIds);
+
+  // Outer LIMIT only short-circuits recursion when the outer query streams directly
+  // without sorting, grouping, filtering, deduplication, joins, windowing, set ops, or aggregates.
+  if (!/^\s*SELECT\b/i.test(cleanNoIds)) return false;
+  if (
+    /\b(?:DISTINCT|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|UNION|INTERSECT|EXCEPT|OVER|JOIN)\b/i.test(
+      topLevel
+    )
+  ) {
+    return false;
+  }
+  if (/\b(?:COUNT|SUM|AVG|MIN|MAX|TOTAL|GROUP_CONCAT)\s*\(/i.test(cleanNoIds)) {
+    return false;
+  }
+  const beforeLimit = topLevel.split(/\bLIMIT\b/i)[0] || '';
+  const fromPart = beforeLimit.split(/\bFROM\b/i).slice(1).join(' ');
+  if (fromPart.includes(',')) {
+    return false;
+  }
+  return true;
+}
+
+function extractSqlIdentifierTokens(cleanWithIds: string): string[] {
+  const tokens: string[] = [];
+  for (let i = 0; i < cleanWithIds.length; i++) {
+    const ch = cleanWithIds[i];
+    if (ch === "'") {
+      i++;
+      while (i < cleanWithIds.length) {
+        if (cleanWithIds[i] === "'" && cleanWithIds[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === "'") break;
+        i++;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      i++;
+      let ident = '';
+      while (i < cleanWithIds.length) {
+        if (cleanWithIds[i] === '"' && cleanWithIds[i + 1] === '"') {
+          ident += '"';
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === '"') break;
+        ident += cleanWithIds[i];
+        i++;
+      }
+      if (ident) tokens.push(ident.toLowerCase());
+      continue;
+    }
+    if (ch === '`') {
+      i++;
+      let ident = '';
+      while (i < cleanWithIds.length) {
+        if (cleanWithIds[i] === '`' && cleanWithIds[i + 1] === '`') {
+          ident += '`';
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === '`') break;
+        ident += cleanWithIds[i];
+        i++;
+      }
+      if (ident) tokens.push(ident.toLowerCase());
+      continue;
+    }
+    if (ch === '[') {
+      i++;
+      let ident = '';
+      while (i < cleanWithIds.length && cleanWithIds[i] !== ']') {
+        ident += cleanWithIds[i];
+        i++;
+      }
+      if (ident) tokens.push(ident.toLowerCase());
+      continue;
+    }
+    if (/[a-zA-Z_]/.test(ch)) {
+      let ident = ch;
+      while (i + 1 < cleanWithIds.length && /[a-zA-Z0-9_]/.test(cleanWithIds[i + 1])) {
+        i++;
+        ident += cleanWithIds[i];
+      }
+      tokens.push(ident.toLowerCase());
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Validates recursive CTE safety consistently across both database-engine and local-sandbox.
+ * A CTE can recurse in SQLite only when it uses a top-level UNION / UNION ALL inside its CTE body
+ * (either with WITH RECURSIVE or via self-reference). Non-looping WITH RECURSIVE ... UPDATE/SELECT
+ * queries without UNION are allowed; looping recursive CTEs require an explicit top-level LIMIT.
+ */
+export function validateRecursiveCteSafety(sql: string): void {
+  const statements = splitSqlStatements(sql);
+  const stmtsToCheck = statements.length > 0 ? statements : [sql];
+
+  const skipQuotedToken = (text: string, idx: number): number => {
+    const ch = text[idx];
+    if (ch === "'") {
+      idx++;
+      while (idx < text.length) {
+        if (text[idx] === "'" && text[idx + 1] === "'") {
+          idx += 2;
+          continue;
+        }
+        if (text[idx] === "'") return idx + 1;
+        idx++;
+      }
+      return idx;
+    }
+    if (ch === '"') {
+      idx++;
+      while (idx < text.length) {
+        if (text[idx] === '"' && text[idx + 1] === '"') {
+          idx += 2;
+          continue;
+        }
+        if (text[idx] === '"') return idx + 1;
+        idx++;
+      }
+      return idx;
+    }
+    if (ch === '`') {
+      idx++;
+      while (idx < text.length) {
+        if (text[idx] === '`' && text[idx + 1] === '`') {
+          idx += 2;
+          continue;
+        }
+        if (text[idx] === '`') return idx + 1;
+        idx++;
+      }
+      return idx;
+    }
+    if (ch === '[') {
+      idx++;
+      while (idx < text.length && text[idx] !== ']') {
+        idx++;
+      }
+      return idx < text.length ? idx + 1 : idx;
+    }
+    return idx;
+  };
+
+  const findClosingParen = (text: string, openIdx: number): number => {
+    if (text[openIdx] !== '(') return -1;
+    let depth = 0;
+    for (let j = openIdx; j < text.length; j++) {
+      const c = text[j];
+      if (c === "'" || c === '"' || c === '`' || c === '[') {
+        j = skipQuotedToken(text, j) - 1;
+        continue;
+      }
+      if (c === '(') depth++;
+      else if (c === ')') {
+        depth--;
+        if (depth === 0) return j;
+      }
+    }
+    return -1;
+  };
+
+  for (const stmt of stmtsToCheck) {
+    const clean = stripSqlCommentsAndStringLiterals(stmt);
+    const len = clean.length;
+
+    for (let i = 0; i < len; i++) {
+      const ch = clean[i];
+      if (ch === "'" || ch === '"' || ch === '`' || ch === '[') {
+        i = skipQuotedToken(clean, i) - 1;
+        continue;
+      }
+
+      if (
+        (i === 0 || !/[a-zA-Z0-9_]/.test(clean[i - 1])) &&
+        /^WITH\b/i.test(clean.slice(i))
+      ) {
+        let pos = i + 4;
+        const skipWs = () => {
+          while (pos < len && /\s/.test(clean[pos])) pos++;
+        };
+        skipWs();
+
+        let isRecursiveKeyword = false;
+        if (/^RECURSIVE\b/i.test(clean.slice(pos))) {
+          isRecursiveKeyword = true;
+          pos += 9;
+          skipWs();
+        }
+
+        const ctes: Array<{ name: string; body: string }> = [];
+        let validWithList = true;
+        while (pos < len) {
+          skipWs();
+          let cteName = '';
+          const c = clean[pos];
+          if (c === '"' || c === '`' || c === '[') {
+            const nextPos = skipQuotedToken(clean, pos);
+            const rawSlice = clean.slice(pos, nextPos);
+            const tokens = extractSqlIdentifierTokens(rawSlice);
+            cteName = tokens[0] || '';
+            pos = nextPos;
+          } else {
+            const nameMatch = clean.slice(pos).match(/^[a-zA-Z_][a-zA-Z0-9_]*/);
+            if (!nameMatch) {
+              validWithList = false;
+              break;
+            }
+            cteName = nameMatch[0].toLowerCase();
+            pos += nameMatch[0].length;
+          }
+          if (!cteName) {
+            validWithList = false;
+            break;
+          }
+
+          skipWs();
+          if (clean[pos] === '(') {
+            const colEnd = findClosingParen(clean, pos);
+            if (colEnd === -1) {
+              validWithList = false;
+              break;
+            }
+            pos = colEnd + 1;
+            skipWs();
+          }
+
+          const asMatch = clean.slice(pos).match(/^AS\b(?:\s+(?:NOT\s+)?MATERIALIZED\b)?/i);
+          if (!asMatch) {
+            validWithList = false;
+            break;
+          }
+          pos += asMatch[0].length;
+          skipWs();
+
+          if (clean[pos] !== '(') {
+            validWithList = false;
+            break;
+          }
+          const bodyEnd = findClosingParen(clean, pos);
+          if (bodyEnd === -1) {
+            validWithList = false;
+            break;
+          }
+          const cteBody = clean.slice(pos + 1, bodyEnd);
+          ctes.push({ name: cteName, body: cteBody });
+          pos = bodyEnd + 1;
+
+          skipWs();
+          if (clean[pos] === ',') {
+            pos++;
+            continue;
+          }
+          break;
+        }
+
+        if (!validWithList || ctes.length === 0) {
+          continue;
+        }
+
+        // Find end of the WITH statement/subquery scope
+        let depth = 0;
+        let scopeEnd = len;
+        for (let k = pos; k < len; k++) {
+          const c = clean[k];
+          if (c === "'" || c === '"' || c === '`' || c === '[') {
+            k = skipQuotedToken(clean, k) - 1;
+            continue;
+          }
+          if (c === '(') depth++;
+          else if (c === ')') {
+            if (depth === 0) {
+              scopeEnd = k;
+              break;
+            }
+            depth--;
+          } else if (c === ';' && depth === 0) {
+            scopeEnd = k;
+            break;
+          }
+        }
+        const mainQuery = clean.slice(pos, scopeEnd);
+        const mainBoundsCte = canOuterLimitBoundCte(mainQuery);
+
+        for (const cte of ctes) {
+          const bodyTopLevel = stripNestedParens(sanitizeSqlForSecurityCheck(cte.body));
+          const hasUnion = /\bUNION\b/i.test(bodyTopLevel);
+          if (!hasUnion) continue;
+
+          const bodyTokens = extractSqlIdentifierTokens(cte.body);
+          const isSelfReferencing = bodyTokens.includes(cte.name);
+          if (isRecursiveKeyword || isSelfReferencing) {
+            const afterUnion = bodyTopLevel.split(/\bUNION\b/i).slice(1).join(' ');
+            const cteSelfLimited = hasTopLevelLimit(cte.body) && !/\bORDER\s+BY\b/i.test(afterUnion);
+            if (!cteSelfLimited && !mainBoundsCte) {
+              throw new Error(
+                'Recursive CTE queries must include an explicit LIMIT clause to prevent server process resource starvation.'
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+export function validateSqlSandboxSecurity(
+  sql: string,
+  options?: { skipRecursiveCteCheck?: boolean }
+): void {
+  const cleanWithoutStrings = sanitizeSqlForSecurityCheck(sql);
+  const cleanCommentsAndStrings = stripSqlCommentsAndStringLiterals(sql);
+  const statements = splitSqlStatements(sql);
+
   // 1. Prohibit ATTACH or DETACH (with or without optional DATABASE keyword)
   if (/\b(?:ATTACH(?:\s+DATABASE)?|DETACH(?:\s+DATABASE)?)\b/i.test(cleanWithoutStrings)) {
     throw new Error('Access denied: ATTACH and DETACH commands are prohibited in sandboxed practice mode.');
   }
 
-  // 2. Prohibit modifying or administrative PRAGMA commands; allow only read-only schema introspection
-  if (/\bPRAGMA\b/i.test(cleanWithoutStrings)) {
-    const isAdminPragma = /\bPRAGMA\s+(?:[a-zA-Z0-9_]+\.)?(?:writable_schema|default_cache_size|foreign_keys|journal_mode|synchronous|locking_mode|auto_vacuum|temp_store|wal_checkpoint|compile_options|database_list|hard_heap_limit|soft_heap_limit|max_page_count|page_size|secure_delete)\b/i.test(cleanWithoutStrings);
-    const isAllowedPragma = /^\s*PRAGMA\s+(?:[a-zA-Z0-9_]+\.)?(?:table_info|index_list|index_info|foreign_key_list)\s*\(/i.test(cleanWithoutStrings);
-    if (isAdminPragma || !isAllowedPragma) {
-      throw new Error('Access denied: administrative or file-level PRAGMA commands are prohibited in sandboxed practice mode.');
-    }
+  // 2. Prohibit VACUUM ... INTO host file operations
+  if (/\bVACUUM(?:\s+[a-zA-Z0-9_]+\s+|\s*(?:""|``|\[\])\s*|\s+)INTO\b/i.test(cleanWithoutStrings)) {
+    throw new Error('Access denied: VACUUM INTO host file operations are prohibited in sandboxed practice mode.');
   }
 
-  // 3. Prohibit load_extension
-  if (/\bload_extension\b/i.test(cleanWithoutStrings)) {
+  // 3. Prohibit pragma_* table-valued functions (including quoted/bracketed/backticked identifiers)
+  if (/\bpragma_[a-zA-Z0-9_]+\b/i.test(cleanCommentsAndStrings)) {
+    throw new Error('Access denied: pragma_* table-valued functions are prohibited in sandboxed practice mode.');
+  }
+
+  // 4. Prohibit modifying or administrative PRAGMA commands per statement; allow only read-only schema introspection
+  const isProhibitedPragmaInStatement = (stmtText: string): boolean => {
+    const cleanStmt = sanitizeSqlForSecurityCheck(stmtText);
+    if (!/\bPRAGMA\b/i.test(cleanStmt)) return false;
+    const isAdminPragma =
+      /\bPRAGMA\s+(?:[a-zA-Z0-9_]+\.)?(?:writable_schema|default_cache_size|foreign_keys|journal_mode|synchronous|locking_mode|auto_vacuum|temp_store|wal_checkpoint|compile_options|database_list|hard_heap_limit|soft_heap_limit|max_page_count|page_size|secure_delete)\b/i.test(cleanStmt);
+    const isAllowedPragma =
+      /^\s*PRAGMA\s+(?:[a-zA-Z0-9_]+\.)?(?:table_info|index_list|index_info|foreign_key_list)\s*\([^()]*\)\s*$/i.test(cleanStmt);
+    return isAdminPragma || !isAllowedPragma;
+  };
+
+  if (
+    statements.length > 0
+      ? statements.some(isProhibitedPragmaInStatement)
+      : isProhibitedPragmaInStatement(cleanWithoutStrings)
+  ) {
+    throw new Error('Access denied: administrative or file-level PRAGMA commands are prohibited in sandboxed practice mode.');
+  }
+
+  // 5. Prohibit load_extension (including quoted/bracketed/backticked identifiers)
+  if (/\bload_extension\b/i.test(cleanCommentsAndStrings)) {
     throw new Error('Access denied: loading external extensions is prohibited in sandboxed practice mode.');
   }
+
+  // 6. Prohibit unconstrained recursive CTEs (shared with local-sandbox)
+  if (!options?.skipRecursiveCteCheck) {
+    validateRecursiveCteSafety(sql);
+  }
+}
+
+export function isSqlDataQuery(statement: string): boolean {
+  const clean = sanitizeSqlForSecurityCheck(statement);
+  if (/^(?:\(|\s)*(?:SELECT\b|EXPLAIN\b|VALUES\b|PRAGMA\s+(?:[a-zA-Z0-9_]+\.)?(?:table_info|index_list|index_info|foreign_key_list)\b)/i.test(clean)) {
+    return true;
+  }
+  const withMatch = clean.match(/^\s*WITH\b(?:\s+RECURSIVE\b)?/i);
+  if (!withMatch) return false;
+
+  let i = withMatch[0].length;
+  const len = clean.length;
+  const skipWs = () => {
+    while (i < len && /\s/.test(clean[i])) i++;
+  };
+  const skipParens = (): boolean => {
+    if (clean[i] !== '(') return false;
+    let depth = 0;
+    while (i < len) {
+      if (clean[i] === '(') depth++;
+      else if (clean[i] === ')') {
+        depth--;
+        if (depth === 0) {
+          i++;
+          return true;
+        }
+      }
+      i++;
+    }
+    return false;
+  };
+
+  while (i < len) {
+    skipWs();
+    // CTE name
+    const nameMatch = clean.slice(i).match(/^(?:[a-zA-Z_][a-zA-Z0-9_]*|""|``|\[\])/);
+    if (!nameMatch) return false;
+    i += nameMatch[0].length;
+    skipWs();
+    // Optional column list (...)
+    if (clean[i] === '(') {
+      if (!skipParens()) return false;
+      skipWs();
+    }
+    // AS [NOT] MATERIALIZED
+    const asMatch = clean.slice(i).match(/^AS\b(?:\s+(?:NOT\s+)?MATERIALIZED\b)?/i);
+    if (!asMatch) return false;
+    i += asMatch[0].length;
+    skipWs();
+    // CTE body (...)
+    if (clean[i] !== '(' || !skipParens()) return false;
+    skipWs();
+    if (clean[i] === ',') {
+      i++;
+      continue;
+    }
+    break;
+  }
+
+  skipWs();
+  return /^(?:SELECT|VALUES)\b/i.test(clean.slice(i));
+}
+
+/**
+ * Check query for dangerous operations or unsupported dialect keywords
+ */
+function validateAndTranspileDialect(sql: string, dialect: SqlDialect): { transSql: string; warning?: string } {
+  const trimmed = sql.trim();
+  const cleanForCheck = stripSqlComments(trimmed);
+  const cleanWithoutStrings = sanitizeSqlForSecurityCheck(trimmed);
+
+  validateSqlSandboxSecurity(trimmed, { skipRecursiveCteCheck: true });
 
   let warning: string | undefined;
   let transSql = sql;
@@ -700,19 +1354,7 @@ function validateAndTranspileDialect(sql: string, dialect: SqlDialect): { transS
   }
 
   // 4. Prohibit unconstrained recursive CTE queries to prevent synchronous main-thread starvation
-  const isRecursiveCte =
-    /\bWITH\s+RECURSIVE\b/i.test(cleanWithoutStrings) ||
-    /\bWITH\s+[\s\S]*?\bRECURSIVE\b/i.test(cleanWithoutStrings);
-  if (isRecursiveCte) {
-    const cleanTrans = stripSqlComments(transSql)
-      .replace(/'(?:''|[^'])*'/g, "''")
-      .replace(/"(?:""|[^"])*"/g, '""')
-      .replace(/`[^`]*`/g, '``')
-      .replace(/\[(?:\]\]|[^\]])*\]/g, '[]');
-    if (!/\bLIMIT\s+\d+/i.test(cleanTrans)) {
-      throw new Error('Recursive CTE queries must include an explicit LIMIT clause to prevent server process resource starvation.');
-    }
-  }
+  validateRecursiveCteSafety(transSql);
 
   return { transSql, warning };
 }
@@ -813,13 +1455,17 @@ export async function executeSqlQuery(
     const { transSql, warning } = validateAndTranspileDialect(query, dialect);
     const trimmed = transSql.trim();
 
-    // Check if query is a data-returning query (SELECT, CTE WITH ... SELECT, EXPLAIN, VALUES, or PRAGMA schema introspection)
-    // Strip comments and leading whitespace first so comments/newlines don't break classification
-    const cleanForDetection = stripSqlComments(trimmed);
-    const isDataQuery = /^(?:\(|\s)*(?:SELECT\b|EXPLAIN\b|VALUES\b|WITH\s+[\s\S]*?\bSELECT\b|PRAGMA\s+(?:[a-zA-Z0-9_]+\.)?(?:table_info|index_list|index_info|foreign_key_list)\b)/i.test(cleanForDetection);
+    const statements = splitSqlStatements(trimmed);
+    const lastStmt = statements.length > 0 ? statements[statements.length - 1] : trimmed;
+    const isLastDataQuery = isSqlDataQuery(lastStmt);
 
-    if (isDataQuery) {
-      const stmt = db.prepare(trimmed);
+    if (isLastDataQuery) {
+      if (statements.length > 1) {
+        const setupSql = statements.slice(0, -1).join('\n;\n') + '\n;';
+        db.exec(setupSql);
+      }
+      const targetQuery = statements.length > 1 ? lastStmt : trimmed;
+      const stmt = db.prepare(targetQuery);
       const rows = stmt.all() as any[];
       const executionTimeMs = Date.now() - startTime;
 

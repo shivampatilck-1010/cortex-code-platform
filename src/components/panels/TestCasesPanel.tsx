@@ -269,11 +269,41 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
                           </pre>
                         </div>
                       )}
+                      {tc.error && (
+                        <div className="col-span-2" data-testid="test-case-error">
+                          <span className={`block mb-0.5 font-semibold ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}>
+                            Error:
+                          </span>
+                          <pre className={`p-1.5 rounded border whitespace-pre-wrap break-words ${
+                            isDarkMode
+                              ? 'bg-rose-950/40 border-rose-800/60 text-rose-200'
+                              : 'bg-rose-50 border-rose-200 text-rose-800'
+                          }`}>
+                            {tc.error}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <p className={`text-[11px] ${isDarkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                      Hidden test case.
-                    </p>
+                    <div className="space-y-1.5 text-[11px]">
+                      <p className={isDarkMode ? 'text-gray-500' : 'text-slate-500'}>
+                        Hidden test case.
+                      </p>
+                      {tc.error && (
+                        <div data-testid="test-case-error">
+                          <span className={`block mb-0.5 font-semibold ${isDarkMode ? 'text-rose-400' : 'text-rose-700'}`}>
+                            Error:
+                          </span>
+                          <pre className={`p-1.5 rounded border whitespace-pre-wrap break-words ${
+                            isDarkMode
+                              ? 'bg-rose-950/40 border-rose-800/60 text-rose-200'
+                              : 'bg-rose-50 border-rose-200 text-rose-800'
+                          }`}>
+                            {tc.error}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               ))

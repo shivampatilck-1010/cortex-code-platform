@@ -3,7 +3,7 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { arenaDb } from '@/lib/arena/db';
 import { projectDb } from '@/lib/project/db';
 import { CHALLENGES } from '@/lib/challenges/challenges-data';
-import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
+import { executeArenaTestCase } from '@/lib/arena/execute-test';
 import { TestCase } from '@/lib/execution/types';
 import { readJsonBody, RequestBodyError } from '@/lib/http/safe-json';
 import { ARENA_MAX_REQUEST_BYTES, validateArenaAutosaveFiles } from '@/lib/arena/request-validation';
@@ -46,9 +46,12 @@ export async function POST(req: NextRequest) {
           updatedAt: Date.now()
         }));
       } else {
-        const targetLang = language || 'python';
+        const targetLang =
+          language && challenge.starterTemplates[language]
+            ? language
+            : Object.keys(challenge.starterTemplates)[0] || language || 'python';
         const starterCode = challenge.starterTemplates[targetLang] || challenge.starterTemplates['python'] || '# Write your solution here\n';
-        const ext = targetLang === 'python' ? 'py' : targetLang === 'javascript' ? 'js' : targetLang === 'typescript' ? 'ts' : targetLang === 'cpp' ? 'cpp' : targetLang === 'c' ? 'c' : targetLang === 'java' ? 'java' : 'txt';
+        const ext = targetLang === 'python' ? 'py' : targetLang === 'javascript' ? 'js' : targetLang === 'typescript' ? 'ts' : targetLang === 'cpp' ? 'cpp' : targetLang === 'c' ? 'c' : targetLang === 'java' ? 'java' : targetLang === 'sql' ? 'sql' : 'txt';
         serverFiles = [{
           id: 'guest_sol',
           projectId: 'guest_project',
@@ -104,7 +107,7 @@ export async function POST(req: NextRequest) {
     let allPassed = true;
 
     for (const test of visibleTests) {
-       const res = await executeInCloudRunner({
+       const res = await executeArenaTestCase({
          language,
          files: serverFiles,
          stdin: test.stdin,
@@ -113,18 +116,23 @@ export async function POST(req: NextRequest) {
        });
        
        let passed = false;
-       let actualStdout = res.stdout || '';
-       let errorStr = res.stderr || '';
+       const actualStdout = (res.stdout || '').replace(/\r\n/g, '\n');
+       let errorStr = (res.stderr || '').replace(/\r\n/g, '\n');
 
        if (res.status === 'success') {
-           passed = actualStdout.trim() === test.expectedStdout.trim();
+           passed = actualStdout.trim() === test.expectedStdout.replace(/\r\n/g, '\n').trim();
        } else {
            allPassed = false;
            passed = false;
-           if (res.status === 'compilation_error') errorStr = res.compileOutput || res.stderr;
-           else if (res.status === 'timeout') errorStr = 'Time Limit Exceeded';
-           else if (res.status === 'memory_limit_exceeded') errorStr = 'Memory Limit Exceeded';
-           else errorStr = res.stderr || res.status;
+           if (res.status === 'compilation_error') {
+             errorStr = (res.compileOutput || res.stderr || '').replace(/\r\n/g, '\n');
+           } else if (res.status === 'timeout') {
+             errorStr = 'Time Limit Exceeded';
+           } else if (res.status === 'memory_limit_exceeded') {
+             errorStr = 'Memory Limit Exceeded';
+           } else {
+             errorStr = errorStr || res.status;
+           }
        }
 
        if (!passed) allPassed = false;

@@ -24,7 +24,7 @@ export default function ChallengeSolverPage() {
   const challengeId = (params?.id as string) || 'two-sum';
 
   const [challenge, setChallenge] = useState<Challenge | null>(null);
-  const [language, setLanguage] = useState<'python' | 'cpp' | 'javascript'>('python');
+  const [language, setLanguage] = useState<'python' | 'cpp' | 'javascript' | 'sql'>('python');
   const [code, setCode] = useState('');
   const [activeTab, setActiveTab] = useState<'desc' | 'hints'>('desc');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,18 +54,27 @@ export default function ChallengeSolverPage() {
             const ext = mainFile.name.split('.').pop();
             if (ext === 'py') setLanguage('python');
             else if (ext === 'cpp' || ext === 'c') setLanguage('cpp');
+            else if (ext === 'sql') setLanguage('sql');
             else if (ext === 'js' || ext === 'ts') setLanguage('javascript');
           } else if (data.challenge) {
-            setCode(data.challenge.starterTemplates[language] || '');
+            const fallbackLang = (data.challenge.starterTemplates[language]
+              ? language
+              : Object.keys(data.challenge.starterTemplates)[0] || 'python') as 'python' | 'cpp' | 'javascript' | 'sql';
+            setLanguage(fallbackLang);
+            setCode(data.challenge.starterTemplates[fallbackLang] || '');
           }
 
           setTestResults(data.challenge?.testCases || []);
         } else {
           const clientChallenge = CHALLENGES.find(c => c.id === challengeId || c.slug === challengeId);
           if (clientChallenge) {
+            const fallbackLang = (clientChallenge.starterTemplates[language]
+              ? language
+              : Object.keys(clientChallenge.starterTemplates)[0] || 'python') as 'python' | 'cpp' | 'javascript' | 'sql';
             setChallenge(clientChallenge);
             setIsGuest(true);
-            setCode(clientChallenge.starterTemplates[language] || clientChallenge.starterTemplates['python'] || '# Write your solution here\n');
+            setLanguage(fallbackLang);
+            setCode(clientChallenge.starterTemplates[fallbackLang] || clientChallenge.starterTemplates['python'] || '# Write your solution here\n');
             setTestResults(clientChallenge.testCases.filter(tc => !tc.isHidden).map(tc => ({ ...tc, isHidden: false })));
           } else {
             setError('Challenge Not Found');
@@ -75,9 +84,13 @@ export default function ChallengeSolverPage() {
       } catch (e: any) {
         const clientChallenge = CHALLENGES.find(c => c.id === challengeId || c.slug === challengeId);
         if (clientChallenge) {
+          const fallbackLang = (clientChallenge.starterTemplates[language]
+            ? language
+            : Object.keys(clientChallenge.starterTemplates)[0] || 'python') as 'python' | 'cpp' | 'javascript' | 'sql';
           setChallenge(clientChallenge);
           setIsGuest(true);
-          setCode(clientChallenge.starterTemplates[language] || clientChallenge.starterTemplates['python'] || '# Write your solution here\n');
+          setLanguage(fallbackLang);
+          setCode(clientChallenge.starterTemplates[fallbackLang] || clientChallenge.starterTemplates['python'] || '# Write your solution here\n');
           setTestResults(clientChallenge.testCases.filter(tc => !tc.isHidden).map(tc => ({ ...tc, isHidden: false })));
         } else {
           setError(e.message || 'Challenge Not Found');
@@ -88,11 +101,18 @@ export default function ChallengeSolverPage() {
     loadWorkspace();
   }, [challengeId]);
 
-  const handleLanguageChange = (newLang: 'python' | 'cpp' | 'javascript') => {
+  const handleLanguageChange = (newLang: 'python' | 'cpp' | 'javascript' | 'sql') => {
     setLanguage(newLang);
     if (challenge) {
        setCode(challenge.starterTemplates[newLang] || '');
     }
+  };
+
+  const getFileExtension = (lang: 'python' | 'cpp' | 'javascript' | 'sql') => {
+    if (lang === 'python') return 'py';
+    if (lang === 'cpp') return 'cpp';
+    if (lang === 'sql') return 'sql';
+    return 'js';
   };
 
   const handleRun = async () => {
@@ -100,13 +120,14 @@ export default function ChallengeSolverPage() {
     setSubmissionVerdict(null);
 
     try {
+      const ext = getFileExtension(language);
       const res = await fetch('/api/v1/arena/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           challengeId,
           language,
-          files: [{ id: 'sol', name: `solution.${language === 'python' ? 'py' : language === 'cpp' ? 'cpp' : 'js'}`, path: '/sol', content: code }]
+          files: [{ id: 'sol', name: `solution.${ext}`, path: `/solution.${ext}`, content: code }]
         })
       });
       const data = await res.json();
@@ -131,13 +152,14 @@ export default function ChallengeSolverPage() {
     setSubmissionVerdict(null);
 
     try {
+      const ext = getFileExtension(language);
       const res = await fetch('/api/v1/arena/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           challengeId,
           language,
-          files: [{ id: 'sol', name: `solution.${language === 'python' ? 'py' : language === 'cpp' ? 'cpp' : 'js'}`, path: '/sol', content: code }]
+          files: [{ id: 'sol', name: `solution.${ext}`, path: `/solution.${ext}`, content: code }]
         })
       });
       const data = await res.json();
@@ -204,9 +226,15 @@ export default function ChallengeSolverPage() {
             onChange={(e) => handleLanguageChange(e.target.value as any)}
             className="bg-[#22242a] text-gray-200 border border-[#373a45] rounded px-2.5 py-1 text-xs font-mono cursor-pointer focus:outline-none"
           >
-            <option value="python">Python 3.12</option>
-            <option value="cpp">C++20 (G++ 13)</option>
-            <option value="javascript">JavaScript (Node 20)</option>
+            {challenge.track === 'SQL' || challenge.starterTemplates.sql ? (
+              <option value="sql">SQL (SQLite)</option>
+            ) : (
+              <>
+                <option value="python">Python 3.12</option>
+                <option value="cpp">C++20 (G++ 13)</option>
+                <option value="javascript">JavaScript (Node 20)</option>
+              </>
+            )}
           </select>
 
           <button
@@ -313,7 +341,7 @@ export default function ChallengeSolverPage() {
             <Editor
               key={language}
               height="100%"
-              language={language === 'python' ? 'python' : language === 'cpp' ? 'cpp' : 'javascript'}
+              language={language === 'python' ? 'python' : language === 'cpp' ? 'cpp' : language === 'sql' ? 'sql' : 'javascript'}
               defaultValue={code}
               theme="vs-dark"
               onChange={(val) => setCode(val || '')}

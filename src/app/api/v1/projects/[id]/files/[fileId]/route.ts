@@ -46,16 +46,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     
     // Disallow path traversal on updates too
-    if (body.path) {
+    const patchUpdates: { name?: string; path?: string; content?: string } = {};
+    if (typeof body.name === 'string') {
+      const trimmedName = body.name.trim();
+      if (
+        !trimmedName ||
+        trimmedName.includes('/') ||
+        trimmedName.includes('\\') ||
+        trimmedName.includes('..') ||
+        trimmedName.includes('\0')
+      ) {
+        return NextResponse.json({ error: 'Invalid file name' }, { status: 400 });
+      }
+      patchUpdates.name = trimmedName;
+    }
+    if (typeof body.path === 'string' && body.path) {
       try {
-        body.path = sanitizePath(body.path);
+        patchUpdates.path = sanitizePath(body.path);
       } catch (e) {
         return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
       }
     }
+    if (typeof body.content === 'string') {
+      patchUpdates.content = body.content;
+    }
 
     // Automatically snapshot version if content has changed
-    if (typeof body.content === 'string' && body.content !== file.content) {
+    if (typeof patchUpdates.content === 'string' && patchUpdates.content !== file.content) {
       try {
         await projectDb.createFileVersion(fileId, projectId, file.content);
       } catch (vErr) {
@@ -63,7 +80,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    const updated = await projectDb.updateFile(fileId, body);
+    const updated = await projectDb.updateFile(fileId, patchUpdates);
     return NextResponse.json({ file: updated });
   } catch (err: any) {
     console.error('Update file error:', err);

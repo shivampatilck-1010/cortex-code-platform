@@ -22,9 +22,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (!user) {
-      const targetLang = language || 'python';
+      const targetLang =
+        language && challenge.starterTemplates[language]
+          ? language
+          : Object.keys(challenge.starterTemplates)[0] || language || 'python';
       const starterCode = challenge.starterTemplates[targetLang] || challenge.starterTemplates['python'] || '# Write your solution here\n';
-      const ext = targetLang === 'python' ? 'py' : targetLang === 'javascript' ? 'js' : targetLang === 'typescript' ? 'ts' : targetLang === 'cpp' ? 'cpp' : targetLang === 'c' ? 'c' : targetLang === 'java' ? 'java' : 'txt';
+      const ext = targetLang === 'python' ? 'py' : targetLang === 'javascript' ? 'js' : targetLang === 'typescript' ? 'ts' : targetLang === 'cpp' ? 'cpp' : targetLang === 'c' ? 'c' : targetLang === 'java' ? 'java' : targetLang === 'sql' ? 'sql' : 'txt';
 
       const guestWorkspace = {
         id: `arena_ws_guest_${challenge.id}`,
@@ -68,12 +71,16 @@ export async function POST(req: NextRequest) {
       // Create backing project
       projectId = `proj_arena_${user.id}_${challenge.id}_${Date.now()}`;
       
+      const targetLang =
+        language && challenge.starterTemplates[language]
+          ? language
+          : Object.keys(challenge.starterTemplates)[0] || language || 'python';
       const proj: Project = {
         id: projectId,
         ownerId: user.id,
         name: `Arena: ${challenge.title}`,
         description: `Arena Workspace for ${challenge.title}`,
-        language: language || 'python',
+        language: targetLang,
         status: 'active',
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -82,10 +89,9 @@ export async function POST(req: NextRequest) {
       await projectDb.createProject(proj);
       
       // Starter code
-      const targetLang = language || 'python';
       const starterCode = challenge.starterTemplates[targetLang] || challenge.starterTemplates['python'] || '# Write your solution here\n';
       
-      const ext = targetLang === 'python' ? 'py' : targetLang === 'javascript' ? 'js' : targetLang === 'typescript' ? 'ts' : targetLang === 'cpp' ? 'cpp' : targetLang === 'c' ? 'c' : targetLang === 'java' ? 'java' : 'txt';
+      const ext = targetLang === 'python' ? 'py' : targetLang === 'javascript' ? 'js' : targetLang === 'typescript' ? 'ts' : targetLang === 'cpp' ? 'cpp' : targetLang === 'c' ? 'c' : targetLang === 'java' ? 'java' : targetLang === 'sql' ? 'sql' : 'txt';
       const file: ProjectFile = {
         id: crypto.randomUUID(),
         projectId,

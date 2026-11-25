@@ -194,16 +194,14 @@ export class ArenaDatabase {
       challengeId: r.challenge_id,
       userId: r.user_id,
       language: r.language,
-      code: r.code,
-      status: r.status,
+      status: r.status as ArenaSubmission['status'],
       score: r.score,
       executionTimeMs: r.execution_time_ms,
       memoryUsageMb: r.memory_usage_mb,
-      error: r.error,
       createdAt: r.created_at,
-      sourceCode: r.code,
-      testSummary: r.test_summary ? JSON.parse(r.test_summary) : undefined
-    } as any));
+      sourceCode: r.source_code,
+      testSummary: r.test_summary || ''
+    }));
   }
 
 

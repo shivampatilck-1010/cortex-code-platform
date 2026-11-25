@@ -187,11 +187,14 @@ export const POST = apiHandler(async (req: NextRequest) => {
       }
     }
 
+    const normalizedStdout = (result.stdout || '').replace(/\r\n/g, '\n');
+    const normalizedStderr = (result.stderr || '').replace(/\r\n/g, '\n');
+
     let traceSession: any = undefined;
     if (adapter) {
       traceSession = adapter.parseTraceOutput(
-        result.stdout || '',
-        result.stderr || '',
+        normalizedStdout,
+        normalizedStderr,
         result.exitCode,
         result.executionTimeMs
       );
@@ -201,8 +204,8 @@ export const POST = apiHandler(async (req: NextRequest) => {
       {
         status: result.status,
         exitCode: result.exitCode,
-        stdout: traceSession ? traceSession.stdout : result.stdout,
-        stderr: traceSession ? traceSession.stderr : result.stderr,
+        stdout: traceSession ? traceSession.stdout : normalizedStdout,
+        stderr: traceSession ? traceSession.stderr : normalizedStderr,
         trace: traceSession,
         execution_time: result.executionTimeMs,
         memory: result.memoryUsageMb,

@@ -12,7 +12,8 @@ import {
   ChevronUp,
   ChevronDown,
   Maximize2,
-  Minimize2
+  Minimize2,
+  PanelLeftOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AppShell } from '@/components/layout/AppShell';
@@ -22,8 +23,11 @@ import { CodeVisualizationWorkspace } from '@/components/visualization/CodeVisua
 import { TraceSession } from '@/lib/visualization/types';
 import { FileExplorer } from '@/components/sidebar/FileExplorer';
 import { BenchmarkSidebar } from '@/components/sidebar/BenchmarkSidebar';
-import { PracticeSidebar } from '@/components/sidebar/PracticeSidebar';
 import { LearnSidebar } from '@/components/sidebar/LearnSidebar';
+import { PracticeHub } from '@/components/practice/PracticeHub';
+import { ProblemDetailsPanel } from '@/components/panels/ProblemDetailsPanel';
+import { usePracticeProgress } from '@/components/practice/usePracticeProgress';
+import { Challenge, CHALLENGES } from '@/lib/challenges/challenges-data';
 import { OutputPanel } from '@/components/panels/OutputPanel';
 import { TerminalPanel } from '@/components/panels/TerminalPanel';
 import { TestCasesPanel } from '@/components/panels/TestCasesPanel';
@@ -125,70 +129,97 @@ function CloudIDEPageInner() {
     const fetchProject = async () => {
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        let id = urlParams.get('projectId');
-        if (id) {
-          const res = await fetch(`/api/v1/projects/${id}`);
+        const id = urlParams.get('projectId');
+        const challengeParam = urlParams.get('challenge');
+        const challengeQuerySuffix = challengeParam ? `&challenge=${encodeURIComponent(challengeParam)}` : '';
+
+        const loadAndHydrateProject = async (targetId: string): Promise<'ok' | 'unauth' | 'missing'> => {
+          const res = await fetch(`/api/v1/projects/${targetId}`);
           if (res.ok) {
             const data = await res.json();
             if (mounted && data?.project) {
               setProjectId(data.project.id);
               if (Array.isArray(data.files) && data.files.length > 0) {
-                 setFiles(data.files);
-                 data.files.forEach((f: any) => {
-                   if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
-                 });
-                 const main = data.files.find((f: any) => !f.isFolder) || data.files[0];
-                 let languageConfigured = false;
-                 if (main) {
-                   setActiveFileId(main.id);
-                   setOpenFileIds([main.id]);
-                   const detected = detectLanguage(main.name, main.content, undefined, data.project?.language);
-                   const conf = getLanguageConfig(detected);
-                   if (conf) {
-                     setCurrentLang(conf);
-                     languageConfigured = true;
-                   }
-                 } else {
-                   setActiveFileId('');
-                   setOpenFileIds([]);
-                 }
-                 if (!languageConfigured) {
-                   const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
-                   if (targetLang) setCurrentLang(targetLang);
-                 }
+                setFiles(data.files);
+                data.files.forEach((f: any) => {
+                  if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
+                });
+                const main = data.files.find((f: any) => !f.isFolder) || data.files[0];
+                let languageConfigured = false;
+                if (main) {
+                  setActiveFileId(main.id);
+                  setOpenFileIds([main.id]);
+                  const detected = detectLanguage(main.name, main.content, undefined, data.project?.language);
+                  const conf = getLanguageConfig(detected);
+                  if (conf) {
+                    setCurrentLang(conf);
+                    languageConfigured = true;
+                  }
+                } else {
+                  setActiveFileId('');
+                  setOpenFileIds([]);
+                }
+                if (!languageConfigured) {
+                  const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
+                  if (targetLang) setCurrentLang(targetLang);
+                }
               } else {
+                if (Array.isArray(data.files)) {
+                  setFiles([]);
+                  setActiveFileId('');
+                  setOpenFileIds([]);
+                }
                 const targetLang = SUPPORTED_LANGUAGES.find(l => l.id === data.project.language);
                 if (targetLang) setCurrentLang(targetLang);
               }
             }
-          } else if (res.status === 401) {
+            return 'ok';
+          }
+          if (res.status === 401) {
+            return 'unauth';
+          }
+          return 'missing';
+        };
+
+        const resolveOrCreateDefaultProject = async () => {
+          const res = await fetch('/api/v1/projects');
+          if (!res.ok) return;
+          const data = await res.json();
+          let targetId: string | null = null;
+          if (Array.isArray(data?.projects) && data.projects.length > 0) {
+            targetId = data.projects[0].id;
+          } else {
+            const pRes = await fetch('/api/v1/projects', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: 'Default Project', language: 'python' })
+            });
+            if (pRes.ok) {
+              const pData = await pRes.json();
+              targetId = pData?.project?.id || null;
+            }
+          }
+          if (targetId) {
+            router.replace(`/ide?projectId=${targetId}${challengeQuerySuffix}`);
+            await loadAndHydrateProject(targetId);
+          }
+        };
+
+        if (id) {
+          const status = await loadAndHydrateProject(id);
+          if (status === 'unauth') {
             // Unauthenticated: preserve projectId and route to login
-            const returnUrl = `/ide?projectId=${encodeURIComponent(id)}`;
+            const returnUrl = `/ide?projectId=${encodeURIComponent(id)}${challengeQuerySuffix}`;
             router.replace(`/login?redirect=${encodeURIComponent(returnUrl)}`);
             return;
-          } else {
-            // Bad ID or not found, strip it
-            router.replace('/ide');
+          }
+          if (status === 'missing') {
+            // Bad ID or not found, strip it and hydrate default project
+            router.replace(challengeParam ? `/ide?challenge=${encodeURIComponent(challengeParam)}` : '/ide');
+            await resolveOrCreateDefaultProject();
           }
         } else {
-          // fetch all, or create new
-          const res = await fetch('/api/v1/projects');
-          if (res.ok) {
-             const data = await res.json();
-             if (Array.isArray(data?.projects) && data.projects.length > 0) {
-                 router.replace(`/ide?projectId=${data.projects[0].id}`);
-             } else {
-                 const pRes = await fetch('/api/v1/projects', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: 'Default Project', language: 'python' })
-                 });
-                 if (pRes.ok) {
-                    const pData = await pRes.json();
-                    router.replace(`/ide?projectId=${pData.project.id}`);
-                 }
-             }
-          }
+          await resolveOrCreateDefaultProject();
         }
       } finally {
         if (mounted) setIsProjectLoading(false);
@@ -220,6 +251,17 @@ function CloudIDEPageInner() {
   const [fileLanguageOverrides, setFileLanguageOverrides] = useState<Record<string, string>>({});
   const lastFetchTimestampRef = useRef<Record<string, number>>({});
 
+  const syncTimestampFromPatch = useCallback(async (fileId: string, res: Response) => {
+    if (!res.ok) return;
+    try {
+      const data = await res.json();
+      if (data?.file?.updatedAt) {
+        lastFetchTimestampRef.current[fileId] = data.file.updatedAt;
+        setSaveStatus('saved');
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -246,6 +288,13 @@ function CloudIDEPageInner() {
   ]);
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState<BenchmarkMetrics | null>(null);
+  const {
+    progressMap: practiceProgress,
+    markAttempted: markProblemAttempted,
+    markSolved: markProblemSolved,
+  } = usePracticeProgress();
+  const [activePracticeChallenge, setActivePracticeChallenge] = useState<Challenge | null>(null);
+  const [isProblemPanelOpen, setIsProblemPanelOpen] = useState<boolean>(false);
 
   // 3. Extracted Modular State Management Hooks
   const {
@@ -347,7 +396,7 @@ function CloudIDEPageInner() {
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [editorLayoutMode, sidebarWidth, isBottomCollapsed]);
+  }, [editorLayoutMode, sidebarWidth, isBottomCollapsed, isSidebarOpen, activeSidebarTab, isProblemPanelOpen]);
 
   // Fullscreen Keyboard Listeners (F11 / Esc)
   useEffect(() => {
@@ -377,6 +426,28 @@ function CloudIDEPageInner() {
       }
     }
   }, []);
+
+  const handleThemeChange = (newTheme: string) => {
+    const normalizedTheme =
+      newTheme === 'light'
+        ? 'cortex-light'
+        : newTheme === 'vs-dark'
+          ? 'cortex-dark'
+          : newTheme;
+    const nextDark = normalizedTheme !== 'cortex-light';
+    setTheme(normalizedTheme);
+    setIsDarkMode(nextDark);
+    if (typeof document !== 'undefined') {
+      if (nextDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cortex_ide_theme', nextDark ? 'dark' : 'light');
+    }
+  };
 
   const handleToggleDarkMode = (coords?: { x: number; y: number }) => {
     const originX = coords?.x ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
@@ -903,12 +974,14 @@ function CloudIDEPageInner() {
     try {
       // Force save active file before run
       if (projectId && currentActive.id) {
+        if (saveFileRef.current) clearTimeout(saveFileRef.current);
         try {
-          await fetch(`/api/v1/projects/${projectId}/files/${currentActive.id}`, {
+          const saveRes = await fetch(`/api/v1/projects/${projectId}/files/${currentActive.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: currentActive.content })
           });
+          await syncTimestampFromPatch(currentActive.id, saveRes);
         } catch (e) {}
       }
 
@@ -1077,19 +1150,32 @@ function CloudIDEPageInner() {
   };
 
   // Automated Test Cases Runner
-  const handleRunAllTests = async () => {
-    const targetFile = files.find((f) => f.id === activeFileId && !f.isFolder) || activeFile;
-    if (!targetFile || files.length === 0) return;
+  const handleRunAllTests = async (overrideFile?: ProjectFile, overrideTestCases?: TestCase[]) => {
+    const explicitFile =
+      overrideFile &&
+      typeof overrideFile === 'object' &&
+      'id' in overrideFile &&
+      'name' in overrideFile &&
+      typeof overrideFile.content === 'string'
+        ? overrideFile
+        : undefined;
+    const targetFile = explicitFile || files.find((f) => f.id === activeFileId && !f.isFolder) || activeFile;
+    if (!targetFile) return;
+    const activeTestCases = Array.isArray(overrideTestCases) ? overrideTestCases : testCases;
     setIsRunningTests(true);
     try {
       if (projectId && targetFile.id) {
+        if (saveFileRef.current) clearTimeout(saveFileRef.current);
         try {
-          const currentContent = files.find((f) => f.id === targetFile.id)?.content || '';
-          await fetch(`/api/v1/projects/${projectId}/files/${targetFile.id}`, {
+          const currentContent = explicitFile
+            ? explicitFile.content
+            : (files.find((f) => f.id === targetFile.id)?.content ?? targetFile.content ?? '');
+          const saveRes = await fetch(`/api/v1/projects/${projectId}/files/${targetFile.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: currentContent }),
           });
+          await syncTimestampFromPatch(targetFile.id, saveRes);
         } catch (e) {}
       }
 
@@ -1101,23 +1187,116 @@ function CloudIDEPageInner() {
       );
       const executionLang = getLanguageConfig(detectedLangId) || currentLang;
 
-      const syncedFiles = files.map((f) =>
-        f.id === targetFile.id ? { ...f, content: targetFile.content } : f
-      );
+      if (executionLang.executable === false) {
+        setTestCases((prev) =>
+          (prev.length > 0 ? prev : activeTestCases).map((tc) => ({
+            ...tc,
+            passed: false,
+            actualStdout: '',
+            error: `Active file "${targetFile.name}" (${executionLang.name}) is not executable. Switch to a solution file to run tests.`,
+          }))
+        );
+        return;
+      }
 
-      const { testCases: evaluated, passedCount, totalCount } = await runTestCases(
-        {
-          projectId: projectId || undefined,
-          language: executionLang.id,
-          files: syncedFiles,
-          entrypoint: targetFile.name,
-        },
-        testCases
-      );
+      const hasTargetInFiles = files.some((f) => f.id === targetFile.id);
+      const syncedFiles = hasTargetInFiles
+        ? files.map((f) => (f.id === targetFile.id ? { ...f, content: targetFile.content } : f))
+        : [...files, targetFile];
+
+      let evaluated: TestCase[] = [];
+      let passedCount = 0;
+      const totalCount = activeTestCases.length;
+
+      if (executionLang.id === 'sql') {
+        for (const tc of activeTestCases) {
+          let actualStdout = '';
+          let execErr: string | undefined;
+          let timeMs = 0;
+
+          let sqlApiData: any = null;
+          try {
+            const res = await fetch('/api/v1/sql/execute', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId: projectId || 'demo_sql_project',
+                query: targetFile.content,
+                dialect: 'sqlite',
+              }),
+            });
+            if (res.ok) {
+              sqlApiData = await res.json();
+            }
+          } catch {}
+
+          const isSqlUnavailable =
+            !sqlApiData ||
+            !sqlApiData.result ||
+            (typeof sqlApiData.result?.error === 'string' &&
+              sqlApiData.result.error.toLowerCase().includes('not available in the current runtime environment'));
+
+          if (!isSqlUnavailable && sqlApiData.result) {
+            timeMs = sqlApiData.result.executionTimeMs || 0;
+            if (sqlApiData.result.error) {
+              execErr = sqlApiData.result.error;
+            } else {
+              const rows: any[][] = Array.isArray(sqlApiData.result.rows) ? sqlApiData.result.rows : [];
+              actualStdout = rows
+                .map((r) => r.map((v) => (v === null || v === undefined ? '' : String(v))).join('|'))
+                .join('\n')
+                .trim();
+            }
+          } else {
+            const cloudRes = await executeInCloudSandbox({
+              projectId: projectId || undefined,
+              language: 'sql',
+              files: syncedFiles,
+              entrypoint: targetFile.name,
+              stdin: tc.stdin,
+            });
+            timeMs = cloudRes.executionTimeMs;
+            actualStdout = (cloudRes.stdout || '').replace(/\r\n/g, '\n').trim();
+            if (cloudRes.status !== 'success') {
+              execErr = (cloudRes.stderr || cloudRes.stdout || '').replace(/\r\n/g, '\n');
+            }
+          }
+
+          const expected = (tc.expectedStdout || '').replace(/\r\n/g, '\n').trim();
+          const passed = !execErr && actualStdout === expected;
+          if (passed) passedCount++;
+
+          evaluated.push({
+            ...tc,
+            actualStdout,
+            passed,
+            timeMs,
+            error: execErr,
+          });
+        }
+      } else {
+        const runRes = await runTestCases(
+          {
+            projectId: projectId || undefined,
+            language: executionLang.id,
+            files: syncedFiles,
+            entrypoint: targetFile.name,
+          },
+          activeTestCases
+        );
+        evaluated = runRes.testCases;
+        passedCount = runRes.passedCount;
+      }
+
       setTestCases(evaluated);
 
       if (passedCount === totalCount && totalCount > 0) {
         confetti({ particleCount: 75, spread: 70, origin: { y: 0.6 } });
+        if (activePracticeChallenge) {
+          markProblemSolved(activePracticeChallenge.id);
+        }
+      } else if (activePracticeChallenge) {
+        markProblemAttempted(activePracticeChallenge.id);
       }
     } finally {
       setIsRunningTests(false);
@@ -1130,13 +1309,15 @@ function CloudIDEPageInner() {
     if (!targetFile || files.length === 0) return;
 
     if (projectId && targetFile.id) {
+      if (saveFileRef.current) clearTimeout(saveFileRef.current);
       try {
         const currentContent = files.find((f) => f.id === targetFile.id)?.content || '';
-        await fetch(`/api/v1/projects/${projectId}/files/${targetFile.id}`, {
+        const saveRes = await fetch(`/api/v1/projects/${projectId}/files/${targetFile.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: currentContent }),
         });
+        await syncTimestampFromPatch(targetFile.id, saveRes);
       } catch (e) {}
     }
 
@@ -1161,15 +1342,179 @@ function CloudIDEPageInner() {
     setBenchmarkResult(res);
   };
 
+  const isPracticeHubOpen = activeSidebarTab === 'practice' && isSidebarOpen;
+
+  const handleLaunchChallenge = useCallback(
+    async (challenge: Challenge, preferredLang?: string, forceResetCode = false): Promise<ProjectFile | null> => {
+      const langKey =
+        challenge.track === 'SQL' && challenge.starterTemplates['sql']
+          ? 'sql'
+          : preferredLang && challenge.starterTemplates[preferredLang]
+            ? preferredLang
+            : challenge.starterTemplates['python']
+              ? 'python'
+              : Object.keys(challenge.starterTemplates)[0] || 'python';
+
+      const targetLang = getLanguageConfig(langKey);
+      const starterCode = challenge.starterTemplates[langKey] || targetLang.starterCode || '';
+      const fileName = `${challenge.slug}${targetLang.fileExtension}`;
+      const filePath = `/${fileName}`;
+
+      const existing = files.find((f) => !f.isFolder && f.name === fileName);
+      let resolvedFileId = existing?.id || '';
+      let resolvedFile: ProjectFile | null = null;
+
+      if (existing) {
+        if (forceResetCode || !existing.content.trim()) {
+          resolvedFile = { ...existing, content: starterCode };
+          setFiles((prev) =>
+            prev.map((f) => (f.id === existing.id ? { ...f, content: starterCode } : f))
+          );
+          if (projectId) {
+            if (saveFileRef.current) clearTimeout(saveFileRef.current);
+            try {
+              const saveRes = await fetch(`/api/v1/projects/${projectId}/files/${existing.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: starterCode }),
+              });
+              await syncTimestampFromPatch(existing.id, saveRes);
+            } catch {}
+          }
+        } else {
+          resolvedFile = existing;
+        }
+        setOpenFileIds((prev) => (prev.includes(existing.id) ? prev : [...prev, existing.id]));
+        setActiveFileId(existing.id);
+      } else {
+        let createdFile: ProjectFile | null = null;
+        if (projectId) {
+          try {
+            const res = await fetch(`/api/v1/projects/${projectId}/files`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: fileName,
+                path: filePath,
+                content: starterCode,
+                isFolder: false,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.file) {
+                createdFile = data.file;
+                if (data.file.updatedAt) {
+                  lastFetchTimestampRef.current[data.file.id] = data.file.updatedAt;
+                }
+              }
+            }
+          } catch {}
+        }
+
+        if (!createdFile) {
+          createdFile = {
+            id: `practice_${challenge.id}_${langKey}_${Date.now()}`,
+            name: fileName,
+            path: filePath,
+            content: starterCode,
+            isFolder: false,
+          };
+        }
+
+        resolvedFileId = createdFile.id;
+        resolvedFile = createdFile;
+        setFiles((prev) => [...prev, createdFile!]);
+        setOpenFileIds((prev) => (prev.includes(createdFile!.id) ? prev : [...prev, createdFile!.id]));
+        setActiveFileId(createdFile.id);
+      }
+
+      if (resolvedFileId) {
+        setFileLanguageOverrides((prev) => {
+          const updated = { ...prev, [resolvedFileId]: targetLang.id };
+          try {
+            localStorage.setItem('cortex_file_language_overrides', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+      }
+
+      setCurrentLang(targetLang);
+      setExecutionResult(null);
+      setTraceSession(null);
+
+      if (challenge.testCases.length > 0) {
+        setTestCases(challenge.testCases.map((tc) => ({ ...tc })));
+        setActiveBottomTab('tests');
+        setIsBottomCollapsed(false);
+      } else {
+        setTestCases([]);
+        setActiveBottomTab('output');
+        setIsBottomCollapsed(false);
+      }
+
+      setActivePracticeChallenge(challenge);
+      setIsProblemPanelOpen(true);
+      markProblemAttempted(challenge.id);
+      setActiveSidebarTab('files');
+      setIsSidebarOpen(false);
+
+      return resolvedFile;
+    },
+    [files, projectId, markProblemAttempted, setActiveBottomTab, setActiveSidebarTab, setIsBottomCollapsed, setIsSidebarOpen, syncTimestampFromPatch]
+  );
+
+  const launchedQueryChallengeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isProjectLoading || typeof window === 'undefined') return;
+    const challengeParam = new URLSearchParams(window.location.search).get('challenge');
+    if (!challengeParam || launchedQueryChallengeRef.current === challengeParam) return;
+    const matched = CHALLENGES.find((c) => c.id === challengeParam || c.slug === challengeParam);
+    if (matched) {
+      launchedQueryChallengeRef.current = challengeParam;
+      void handleLaunchChallenge(matched);
+    }
+  }, [isProjectLoading, handleLaunchChallenge]);
+
+  const activeChallengeFile = useMemo(() => {
+    if (!activePracticeChallenge) return null;
+    const allowedNames = new Set(
+      Object.keys(activePracticeChallenge.starterTemplates).map(
+        (langKey) => `${activePracticeChallenge.slug}${getLanguageConfig(langKey).fileExtension}`
+      )
+    );
+    if (activeFile && !activeFile.isFolder && allowedNames.has(activeFile.name)) {
+      return activeFile;
+    }
+    const preferredName = `${activePracticeChallenge.slug}${currentLang.fileExtension}`;
+    return (
+      files.find((f) => !f.isFolder && f.name === preferredName) ||
+      files.find((f) => !f.isFolder && allowedNames.has(f.name)) ||
+      null
+    );
+  }, [activePracticeChallenge, activeFile, files, currentLang.fileExtension]);
+
+  const isChallengeFileActive = useMemo(() => {
+    if (!activePracticeChallenge || !activeFile) return false;
+    const allowedNames = new Set(
+      Object.keys(activePracticeChallenge.starterTemplates).map(
+        (langKey) => `${activePracticeChallenge.slug}${getLanguageConfig(langKey).fileExtension}`
+      )
+    );
+    return allowedNames.has(activeFile.name);
+  }, [activePracticeChallenge, activeFile]);
+
   // Keyboard Shortcuts Listener (Ctrl+Enter, Ctrl+S)
   const handleRunRef = useRef(handleRun);
+  const isPracticeHubOpenRef = useRef(isPracticeHubOpen);
   useEffect(() => {
     handleRunRef.current = handleRun;
+    isPracticeHubOpenRef.current = isPracticeHubOpen;
   });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isPracticeHubOpenRef.current) {
         e.preventDefault();
         handleRunRef.current();
       }
@@ -1233,54 +1578,71 @@ function CloudIDEPageInner() {
     <AppShell isDarkMode={isDarkMode} onOpenSettings={() => setIsSettingsOpen(true)}>
       <div className={`flex flex-col h-full w-full ${isDarkMode ? 'bg-[#0b0c0e] text-[#e6edf3]' : 'bg-[#f8fafc] text-[#0f172a]'} overflow-hidden font-sans select-none`}>
         {/* 1. Header Navigation */}
-        <Navbar
-          isDarkMode={isDarkMode}
-          currentLanguage={currentLang}
-          onLanguageChange={handleLanguageChange}
-          onRun={handleRun}
-          isRunning={isRunning}
-          onDebug={handleStartDebug}
-          isDebugging={isDebugging}
-          onVisualize={handleRunTrace}
-          isVisualizing={isTracing}
-          layoutMode={editorLayoutMode}
-          onLayoutModeChange={setEditorLayoutMode}
-          autoFixEnabled={aiSettings.autoFixErrors}
-          onToggleAutoFix={() =>
-            setAiSettings((s) => ({ ...s, autoFixErrors: !s.autoFixErrors }))
-          }
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenShare={() => setIsShareOpen(true)}
-        />
+        <div className={isPracticeHubOpen ? 'hidden' : ''}>
+          <Navbar
+            isDarkMode={isDarkMode}
+            currentLanguage={currentLang}
+            onLanguageChange={handleLanguageChange}
+            onRun={handleRun}
+            isRunning={isRunning}
+            onDebug={handleStartDebug}
+            isDebugging={isDebugging}
+            onVisualize={handleRunTrace}
+            isVisualizing={isTracing}
+            layoutMode={editorLayoutMode}
+            onLayoutModeChange={setEditorLayoutMode}
+            autoFixEnabled={aiSettings.autoFixErrors}
+            onToggleAutoFix={() =>
+              setAiSettings((s) => ({ ...s, autoFixErrors: !s.autoFixErrors }))
+            }
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenShare={() => setIsShareOpen(true)}
+          />
+        </div>
 
-        {/* 2. Main Work Area: 3-Pane Layout with Resizable Splitters */}
-        <div className={`flex-1 flex overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#f1f5f9]'}`}>
-          {/* Left Contextual Sidebar (Resizable width & Collapsible with smooth sliding animation) */}
-          <div 
-            ref={fileExplorerRef}
-            style={{ 
-              width: isSidebarOpen ? `${sidebarWidth}px` : 0, 
-              minWidth: isSidebarOpen ? `${sidebarWidth}px` : 0, 
-              maxWidth: isSidebarOpen ? `${sidebarWidth}px` : 0,
-              opacity: isSidebarOpen ? 1 : 0,
-            }} 
-            className={`${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-white border-slate-200'} flex flex-col h-full shadow-md overflow-hidden shrink-0 ${
-              !isSidebarOpen ? 'border-r-0 pointer-events-none' : 'border-r'
-            } ${
-              isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'
-            }`}
-          >
-            <div 
-              style={{ 
-                width: `${sidebarWidth}px`, 
-                minWidth: `${sidebarWidth}px`,
-                transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
-              }} 
-              className={`h-full flex flex-col shrink-0 ${
-                isResizingSidebar ? '' : 'transition-transform duration-300 ease-in-out'
-              }`}
-            >
-              {activeSidebarTab === 'files' && (
+        {/* 2. Main Work Area: Dedicated Full-Page Practice Hub + Mounted-but-Hidden 3-Pane IDE Workspace */}
+        {isPracticeHubOpen && (
+          <PracticeHub
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={handleToggleDarkMode}
+            progressMap={practiceProgress}
+            activeProblemId={activePracticeChallenge?.id || null}
+            onLaunchProblem={(challenge, preferredLang) =>
+              handleLaunchChallenge(challenge, preferredLang || currentLang?.id)
+            }
+            onReturnToEditor={() => {
+              setActiveSidebarTab('files');
+              setIsSidebarOpen(!activePracticeChallenge);
+            }}
+          />
+        )}
+        <div className={isPracticeHubOpen ? 'hidden' : `flex-1 flex overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#f1f5f9]'}`}>
+              {/* Left Contextual Sidebar (Resizable width & Collapsible with smooth sliding animation) */}
+              <div 
+                ref={fileExplorerRef}
+                style={{ 
+                  width: isSidebarOpen ? `${sidebarWidth}px` : 0, 
+                  minWidth: isSidebarOpen ? `${sidebarWidth}px` : 0, 
+                  maxWidth: isSidebarOpen ? `${sidebarWidth}px` : 0,
+                  opacity: isSidebarOpen ? 1 : 0,
+                }} 
+                className={`${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-white border-slate-200'} flex flex-col h-full shadow-md overflow-hidden shrink-0 ${
+                  !isSidebarOpen ? 'border-r-0 pointer-events-none' : 'border-r'
+                } ${
+                  isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'
+                }`}
+              >
+                <div 
+                  style={{ 
+                    width: `${sidebarWidth}px`, 
+                    minWidth: `${sidebarWidth}px`,
+                    transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+                  }} 
+                  className={`h-full flex flex-col shrink-0 ${
+                    isResizingSidebar ? '' : 'transition-transform duration-300 ease-in-out'
+                  }`}
+                >
+                  {activeSidebarTab === 'files' && (
                 <FileExplorer
                   width={sidebarWidth}
                   files={files}
@@ -1337,16 +1699,20 @@ function CloudIDEPageInner() {
                     }
                   }}
                   onDeleteFile={async (id) => {
-                    if (projectId) {
-                       try {
-                         await fetch(`/api/v1/projects/${projectId}/files/${id}`, { method: 'DELETE' });
-                       } catch (e) { console.error(e); }
-                    }
                     const getDescendantIds = (targetId: string): string[] => {
                       const children = files.filter((f) => f.parentId === targetId);
                       return [targetId, ...children.flatMap((c) => getDescendantIds(c.id))];
                     };
                     const toDelete = getDescendantIds(id);
+                    if (toDelete.includes(activeFileId) && saveFileRef.current) {
+                      clearTimeout(saveFileRef.current);
+                      saveFileRef.current = null;
+                    }
+                    if (projectId) {
+                       try {
+                         await fetch(`/api/v1/projects/${projectId}/files/${id}`, { method: 'DELETE' });
+                       } catch (e) { console.error(e); }
+                    }
                     setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
                     setOpenFileIds((prev) => prev.filter((openId) => !toDelete.includes(openId)));
                     if (toDelete.includes(activeFileId)) {
@@ -1364,12 +1730,24 @@ function CloudIDEPageInner() {
                     const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
 
                     if (projectId) {
+                      if (id === activeFileId && saveFileRef.current) {
+                        clearTimeout(saveFileRef.current);
+                        saveFileRef.current = null;
+                      }
                       try {
-                        await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
+                        const renameRes = await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ name: newName, path: newPath }),
+                          body: JSON.stringify({
+                            name: newName,
+                            path: newPath,
+                            ...(id === activeFileId && f ? { content: f.content } : {}),
+                          }),
                         });
+                        await syncTimestampFromPatch(id, renameRes);
+                        if (id === activeFileId && renameRes.ok) {
+                          setSaveStatus('saved');
+                        }
                       } catch (e) { console.error(e); }
                     }
 
@@ -1435,9 +1813,13 @@ function CloudIDEPageInner() {
                       });
                       if (res.ok) {
                         const data = await res.json();
-                        setFiles(data.files || []);
-                        if (data.files && data.files.length > 0) {
-                           const firstFile = data.files.find((f: ProjectFile) => !f.isFolder);
+                        const importedFiles = data.files || [];
+                        setFiles(importedFiles);
+                        importedFiles.forEach((f: any) => {
+                          if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
+                        });
+                        if (importedFiles.length > 0) {
+                           const firstFile = importedFiles.find((f: ProjectFile) => !f.isFolder);
                            if (firstFile) {
                              setActiveFileId(firstFile.id);
                              setOpenFileIds([firstFile.id]);
@@ -1457,25 +1839,6 @@ function CloudIDEPageInner() {
                   width={sidebarWidth}
                   isDarkMode={isDarkMode}
                   onLoadCode={(code, lang) => {
-                    const foundLang = SUPPORTED_LANGUAGES.find(
-                      (l) => l.id === lang || l.monacoLang === lang
-                    );
-                    if (foundLang) handleLanguageChange(foundLang);
-                    if (activeFile) {
-                      setFiles((prev) =>
-                        prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
-                      );
-                    }
-                  }}
-                />
-              )}
-
-              {activeSidebarTab === 'practice' && (
-                <PracticeSidebar
-                  width={sidebarWidth}
-                  isDarkMode={isDarkMode}
-                  currentLanguage={currentLang?.id}
-                  onLoadChallenge={(code, lang, title) => {
                     const foundLang = SUPPORTED_LANGUAGES.find(
                       (l) => l.id === lang || l.monacoLang === lang
                     );
@@ -1523,6 +1886,110 @@ function CloudIDEPageInner() {
             } ${isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'}`}
             title="Drag to adjust sidebar size"
           />
+
+          {/* Active Practice Problem Details Panel */}
+          {activePracticeChallenge && isProblemPanelOpen && (() => {
+            const availChallengeLangs = Object.keys(activePracticeChallenge.starterTemplates);
+            const resolvedChallengeLangId = activeChallengeFile
+              ? detectLanguage(
+                  activeChallengeFile.name,
+                  activeChallengeFile.content,
+                  fileLanguageOverrides[activeChallengeFile.id],
+                  currentLang.id
+                )
+              : currentLang.id;
+            const effectiveChallengeLangId = availChallengeLangs.includes(resolvedChallengeLangId)
+              ? resolvedChallengeLangId
+              : availChallengeLangs[0] || currentLang.id;
+            const effectiveTestCasesCount = isChallengeFileActive
+              ? testCases.length
+              : testCases.length > 0
+                ? testCases.length
+                : activePracticeChallenge.testCases.length;
+
+            return (
+            <ProblemDetailsPanel
+              key={activePracticeChallenge.id}
+              challenge={activePracticeChallenge}
+              isDarkMode={isDarkMode}
+              status={practiceProgress[activePracticeChallenge.id] ?? 'unsolved'}
+              currentLanguageId={effectiveChallengeLangId}
+              isRunningTests={isRunningTests}
+              isChallengeFileActive={isChallengeFileActive}
+              activeFileName={activeFile?.name || null}
+              activeTestCasesCount={effectiveTestCasesCount}
+              onOpenChallengeFile={() => {
+                if (activeChallengeFile) {
+                  handleSelectFile(activeChallengeFile.id);
+                } else {
+                  void handleLaunchChallenge(activePracticeChallenge, undefined, false);
+                }
+              }}
+              onSelectLanguage={(langId) =>
+                handleLaunchChallenge(activePracticeChallenge, langId, false)
+              }
+              onResetCode={() => {
+                const targetLang = availChallengeLangs.includes(resolvedChallengeLangId)
+                  ? resolvedChallengeLangId
+                  : undefined;
+                void handleLaunchChallenge(activePracticeChallenge, targetLang, true);
+              }}
+              onRunTests={() => {
+                if (isChallengeFileActive && testCases.length === 0) {
+                  return;
+                }
+                setActiveBottomTab('tests');
+                setIsBottomCollapsed(false);
+                if (!isChallengeFileActive) {
+                  if (activeChallengeFile) {
+                    handleSelectFile(activeChallengeFile.id);
+                    const freshTests = testCases.length > 0
+                      ? undefined
+                      : activePracticeChallenge.testCases.map((tc) => ({ ...tc }));
+                    void handleRunAllTests(activeChallengeFile, freshTests);
+                  } else {
+                    void handleLaunchChallenge(activePracticeChallenge, undefined, false).then((launched) => {
+                      if (launched) {
+                        const freshTests = activePracticeChallenge.testCases.map((tc) => ({ ...tc }));
+                        void handleRunAllTests(launched, freshTests);
+                      }
+                    });
+                  }
+                  return;
+                }
+                void handleRunAllTests();
+              }}
+              onBackToPracticeHub={() => {
+                setActiveSidebarTab('practice');
+                setIsSidebarOpen(true);
+              }}
+              onClosePanel={() => setIsProblemPanelOpen(false)}
+            />
+            );
+          })()}
+
+          {activePracticeChallenge && !isProblemPanelOpen && (
+            <div
+              className={`w-9 shrink-0 border-r flex flex-col items-center py-3 gap-3 ${
+                isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setIsProblemPanelOpen(true)}
+                title="Show Problem Details"
+                aria-label="Show Problem Details"
+                data-testid="problem-reopen-panel"
+                className={`p-1.5 rounded-lg border transition-colors ${
+                  isDarkMode
+                    ? 'bg-[#161820] border-[#262936] text-[#ff9100] hover:bg-[#1e212b]'
+                    : 'bg-white border-slate-300 text-[#d97706] hover:bg-amber-50'
+                }`}
+              >
+                <PanelLeftOpen className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Center & Bottom Area */}
           <div className={`flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-white'}`}>
@@ -1716,7 +2183,7 @@ function CloudIDEPageInner() {
                       onDeleteTestCase={(id) =>
                         setTestCases((prev) => prev.filter((t) => t.id !== id))
                       }
-                      onRunAllTests={handleRunAllTests}
+                      onRunAllTests={() => handleRunAllTests()}
                       onRunBenchmark={handleRunBenchmark}
                       isRunningTests={isRunningTests}
                       benchmarkResult={benchmarkResult}
@@ -1827,7 +2294,8 @@ function CloudIDEPageInner() {
           fontSize={fontSize}
           onChangeFontSize={setFontSize}
           theme={theme}
-          onChangeTheme={setTheme}
+          onChangeTheme={handleThemeChange}
+          isDarkMode={isDarkMode}
         />
 
         <ShareModal

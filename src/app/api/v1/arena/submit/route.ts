@@ -3,7 +3,7 @@ import { ClassroomAuth } from '@/lib/classroom/auth';
 import { arenaDb } from '@/lib/arena/db';
 import { projectDb } from '@/lib/project/db';
 import { CHALLENGES } from '@/lib/challenges/challenges-data';
-import { executeInCloudRunner } from '@/lib/execution/cloud-runner';
+import { executeArenaTestCase } from '@/lib/arena/execute-test';
 import { TestCase } from '@/lib/execution/types';
 import { readJsonBody, RequestBodyError } from '@/lib/http/safe-json';
 import { ARENA_MAX_REQUEST_BYTES, validateArenaAutosaveFiles } from '@/lib/arena/request-validation';
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     let maxMemory = 0;
 
     for (const test of allTests) {
-       const res = await executeInCloudRunner({
+       const res = await executeArenaTestCase({
          language,
          files: serverFiles,
          stdin: test.stdin,
@@ -91,14 +91,23 @@ export async function POST(req: NextRequest) {
        maxMemory = Math.max(maxMemory, res.memoryUsageMb || 0);
 
        let passed = false;
-       let actualStdout = res.stdout || '';
-       let errorStr = res.stderr || '';
+       const actualStdout = (res.stdout || '').replace(/\r\n/g, '\n');
+       let errorStr = (res.stderr || '').replace(/\r\n/g, '\n');
 
        if (res.status === 'success') {
-           passed = actualStdout.trim() === test.expectedStdout.trim();
+           passed = actualStdout.trim() === test.expectedStdout.replace(/\r\n/g, '\n').trim();
        } else {
            allPassed = false;
            passed = false;
+           if (res.status === 'compilation_error') {
+              errorStr = (res.compileOutput || res.stderr || '').replace(/\r\n/g, '\n');
+           } else if (res.status === 'timeout') {
+              errorStr = 'Time Limit Exceeded';
+           } else if (res.status === 'memory_limit_exceeded') {
+              errorStr = 'Memory Limit Exceeded';
+           } else {
+              errorStr = errorStr || res.status;
+           }
            if (overallStatus === 'PASSED') {
               if (res.status === 'compilation_error') overallStatus = 'COMPILE_ERROR';
               else if (res.status === 'timeout') overallStatus = 'TIMEOUT';
