@@ -89,7 +89,17 @@ export default function ForgotPasswordPage() {
         </form>
         
         <div className="text-center text-sm text-gray-400">
-          Remembered your password? <button onClick={() => router.push('/login')} className="text-[#ff9100] hover:underline">Login</button>
+          Remembered your password?{' '}
+          <button
+            type="button"
+            onClick={() => {
+              const redirect = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('redirect') : null;
+              router.push(redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login');
+            }}
+            className="text-[#ff9100] hover:underline"
+          >
+            Login
+          </button>
         </div>
       </div>
     </div>

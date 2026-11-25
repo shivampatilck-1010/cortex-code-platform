@@ -93,6 +93,20 @@ export class CollaborationBroker {
     return this.currentUser;
   }
 
+  public updateUser(updates: Partial<Collaborator>) {
+    this.currentUser = {
+      ...this.currentUser,
+      ...updates,
+      lastActive: Date.now(),
+    };
+    this.broadcast({
+      type: 'presence',
+      sender: this.currentUser,
+      payload: { action: 'update' },
+      timestamp: Date.now(),
+    });
+  }
+
   private broadcast(msg: CollabMessage) {
     if (this.channel) {
       try {

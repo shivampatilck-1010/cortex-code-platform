@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isSecureRequest, sanitizeRedirectPath } from '@/lib/env';
 import crypto from 'crypto';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { classroomDb } from '@/lib/classroom/db';
@@ -165,6 +166,7 @@ export async function GET(req: NextRequest) {
       // Safely link existing user account: preserve password hash and role
       if (!user.avatar && googleProfile.picture) {
         user.avatar = googleProfile.picture;
+        await classroomDb.updateUserProfile(user.id, { avatar: googleProfile.picture });
       }
     } else {
       // Auto-provision new student account
@@ -186,6 +188,10 @@ export async function GET(req: NextRequest) {
 
     // 4. Create authenticated session
     const sessionId = ClassroomAuth.generateSecureToken(32);
+    const redirectTarget = sanitizeRedirectPath(
+      req.cookies.get('google_oauth_redirect')?.value,
+      '/classroom'
+    );
     const expiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7; // 7 days
     await classroomDb.createSession(sessionId, user.id, expiresAt);
 
@@ -215,13 +221,13 @@ export async function GET(req: NextRequest) {
   </style>
   <script>
     try {
-      localStorage.setItem('cortex_user', ${JSON.stringify(safeUserJson)});
-      localStorage.setItem('cortex_user_profile', ${JSON.stringify(safeUserJson)});
+      localStorage.setItem('cortex_user', ${JSON.stringify(safeUserJson).replace(/</g, '\\u003c')});
+      localStorage.setItem('cortex_user_profile', ${JSON.stringify(safeUserJson).replace(/</g, '\\u003c')});
       localStorage.setItem('cortex_session_id', ${JSON.stringify(sessionId)});
     } catch (e) {
       console.error('Storage sync error:', e);
     }
-    window.location.replace('/classroom');
+    window.location.replace(${JSON.stringify(redirectTarget).replace(/</g, '\\u003c')});
   </script>
 </body>
 </html>`;
@@ -232,7 +238,7 @@ export async function GET(req: NextRequest) {
 
     response.cookies.set('cortex_session', sessionId, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureRequest(req),
       sameSite: 'lax',
       path: '/',
       expires: new Date(expiresAt),
@@ -240,6 +246,14 @@ export async function GET(req: NextRequest) {
 
     // Priority 5: Deterministic cookie cleanup on success
     response.cookies.delete('google_oauth_state');
+    response.cookies.delete('google_oauth_redirect');
+    response.cookies.set('google_oauth_redirect', '', {
+      httpOnly: true,
+      secure: isSecureRequest(req),
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    });
     response.cookies.set('google_oauth_state', '', {
       path: '/',
       maxAge: 0,

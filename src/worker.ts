@@ -41,8 +41,6 @@ export function validateStartupSecrets(env?: Env): void {
   const requiredSecrets: string[] = [
     'LOCKDOWN_POLICY_SECRET',
     'LTI_HMAC_SECRET',
-    'GITHUB_CLIENT_ID',
-    'GITHUB_CLIENT_SECRET',
     'LOCKDOWN_SERVER_PEPPER',
   ];
 

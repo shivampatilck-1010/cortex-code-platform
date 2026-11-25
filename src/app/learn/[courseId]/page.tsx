@@ -16,6 +16,7 @@ import {
 import confetti from 'canvas-confetti';
 import Editor from '@monaco-editor/react';
 import { executeInCloudSandbox } from '@/lib/execution/engine';
+import { getLanguageConfig } from '@/config/languages';
 import { LearningCourse, LearningLesson, LearningProgress } from '@/lib/learning/db';
 
 type CourseData = LearningCourse & { lessons: LearningLesson[] };
@@ -119,7 +120,14 @@ export default function CourseLessonPage() {
     try {
       const res = await executeInCloudSandbox({
         language: currentLesson.language,
-        files: [{ id: 'lesson', name: `main.${currentLesson.language === 'python' ? 'py' : currentLesson.language === 'cpp' ? 'cpp' : 'rs'}`, path: '/main', content: code }],
+        files: [
+          {
+            id: 'lesson',
+            name: getLanguageConfig(currentLesson.language).defaultFileName,
+            path: `/${getLanguageConfig(currentLesson.language).defaultFileName}`,
+            content: code,
+          },
+        ],
       });
 
       const actual = (res.stdout || '').trim();
@@ -236,8 +244,8 @@ export default function CourseLessonPage() {
             <Editor
               key={currentLesson.id}
               height="100%"
-              language={currentLesson.language === 'cpp' ? 'cpp' : currentLesson.language === 'python' ? 'python' : 'rust'}
-              defaultValue={code}
+              language={getLanguageConfig(currentLesson.language).monacoLang}
+              value={code}
               theme="vs-dark"
               onChange={(val) => setCode(val || '')}
               options={{

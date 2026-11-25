@@ -8,23 +8,33 @@ interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectName?: string;
+  projectId?: string | null;
+  activeFileName?: string;
+  activeFileContent?: string;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
   isOpen,
   onClose,
   projectName = 'Cortex Cloud IDE Project',
+  projectId = null,
+  activeFileName,
+  activeFileContent,
 }) => {
   const [copied, setCopied] = useState(false);
   const [visibility, setVisibility] = useState<'public' | 'unlisted' | 'private'>('public');
 
   if (!isOpen) return null;
 
-  const shareUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/project/shared-${Math.random().toString(36).substring(2, 8)}`
-    : 'https://cortex-ide.dev/project/shared-demo';
+  const origin =
+    typeof window !== 'undefined'
+      ? window.location.origin
+      : 'https://cortex-code-platform.cortexbuild1.workers.dev';
+  const shareUrl = projectId
+    ? `${origin}/ide?projectId=${encodeURIComponent(projectId)}`
+    : `${origin}/ide`;
 
-  const embedSnippet = `<iframe src="${shareUrl}?embed=true" width="100%" height="500" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  const embedSnippet = `<iframe src="${shareUrl}" width="100%" height="500" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>`;
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);

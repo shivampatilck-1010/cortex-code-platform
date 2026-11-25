@@ -48,7 +48,7 @@ export default function ChallengesPage() {
             <CortexLogo variant="header" size="sm" />
           </Link>
           <nav className="hidden sm:flex items-center space-x-1 pl-3 border-l border-[#2a2c33]">
-            <Link href="/" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#252830] transition">
+            <Link href="/ide" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#252830] transition">
               IDE
             </Link>
             <Link href="/classroom" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
@@ -69,7 +69,7 @@ export default function ChallengesPage() {
           </nav>
         </div>
         <Link
-          href="/"
+          href="/ide"
           className="text-xs font-semibold text-[#0b0c0e] bg-[#ff9100] hover:bg-[#e07f00] px-3 py-1.5 rounded transition shadow"
         >
           Launch Cloud IDE
@@ -92,7 +92,11 @@ export default function ChallengesPage() {
           </div>
           <div className="hidden sm:flex items-center space-x-3">
             <div className="p-3 bg-[#16171d] rounded border border-[#2c2f3b] text-center">
-              <span className="text-lg font-bold text-yellow-400">1,280</span>
+              <span className="text-lg font-bold text-yellow-400">
+                {CHALLENGES.filter((c) => solvedIds.has(c.id))
+                  .reduce((sum, c) => sum + (c.difficulty === 'Hard' ? 350 : c.difficulty === 'Medium' ? 200 : 100), 0)
+                  .toLocaleString()}
+              </span>
               <span className="text-[10px] text-gray-400 block">Rating Score</span>
             </div>
           </div>

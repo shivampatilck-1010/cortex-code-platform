@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { diffLines } from "diff";
 import { ClassroomAuth } from "@/lib/classroom/auth";
 import { aiRateLimiter } from "@/lib/execution/rate-limiter";
+import { getRuntimeVar } from "@/lib/env";
 
-const FALLBACK_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
 const CANDIDATE_MODELS = [
-  "gemini-3.7-flash",
+  "gemini-2.5-flash",
   "gemini-flash-latest",
-  "gemini-3.5-flash",
+  "gemini-2.0-flash",
 ];
 
 async function readJsonBody(req: NextRequest, maxSize: number = 512 * 1024) {
@@ -31,16 +32,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const key = FALLBACK_KEY;
+    const body = await readJsonBody(req);
+    const key =
+      (typeof body.apiKey === "string" && body.apiKey.trim()) ||
+      getRuntimeVar("GEMINI_API_KEY") ||
+      getRuntimeVar("GOOGLE_API_KEY");
     if (!key) {
       return NextResponse.json({ error: "AI provider not configured." }, { status: 503 });
     }
-
-    const body = await readJsonBody(req);
     
     const code = (body.code || "").slice(0, 10000);
     const stderr = (body.stderr || "").slice(0, 2000);
-    const prompt = `Fix this ${body.languageId} code error:\n\nCode:\n${code}\n\nError:\n${stderr}\nReturn JSON with { convertedCode, explanation, bugs, optimizations, complexityEstimate }`;
+    const prompt = `Fix this ${body.languageId} code error:\n\nCode:\n${code}\n\nError:\n${stderr}\nReturn JSON with { fixedCode, cause, explanation, inlineComment }`;
     
     for (const model of CANDIDATE_MODELS) {
       try {
@@ -55,14 +58,42 @@ export async function POST(req: NextRequest) {
           let parsed;
           try {
             parsed = JSON.parse(text.replace(/\r?\n/g, "\n").replace(/\r/g, "\n").replace(/^\s*```json\s*/, "").replace(/\s*```\s*$/, ""));
-          } catch(e) { parsed = { convertedCode: code, explanation: "Failed to parse AI output" }; }
+          } catch (e) {
+            parsed = {
+              provider: "gemini",
+              fix: {
+                cause: body.stderr || "Syntax or runtime error",
+                explanation: text || "Failed to parse structured AI output",
+                inlineComment: "AI suggested review",
+                fixedCode: code,
+                originalCode: code,
+                diffChanges: diffLines(code, code),
+                confidence: 0.5,
+              },
+            };
+          }
+          if (parsed && !parsed.fix) {
+            const nextCode = parsed.fixedCode || parsed.convertedCode || code;
+            parsed = {
+              provider: "gemini",
+              fix: {
+                cause: parsed.cause || body.stderr || "Code issue",
+                explanation: parsed.explanation || "AI auto-fix applied.",
+                inlineComment: parsed.inlineComment || "Fixed by Cortex AI",
+                fixedCode: nextCode,
+                originalCode: code,
+                diffChanges: diffLines(code, nextCode),
+                confidence: 0.9,
+              },
+            };
+          }
           return NextResponse.json(parsed);
         }
       } catch (e) {
         console.warn('[AI Route] Swallowed non-fatal error:', e instanceof Error ? e.message : String(e));
       }
     }
-    return NextResponse.json({ convertedCode: code, explanation: "AI Fix unavailable" });
+    return NextResponse.json({ error: "AI Fix unavailable" }, { status: 502 });
 
 
   } catch (err: any) {

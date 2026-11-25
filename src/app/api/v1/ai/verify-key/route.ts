@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRuntimeVar } from '@/lib/env';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,10 +14,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate key against Google Generative Language API
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
 
     if (res.ok) {
       const data = await res.json();
@@ -43,8 +47,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const envKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const envKey = getRuntimeVar('GEMINI_API_KEY') || getRuntimeVar('GOOGLE_API_KEY');
   return NextResponse.json({
-    hasDefaultKey: !!envKey,
+    hasDefaultKey: Boolean(envKey),
   });
 }

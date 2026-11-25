@@ -2,20 +2,12 @@ import { ClassroomAuth } from "@/lib/classroom/auth";
 import { classroomDb } from "@/lib/classroom/db";
 import { NextRequest, NextResponse } from 'next/server';
 import { aiRateLimiter } from '@/lib/execution/rate-limiter';
+import { getRuntimeVar } from '@/lib/env';
 
-// Server-only key fallback; NEXT_PUBLIC_ is deliberately omitted to prevent bundle leakage
-const FALLBACK_KEY =
-  process.env.GEMINI_API_KEY ||
-  process.env.GOOGLE_API_KEY ||
-  '';
-
-// Fast model priority list: gemini-3.7-flash (sub-second) -> gemini-flash-latest -> gemini-3.8-flash -> gemini-3.5-flash
 const CANDIDATE_MODELS = [
-  'gemini-3.7-flash',
+  'gemini-2.5-flash',
   'gemini-flash-latest',
-  'gemini-3.8-flash',
-  'gemini-3.5-flash',
-  'gemini-3.6-flash',
+  'gemini-2.0-flash',
 ];
 
 
@@ -84,7 +76,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const key = FALLBACK_KEY;
+    const key =
+      (typeof body.apiKey === "string" && body.apiKey.trim()) ||
+      getRuntimeVar("GEMINI_API_KEY") ||
+      getRuntimeVar("GOOGLE_API_KEY");
     if (!key) {
       return NextResponse.json(
         { reply: "Offline: API key not configured on server.", model: "cortex-offline-fallback" },

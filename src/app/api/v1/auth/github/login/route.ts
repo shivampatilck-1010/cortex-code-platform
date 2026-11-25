@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRuntimeVar, isSecureRequest } from '@/lib/env';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { githubRateLimiter } from '@/lib/execution/rate-limiter';
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
     // Bind state to this specific user session via HttpOnly cookie (prevents CSRF and replay attacks)
     response.cookies.set('github_oauth_state', state, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureRequest(req),
       sameSite: 'lax',
       maxAge: 60 * 10 // 10 minutes
     });

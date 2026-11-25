@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ClassroomAuth } from '@/lib/classroom/auth';
+import { isSecureRequest, sanitizeRedirectPath } from '@/lib/env';
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,12 +40,21 @@ export async function GET(req: NextRequest) {
     googleAuthUrl.searchParams.set('access_type', 'offline');
     googleAuthUrl.searchParams.set('prompt', 'select_account');
 
+    const requestedRedirect = sanitizeRedirectPath(req.nextUrl.searchParams.get('redirect'), '/classroom');
+    const isSecure = isSecureRequest(req);
     const response = NextResponse.redirect(googleAuthUrl.toString(), 307);
     response.cookies.set('google_oauth_state', state, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecure,
       sameSite: 'lax',
       maxAge: 60 * 10, // 10 minutes
+      path: '/',
+    });
+    response.cookies.set('google_oauth_redirect', requestedRedirect, {
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: 'lax',
+      maxAge: 60 * 10,
       path: '/',
     });
     return response;

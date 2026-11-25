@@ -61,7 +61,7 @@ export default function DashboardPage() {
             <CortexLogo variant="header" size="sm" />
           </Link>
           <nav className="hidden sm:flex items-center space-x-1 pl-3 border-l border-[#252830]">
-            <Link href="/" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
+            <Link href="/ide" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
               IDE
             </Link>
             <Link
@@ -88,7 +88,7 @@ export default function DashboardPage() {
           </nav>
         </div>
         <Link
-          href="/"
+          href="/ide"
           className="px-3.5 py-1.5 bg-[#ff9100] hover:bg-[#e07f00] text-[#0b0c0e] rounded text-xs font-bold flex items-center space-x-1.5 transition active:scale-95 shadow"
         >
           <Play className="w-3.5 h-3.5 fill-current" />
@@ -116,7 +116,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <Link
-            href="/"
+            href="/ide"
             className="px-4 py-2 bg-[#ff9100] hover:bg-[#e07f00] text-[#0b0c0e] font-bold rounded text-xs shadow flex items-center space-x-1.5 transition active:scale-95"
           >
             <span>Continue Workspace</span>
@@ -150,7 +150,7 @@ export default function DashboardPage() {
           <div className="p-5 bg-[#18191d] border border-[#262832] rounded-lg space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-sm text-gray-200">Recent Projects & Workspaces</h2>
-              <Link href="/" className="text-xs text-cyan-400 hover:underline">New Project</Link>
+              <Link href="/ide" className="text-xs text-cyan-400 hover:underline">New Project</Link>
             </div>
             <div className="divide-y divide-[#262832]">
               {recentProjects.map((p) => (
@@ -163,7 +163,7 @@ export default function DashboardPage() {
                     <span className="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 text-[10px]">
                       {p.status}
                     </span>
-                    <Link href="/" className="p-1 text-gray-400 hover:text-white">
+                    <Link href={`/ide?projectId=${encodeURIComponent(p.id)}`} className="p-1 text-gray-400 hover:text-white" title="Open in IDE">
                       <ExternalLink className="w-3.5 h-3.5" />
                     </Link>
                   </div>

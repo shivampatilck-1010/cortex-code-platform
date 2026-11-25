@@ -501,13 +501,13 @@ Please provide a concise, structured comparative analysis with:
       {/* 1. Sleek, Minimalist Top Header */}
       <header className="h-12 bg-[#111216] border-b border-[#1f2026] px-3 sm:px-4 flex items-center justify-between z-20">
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <Link href="/" className="flex items-center group transition" title="Return to IDE">
+          <Link href="/" className="flex items-center group transition" title="Cortex Home">
             <CortexLogo variant="header" size="sm" />
           </Link>
 
           <span className="text-gray-600">/</span>
 
-          <Link href="/" className="text-xs font-semibold text-gray-400 hover:text-white transition hidden md:inline">
+          <Link href="/ide" className="text-xs font-semibold text-gray-400 hover:text-white transition hidden md:inline">
             IDE
           </Link>
 
@@ -698,7 +698,7 @@ Please provide a concise, structured comparative analysis with:
               key={langA}
               height="100%"
               language={getLanguageConfig(langA).monacoLang}
-              defaultValue={codeA}
+              value={codeA}
               theme="vs-dark"
               onMount={(editor) => { editorRefA.current = editor; }}
               onChange={(v) => setCodeA(v || '')}
@@ -782,7 +782,7 @@ Please provide a concise, structured comparative analysis with:
               key={langB}
               height="100%"
               language={getLanguageConfig(langB).monacoLang}
-              defaultValue={codeB}
+              value={codeB}
               theme="vs-dark"
               onMount={(editor) => { editorRefB.current = editor; }}
               onChange={(v) => setCodeB(v || '')}

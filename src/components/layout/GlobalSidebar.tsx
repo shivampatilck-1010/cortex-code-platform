@@ -29,6 +29,7 @@ interface UserProfile {
   name: string;
   email: string;
   role?: string;
+  avatar?: string;
   professionalEmail?: string;
 }
 
@@ -59,6 +60,48 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
   const isDarkMode = propDarkMode !== undefined ? propDarkMode : internalDarkMode;
 
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [loginHref, setLoginHref] = useState<string>('/login');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (pathname === '/login' || pathname === '/register') {
+      setLoginHref('/login');
+      return;
+    }
+    const target = `${window.location.pathname}${window.location.search}`;
+    setLoginHref(`/login?redirect=${encodeURIComponent(target)}`);
+  }, [pathname]);
+
+  useEffect(() => {
+    let active = true;
+    const syncAuthUser = () => {
+      fetch('/api/v1/auth/me', { credentials: 'include' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!active) return;
+          if (data?.user) {
+            setUser(data.user);
+          } else {
+            setUser(null);
+          }
+        })
+        .catch(() => {});
+    };
+
+    syncAuthUser();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cortex-auth-changed', syncAuthUser);
+      window.addEventListener('focus', syncAuthUser);
+      return () => {
+        active = false;
+        window.removeEventListener('cortex-auth-changed', syncAuthUser);
+        window.removeEventListener('focus', syncAuthUser);
+      };
+    }
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
   const [isAccountOpen, setIsAccountOpen] = useState<boolean>(false);
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -125,22 +168,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
     };
   }, []);
 
-  // Fetch current user from /api/v1/auth/me
-  useEffect(() => {
-    let isMounted = true;
-    fetch('/api/v1/auth/me')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (isMounted && data?.user) {
-          setUser(data.user);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // Auth state is synced above on pathname, focus, and cortex-auth-changed events
 
   // Close account dropdown on outside click or escape
   useEffect(() => {
@@ -179,6 +207,12 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
     } catch {
       // proceed to redirect regardless
     } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('cortex_user');
+        localStorage.removeItem('cortex_session_id');
+        localStorage.removeItem('cortex_user_profile');
+        window.dispatchEvent(new Event('cortex-auth-changed'));
+      }
       window.location.href = '/login';
     }
   };
@@ -381,7 +415,16 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
                     <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-xs text-[#ff9100] ${
                       isDarkMode ? 'bg-[#1e1f26] border-[#2a2c38]' : 'bg-white border-slate-200 shadow-sm'
                     }`}>
-                      {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                      {user.avatar ? (
+                        <img
+                          src={user.avatar}
+                          alt={user.name || 'User'}
+                          className="w-full h-full object-cover rounded-full"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        user.name ? user.name.charAt(0).toUpperCase() : 'U'
+                      )}
                     </div>
                     <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border ${
                       isDarkMode ? 'border-[#0a0b0d]' : 'border-white'
@@ -419,7 +462,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
               </>
             ) : (
               <Link
-                href="/login"
+                href={loginHref}
                 onMouseEnter={(e) => showFloatingTooltip('Sign In', 'Sync your projects & progress', e)}
                 onMouseMove={moveFloatingTooltip}
                 onMouseLeave={hideFloatingTooltip}

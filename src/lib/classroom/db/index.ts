@@ -1157,7 +1157,26 @@ class ClassroomDatabase {
 
   async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
     if (!(await this.getDb())) return;
-    await (await this.getDb()).prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+    await (await this.getDb()).prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(passwordHash, Date.now(), userId);
+  }
+
+  async updateUserProfile(userId: string, updates: { name?: string; avatar?: string }): Promise<void> {
+    if (!(await this.getDb())) return;
+    const fields: string[] = [];
+    const values: any[] = [];
+    if (typeof updates.name === 'string' && updates.name.trim()) {
+      fields.push('name = ?');
+      values.push(updates.name.trim());
+    }
+    if (typeof updates.avatar === 'string' && updates.avatar.trim()) {
+      fields.push('avatar = ?');
+      values.push(updates.avatar.trim());
+    }
+    if (fields.length === 0) return;
+    fields.push('updated_at = ?');
+    values.push(Date.now());
+    values.push(userId);
+    await (await this.getDb()).prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values);
   }
 
   // --- END AUTH ---

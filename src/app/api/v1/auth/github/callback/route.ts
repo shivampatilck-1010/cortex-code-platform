@@ -39,45 +39,50 @@ export async function GET(req: NextRequest) {
     let githubUsername: string;
 
     // Real OAuth exchange if configured
-    if (clientId && clientSecret && clientId !== 'mock_client_id' && clientSecret !== 'mock_client_secret') {
-      const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          client_id: clientId,
-          client_secret: clientSecret,
-          code,
-        }),
-      });
-      const tokenData = await tokenRes.json();
-      if (tokenData.error) {
-        return NextResponse.json({ error: tokenData.error_description || tokenData.error }, { status: 400 });
-      }
-      accessToken = tokenData.access_token;
-
-      // Get user profile
-      const userRes = await fetch('https://api.github.com/user', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'Cortex-App'
-        },
-      });
-      const userData = await userRes.json();
-      githubUserId = userData.id.toString();
-      githubUsername = userData.login;
-    } else {
-      if (process.env.NODE_ENV === 'production') {
-        return NextResponse.json({ error: 'GitHub OAuth is not configured for this environment' }, { status: 503 });
-      }
-      // Local development fallback credentials for offline developer sandbox
-      accessToken = '__dev_mock_access_token__';
-      githubUserId = '__dev_mock_gh_uid__';
-      githubUsername = '__dev_mock_gh_user__';
+    if (!clientId || !clientSecret) {
+      return NextResponse.json(
+        { error: 'GitHub OAuth is not configured on this instance' },
+        { status: 503 }
+      );
     }
+
+    const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+      }),
+    });
+    if (!tokenRes.ok) {
+      return NextResponse.json({ error: 'Failed to exchange GitHub authorization code' }, { status: 502 });
+    }
+    const tokenData = await tokenRes.json();
+    if (tokenData.error || !tokenData.access_token) {
+      return NextResponse.json({ error: tokenData.error_description || tokenData.error || 'Missing GitHub access token' }, { status: 400 });
+    }
+    accessToken = tokenData.access_token;
+
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Cortex-App',
+      },
+    });
+    if (!userRes.ok) {
+      return NextResponse.json({ error: 'Failed to fetch GitHub user profile' }, { status: 502 });
+    }
+    const userData = await userRes.json();
+    if (!userData?.id || !userData?.login) {
+      return NextResponse.json({ error: 'Incomplete GitHub user profile response' }, { status: 502 });
+    }
+    githubUserId = userData.id.toString();
+    githubUsername = userData.login;
 
     // Save connection securely (server-side only)
     await projectDb.saveGitHubConnection(user.id, githubUserId, githubUsername, accessToken);

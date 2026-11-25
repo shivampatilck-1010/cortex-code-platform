@@ -60,7 +60,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [validationMsg, setValidationMsg] = useState(aiSettings.apiKey ? 'Your auto fix is connected and good to go!' : '');
 
   // API Key & Execution Limits State
-  const [showCortexApiKey, setShowCortexApiKey] = useState(false);
+  // API Key Verification & Status State
   const [copiedKey, setCopiedKey] = useState(false);
   const [memoryLimit, setMemoryLimit] = useState<number>(512);
   const [processTimeout, setProcessTimeout] = useState<number>(10);
@@ -571,46 +571,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* DEVELOPER API KEYS (Masked & Hidden by default) */}
+            {/* DEVELOPER API & EXECUTION ENDPOINTS */}
             {activeSection === 'api' && (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-sm font-heading font-bold text-gray-200">Developer API Keys</h3>
+                  <h3 className="text-sm font-heading font-bold text-gray-200">Execution &amp; AI API Reference</h3>
                   <p className="text-gray-400 text-xs mt-0.5">
-                    Use your API key to trigger programmatic cloud code executions via <code>POST /api/v1/execute</code>.
+                    Cortex API routes authenticate via your signed-in HttpOnly session cookie (<code>cortex_session</code>).
                   </p>
                 </div>
 
                 <div className="bg-[#1e2028] p-4 rounded border border-[#2d303d] space-y-3">
                   <div className="flex items-center justify-between text-gray-300">
-                    <span className="font-semibold text-xs">Production Secret API Key</span>
-                    <span className="text-[11px] text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
-                      Keep Secret • Never Share
+                    <span className="font-semibold text-xs">Cloud Sandbox Execution Endpoint</span>
+                    <span className="text-[11px] text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40">
+                      Session Authenticated
                     </span>
                   </div>
 
-                  {/* Masked Key Display with Show/Hide and Copy */}
                   <div className="flex items-center space-x-2 bg-[#141518] p-2.5 rounded border border-[#2d303d]">
-                    <span className="font-mono text-xs flex-1 text-gray-300 tracking-wider">
-                      {showCortexApiKey 
-                        ? 'cortex_live_pk_8f73a90c12e5429188a' 
-                        : 'cortex_live_pk_••••••••••••••••••••'}
+                    <span className="font-mono text-xs flex-1 text-gray-300">
+                      POST /api/v1/execute
                     </span>
-
                     <button
                       type="button"
-                      onClick={() => setShowCortexApiKey(!showCortexApiKey)}
-                      className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#22242c] transition"
-                      title={showCortexApiKey ? 'Hide Key' : 'Show Key'}
-                    >
-                      {showCortexApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCopyApiKey('cortex_live_pk_8f73a90c12e5429188a')}
+                      onClick={() =>
+                        handleCopyApiKey(
+                          `curl -X POST "${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/execute" -H "Content-Type: application/json" -b "cortex_session=<SESSION_COOKIE>" -d '{"language":"python","files":[{"name":"main.py","content":"print(1+1)"}]}'`
+                        )
+                      }
                       className="flex items-center space-x-1 px-3 py-1 bg-[#252832] hover:bg-[#30333f] text-gray-200 rounded text-xs transition"
-                      title="Copy Key to Clipboard"
+                      title="Copy Example Command"
                     >
                       {copiedKey ? (
                         <>
@@ -620,15 +611,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" />
-                          <span>Copy</span>
+                          <span>Copy cURL</span>
                         </>
                       )}
                     </button>
                   </div>
 
-                  <p className="text-gray-400 text-[11px]">
-                    This key is masked by default to protect against accidental screen sharing or recording.
-                  </p>
+                  <div className="pt-2 border-t border-[#2d303d] flex items-center justify-between text-xs text-gray-400">
+                    <span>
+                      Personal Gemini AI Key:{' '}
+                      <strong className={aiSettings.apiKey ? 'text-emerald-400' : 'text-gray-300'}>
+                        {aiSettings.apiKey ? 'Connected in Browser Storage' : 'Not Configured'}
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection('ai')}
+                      className="text-[#ff9100] hover:underline font-medium"
+                    >
+                      Configure Gemini Key
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

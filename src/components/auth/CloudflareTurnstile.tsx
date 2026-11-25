@@ -64,6 +64,14 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
       },
     }));
 
+    const onSuccessRef = useRef(onSuccess);
+    const onErrorRef = useRef(onError);
+    const onExpireRef = useRef(onExpire);
+
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+    onExpireRef.current = onExpire;
+
     useEffect(() => {
       let isMounted = true;
 
@@ -85,19 +93,19 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
             callback: (token: string) => {
               if (isMounted) {
                 setStatus('verified');
-                onSuccess(token);
+                onSuccessRef.current(token);
               }
             },
             'error-callback': (err: any) => {
               if (isMounted) {
                 setStatus('error');
-                if (onError) onError(String(err || 'Verification challenge failed'));
+                if (onErrorRef.current) onErrorRef.current(String(err || 'Verification challenge failed'));
               }
             },
             'expired-callback': () => {
               if (isMounted) {
                 setStatus('ready');
-                if (onExpire) onExpire();
+                if (onExpireRef.current) onExpireRef.current();
               }
             },
           });
@@ -148,7 +156,7 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
           widgetIdRef.current = null;
         }
       };
-    }, [effectiveSiteKey, onSuccess, onError, onExpire]);
+    }, [effectiveSiteKey]);
 
     return (
       <div className={`p-3 rounded-xl bg-[#0f1015] border border-[#242732] flex flex-col items-center justify-center space-y-2 text-center ${className}`}>

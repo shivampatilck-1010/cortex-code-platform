@@ -591,7 +591,7 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
               </div>
               <ul className="space-y-2.5 text-xs">
                 <li>
-                  <Link href="/downloads" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
+                  <Link href="/lockdown/download" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors">
                     Documentation
                   </Link>
                 </li>

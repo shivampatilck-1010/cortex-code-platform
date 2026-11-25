@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isSecureRequest } from '@/lib/env';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
 import { User } from '@/lib/classroom/models';
@@ -139,7 +140,9 @@ export async function POST(req: NextRequest) {
       'Set-Cookie',
       'cortex_session=' +
         sessionId +
-        '; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=' +
+        (isSecureRequest(req)
+          ? '; HttpOnly; Secure; SameSite=Lax; Path=/; Expires='
+          : '; HttpOnly; SameSite=Lax; Path=/; Expires=') +
         new Date(expiresAt).toUTCString()
     );
 
