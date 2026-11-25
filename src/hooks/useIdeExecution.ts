@@ -5,6 +5,7 @@ import confetti from 'canvas-confetti';
 import { ProjectFile, ExecutionResult, TestCase, BenchmarkMetrics } from '@/lib/execution/types';
 import { LanguageConfig, getLanguageConfig } from '@/config/languages';
 import { detectLanguage } from '@/lib/editor/language-detector';
+import { getGuestSqlProjectId } from '@/lib/sql/guest-session';
 import { executeInCloudSandbox, runTestCases, benchmarkExecution } from '@/lib/execution/engine';
 import { formatSqlResultsToAsciiTable } from '@/lib/sql/formatter';
 import { TraceSession } from '@/lib/visualization/types';
@@ -96,7 +97,7 @@ export function useIdeExecution({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            projectId: projectId || 'demo_sql_project',
+            projectId: projectId || getGuestSqlProjectId(),
             query: currentActive.content,
             dialect: 'sqlite',
           }),

@@ -144,10 +144,12 @@ class LearningDatabase {
     return result;
   }
 
-  async getCourseDetails(id: string): Promise<(LearningCourse & { lessons: LearningLesson[] }) | null> {
+  async getCourseDetails(idOrSlug: string): Promise<(LearningCourse & { lessons: LearningLesson[] }) | null> {
     const db = await this.getDb();
     if (!db) return null;
-    const course = await db.prepare('SELECT * FROM learning_courses WHERE id = ?').get(id) as LearningCourse;
+    const course = await db
+      .prepare('SELECT * FROM learning_courses WHERE id = ? OR slug = ?')
+      .get(idOrSlug, idOrSlug) as LearningCourse;
     if (!course) return null;
     const lessons = await db.prepare('SELECT * FROM learning_lessons WHERE course_id = ? ORDER BY order_index ASC').all(course.id) as LearningLesson[];
     return { ...course, lessons };

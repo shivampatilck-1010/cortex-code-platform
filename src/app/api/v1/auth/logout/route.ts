@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isSecureRequest } from '@/lib/env';
 import { classroomDb } from '@/lib/classroom/db';
 
 export async function POST(req: NextRequest) {
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
       name: 'cortex_session',
       value: '',
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureRequest(req),
       sameSite: 'lax',
       path: '/',
       expires: new Date(0),

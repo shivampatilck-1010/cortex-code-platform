@@ -570,7 +570,7 @@ export async function analyzeCode(
 ): Promise<AIAnalysisResult> {
   const lang = getLanguageConfig(languageId);
   // Use the user's key or fall back to the platform default
-  const FALLBACK = process.env.GEMINI_API_KEY || '';
+  const FALLBACK = '';
   const apiKey = settings.apiKey || FALLBACK;
 
 
@@ -587,11 +587,9 @@ export async function analyzeCode(
       }
 
       const MODELS = [
-        'gemini-3.7-flash',
+        'gemini-2.5-flash',
         'gemini-flash-latest',
-        'gemini-3.8-flash',
-        'gemini-3.5-flash',
-        'gemini-3.6-flash',
+        'gemini-2.0-flash',
       ];
 
       for (const model of MODELS) {
@@ -704,7 +702,7 @@ export async function convertCode(
   if (apiKey) {
     try {
       const prompt = `Convert the following code from ${fromConfig.name} to ${toConfig.name}. Output only the converted valid code, followed by a markdown note explaining differences.\n\nSource Code:\n${sourceCode}`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),

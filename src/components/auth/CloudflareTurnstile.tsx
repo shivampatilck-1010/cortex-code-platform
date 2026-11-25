@@ -64,11 +64,20 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
       },
     }));
 
+    const onSuccessRef = useRef(onSuccess);
+    const onErrorRef = useRef(onError);
+    const onExpireRef = useRef(onExpire);
+
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+    onExpireRef.current = onExpire;
+
     useEffect(() => {
       let isMounted = true;
+      let checkInterval: ReturnType<typeof setInterval> | null = null;
 
       const initTurnstile = () => {
-        if (!containerRef.current || !window.turnstile) return;
+        if (!isMounted || !containerRef.current || !window.turnstile) return;
 
         if (widgetIdRef.current) {
           try {
@@ -76,6 +85,7 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
           } catch {}
           widgetIdRef.current = null;
         }
+        containerRef.current.innerHTML = '';
 
         try {
           const id = window.turnstile.render(containerRef.current, {
@@ -85,19 +95,19 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
             callback: (token: string) => {
               if (isMounted) {
                 setStatus('verified');
-                onSuccess(token);
+                onSuccessRef.current(token);
               }
             },
             'error-callback': (err: any) => {
               if (isMounted) {
                 setStatus('error');
-                if (onError) onError(String(err || 'Verification challenge failed'));
+                if (onErrorRef.current) onErrorRef.current(String(err || 'Verification challenge failed'));
               }
             },
             'expired-callback': () => {
               if (isMounted) {
                 setStatus('ready');
-                if (onExpire) onExpire();
+                if (onExpireRef.current) onExpireRef.current();
               }
             },
           });
@@ -129,18 +139,27 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
           };
           document.head.appendChild(script);
         } else {
-          const checkInterval = setInterval(() => {
+          checkInterval = setInterval(() => {
+            if (!isMounted) {
+              if (checkInterval) clearInterval(checkInterval);
+              checkInterval = null;
+              return;
+            }
             if (window.turnstile) {
-              clearInterval(checkInterval);
+              if (checkInterval) clearInterval(checkInterval);
+              checkInterval = null;
               initTurnstile();
             }
           }, 100);
-          return () => clearInterval(checkInterval);
         }
       }
 
       return () => {
         isMounted = false;
+        if (checkInterval) {
+          clearInterval(checkInterval);
+          checkInterval = null;
+        }
         if (typeof window !== 'undefined' && window.turnstile && widgetIdRef.current) {
           try {
             window.turnstile.remove(widgetIdRef.current);
@@ -148,7 +167,7 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
           widgetIdRef.current = null;
         }
       };
-    }, [effectiveSiteKey, onSuccess, onError, onExpire]);
+    }, [effectiveSiteKey]);
 
     return (
       <div className={`p-3 rounded-xl bg-[#0f1015] border border-[#242732] flex flex-col items-center justify-center space-y-2 text-center ${className}`}>

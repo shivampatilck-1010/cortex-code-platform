@@ -163,27 +163,39 @@ export default function ClassroomHubPage() {
   }, [router]);
 
 
-  const handleSaveProfile = () => {
-    if (!profileForm.name.trim()) {
-       if (typeof showToast !== 'undefined') showToast('Name is required');
-       return;
+  const handleSaveProfile = async () => {
+    const trimmedName = profileForm.name.trim();
+    if (!trimmedName) {
+      if (typeof showToast !== 'undefined') showToast('Name is required');
+      return;
     }
-    
-    const existingId = localStorage.getItem('cortex_user_profile') ? JSON.parse(localStorage.getItem('cortex_user_profile') || '{}').id : `usr_${Date.now()}_${Math.random().toString(36).substring(2,6)}`;
-    
-    const newProfile = {
-      id: existingId,
-      name: profileForm.name,
-      email: profileForm.email || `${existingId}@cortex.edu`,
-      role: profileForm.role
-    };
-    
-    localStorage.setItem('cortex_user_profile', JSON.stringify(newProfile));
-    setCurrentUserId(newProfile.id);
-    setCurrentUserName(newProfile.name);
-    setCurrentUserEmail(newProfile.email);
-    setCurrentUserRole(newProfile.role);
-    setIsProfileModalOpen(false);
+
+    try {
+      const res = await fetch('/api/v1/auth/me', {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ name: trimmedName }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.user) {
+        if (typeof showToast !== 'undefined') showToast(data?.error || 'Failed to update profile');
+        return;
+      }
+
+      const updatedUser = data.user;
+      localStorage.setItem('cortex_user', JSON.stringify(updatedUser));
+      localStorage.setItem('cortex_user_profile', JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event('cortex-auth-changed'));
+
+      setCurrentUserId(updatedUser.id);
+      setCurrentUserName(updatedUser.name);
+      setCurrentUserEmail(updatedUser.email);
+      setCurrentUserRole(updatedUser.role);
+      setIsProfileModalOpen(false);
+      if (typeof showToast !== 'undefined') showToast('Profile updated');
+    } catch {
+      if (typeof showToast !== 'undefined') showToast('Network error updating profile');
+    }
   };
 
 
@@ -392,43 +404,10 @@ export default function ClassroomHubPage() {
         headers: getAuthHeaders(),
       });
       const data = await res.json();
-      if (data.notifications && data.notifications.length > 0) {
+      if (Array.isArray(data.notifications)) {
         setNotifications(data.notifications);
-      } else if (currentUserId) {
-        // Seed welcome and midterm notifications for fresh classroom students
-        const seedNotifications: Notification[] = [
-          {
-            id: `notif_seed_${Date.now()}_1`,
-            userId: currentUserId,
-            classroomId: selectedClassroom?.id || 'CLS_1792819623330_ZF01',
-            type: 'announcement',
-            title: 'Welcome to CS 276 Systems Programming',
-            message: 'Course announcements, assignments, and exam windows are published. Check your syllabus in Stream.',
-            createdAt: Date.now() - 3600000 * 2,
-            data: { tab: 'stream' },
-          },
-          {
-            id: `notif_seed_${Date.now()}_2`,
-            userId: currentUserId,
-            classroomId: selectedClassroom?.id || 'CLS_1792819623330_ZF01',
-            type: 'assignment_new',
-            title: 'Lab 1: Bounded Concurrent Queue Open',
-            message: 'Implement a thread-safe circular buffer with condition variable synchronization in Python.',
-            createdAt: Date.now() - 3600000 * 5,
-            data: { tab: 'assignments' },
-          },
-          {
-            id: `notif_seed_${Date.now()}_3`,
-            userId: currentUserId,
-            classroomId: selectedClassroom?.id || 'CLS_1792819623330_ZF01',
-            type: 'exam_published',
-            title: 'Midterm Examination Window Active',
-            message: 'Multithreading, Memory Models & Lock-Free Structures exam is ready for proctored evaluation.',
-            createdAt: Date.now() - 3600000 * 12,
-            data: { tab: 'examinations' },
-          }
-        ];
-        setNotifications(seedNotifications);
+      } else {
+        setNotifications([]);
       }
     } catch (err) {
       console.error('Failed to load notifications', err);

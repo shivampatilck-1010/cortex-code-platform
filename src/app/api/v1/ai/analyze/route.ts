@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ClassroomAuth } from "@/lib/classroom/auth";
 import { aiRateLimiter } from "@/lib/execution/rate-limiter";
+import { getRuntimeVar } from "@/lib/env";
 
-const FALLBACK_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
 const CANDIDATE_MODELS = [
-  "gemini-3.7-flash",
+  "gemini-2.5-flash",
   "gemini-flash-latest",
-  "gemini-3.5-flash",
+  "gemini-2.0-flash",
 ];
 
 async function readJsonBody(req: NextRequest, maxSize: number = 512 * 1024) {
@@ -31,12 +31,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const key = FALLBACK_KEY;
+    const body = await readJsonBody(req);
+    const key =
+      (typeof body.apiKey === "string" && body.apiKey.trim()) ||
+      getRuntimeVar("GEMINI_API_KEY") ||
+      getRuntimeVar("GOOGLE_API_KEY");
     if (!key) {
       return NextResponse.json({ error: "AI provider not configured." }, { status: 503 });
     }
-
-    const body = await readJsonBody(req);
     
     const code = (body.code || "").slice(0, 10000);
     const prompt = `Analyze this ${body.languageId} code for ${body.mode}. Return JSON with { convertedCode, explanation, bugs, optimizations, complexityEstimate }.\n\nCode:\n${code}`;

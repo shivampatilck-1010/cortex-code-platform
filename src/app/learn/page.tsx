@@ -45,7 +45,7 @@ export default function LearnIndexPage() {
             <CortexLogo variant="header" size="sm" />
           </Link>
           <nav className="hidden sm:flex items-center space-x-1 pl-3 border-l border-[#252830]">
-            <Link href="/" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
+            <Link href="/ide" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
               IDE
             </Link>
             <Link href="/classroom" className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-[#1e2026] transition">
@@ -66,7 +66,7 @@ export default function LearnIndexPage() {
           </nav>
         </div>
         <Link
-          href="/"
+          href="/ide"
           className="text-xs font-semibold text-[#0b0c0e] bg-[#ff9100] hover:bg-[#e07f00] px-3 py-1.5 rounded transition shadow"
         >
           Launch Cloud IDE

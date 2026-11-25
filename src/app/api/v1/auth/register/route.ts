@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { classroomDb } from '@/lib/classroom/db';
 import { ClassroomAuth } from '@/lib/classroom/auth';
+import { isSecureRequest } from '@/lib/env';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CORTEX_ID_REGEX = /^[a-zA-Z0-9_]{3,20}$/; // Alphanumeric and underscore, 3-20 chars
@@ -94,7 +95,10 @@ export async function POST(req: NextRequest) {
       sessionId,
     });
     
-    response.headers.append('Set-Cookie', 'cortex_session=' + sessionId + '; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=' + new Date(expiresAt).toUTCString());
+    const cookieFlags = isSecureRequest(req)
+      ? '; HttpOnly; Secure; SameSite=Lax; Path=/; Expires='
+      : '; HttpOnly; SameSite=Lax; Path=/; Expires=';
+    response.headers.append('Set-Cookie', 'cortex_session=' + sessionId + cookieFlags + new Date(expiresAt).toUTCString());
 
     return response;
   } catch (err: any) {

@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { sanitizeRedirectPath } from '@/lib/env';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -12,8 +13,18 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [inviteCode, setInviteCode] = useState('');
+  const [redirectParam, setRedirectParam] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const rawRedirect = new URLSearchParams(window.location.search).get('redirect');
+      if (rawRedirect) {
+        setRedirectParam(sanitizeRedirectPath(rawRedirect, ''));
+      }
+    }
+  }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +43,18 @@ export default function RegisterPage() {
         throw new Error(data.error || 'Failed to register');
       }
 
-      router.push('/classroom');
+      if (typeof window !== 'undefined' && data?.user) {
+        localStorage.setItem('cortex_user', JSON.stringify(data.user));
+        localStorage.setItem('cortex_user_profile', JSON.stringify(data.user));
+        if (data.sessionId) {
+          localStorage.setItem('cortex_session_id', data.sessionId);
+        }
+        window.dispatchEvent(new Event('cortex-auth-changed'));
+      }
+      const rawRedirect =
+        redirectParam ||
+        (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('redirect') : null);
+      router.push(sanitizeRedirectPath(rawRedirect, '/classroom'));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -171,7 +193,14 @@ export default function RegisterPage() {
         </form>
         
         <div className="text-center text-sm text-gray-400">
-          Already have an account? <button onClick={() => router.push('/login')} className="text-[#ff9100] hover:underline">Login</button>
+          Already have an account?{' '}
+          <button
+            type="button"
+            onClick={() => router.push(redirectParam ? `/login?redirect=${encodeURIComponent(redirectParam)}` : '/login')}
+            className="text-[#ff9100] hover:underline"
+          >
+            Login
+          </button>
         </div>
       </div>
     </div>

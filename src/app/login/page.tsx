@@ -1,5 +1,6 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { sanitizeRedirectPath } from '@/lib/env';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CortexLogo } from '@/components/brand/CortexLogo';
@@ -41,12 +42,19 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string>('');
+  const [redirectParam, setRedirectParam] = useState<string>('');
+  const handleTurnstileSuccess = useCallback((token: string) => setTurnstileToken(token), []);
+  const handleTurnstileExpire = useCallback(() => setTurnstileToken(''), []);
   const turnstileRef = useRef<CloudflareTurnstileRef>(null);
 
   // Check if a code or auth error was passed via query params
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
+      const rawRedirect = params.get('redirect');
+      if (rawRedirect) {
+        setRedirectParam(sanitizeRedirectPath(rawRedirect, ''));
+      }
       const codeParam = params.get('code');
       if (codeParam) {
         setClassroomCode(codeParam.toUpperCase().trim());
@@ -115,8 +123,11 @@ export default function LoginPage() {
         } catch {}
       }
 
-      const redirectParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('redirect') : null;
-      const targetUrl = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/classroom';
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cortex-auth-changed'));
+      }
+      const rawRedirect = redirectParam || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('redirect') : null);
+      const targetUrl = sanitizeRedirectPath(rawRedirect, '/classroom');
       router.push(targetUrl);
     } catch (err: any) {
       setError(err.message);
@@ -213,7 +224,7 @@ export default function LoginPage() {
               {/* Google OAuth Login Button */}
               <div>
                 <a
-                  href="/api/v1/auth/google/login"
+                  href={redirectParam ? `/api/v1/auth/google/login?redirect=${encodeURIComponent(redirectParam)}` : '/api/v1/auth/google/login'}
                   className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-[#13151f] hover:bg-[#1a1d2c] border border-[#262a3d] hover:border-[#3b415e] rounded-xl text-xs sm:text-sm font-semibold text-white transition-all shadow-md group cursor-pointer"
                   title="Sign in with your Google account"
                 >
@@ -273,7 +284,7 @@ export default function LoginPage() {
                     </label>
                     <button
                       type="button"
-                      onClick={() => router.push('/forgot-password')}
+                      onClick={() => router.push(redirectParam ? `/forgot-password?redirect=${encodeURIComponent(redirectParam)}` : '/forgot-password')}
                       className="text-cyan-400 hover:text-cyan-300 text-[11px] font-medium transition-colors"
                     >
                       Forgot password?
@@ -303,8 +314,8 @@ export default function LoginPage() {
                 {/* Cloudflare Turnstile Verification Box */}
                 <CloudflareTurnstile
                   ref={turnstileRef}
-                  onSuccess={(token) => setTurnstileToken(token)}
-                  onExpire={() => setTurnstileToken('')}
+                  onSuccess={handleTurnstileSuccess}
+                  onExpire={handleTurnstileExpire}
                 />
 
                 <button
@@ -331,7 +342,7 @@ export default function LoginPage() {
                 Don&apos;t have an account?{' '}
                 <button
                   type="button"
-                  onClick={() => router.push('/register')}
+                  onClick={() => router.push(redirectParam ? `/register?redirect=${encodeURIComponent(redirectParam)}` : '/register')}
                   className="text-[#FF9100] hover:text-[#FFA726] hover:underline font-semibold transition-colors cursor-pointer"
                 >
                   Register here

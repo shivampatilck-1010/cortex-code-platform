@@ -57,6 +57,7 @@ import { zipSync, strToU8 } from 'fflate';
 import { formatSqlResultsToAsciiTable } from '@/lib/sql/formatter';
 import { useIdeLayout, useIdeDebugger } from '@/hooks';
 import { getStarterContentForFile } from '@/hooks/useIdeFiles';
+import { getGuestSqlProjectId } from '@/lib/sql/guest-session';
 import { Badge } from '@/components/ui/Badge';
 import { triggerThemeRippleTransition } from '@/lib/theme/ripple-transition';
 
@@ -325,6 +326,10 @@ function CloudIDEPageInner() {
     toggleSidebarTab,
   } = useIdeLayout();
 
+  const [traceSession, setTraceSession] = useState<TraceSession | null>(null);
+  const [isTracing, setIsTracing] = useState<boolean>(false);
+
+  const activeDebugTargetFile = files.find((f) => f.id === activeFileId && !f.isFolder);
   const {
     isDebugging,
     setIsDebugging,
@@ -337,10 +342,12 @@ function CloudIDEPageInner() {
     stopDebug,
     stepOver,
     parsedDebugInfo,
-  } = useIdeDebugger();
-
-  const [traceSession, setTraceSession] = useState<TraceSession | null>(null);
-  const [isTracing, setIsTracing] = useState<boolean>(false);
+  } = useIdeDebugger({
+    code: activeDebugTargetFile?.content,
+    activeFileName: activeDebugTargetFile?.name,
+    language: currentLang?.id,
+    traceEvents: traceSession?.events,
+  });
 
   // 5. AI Assistant & Auto-Fix State
   const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
@@ -479,12 +486,44 @@ function CloudIDEPageInner() {
 
   // Initialize Real-time Collaboration
   useEffect(() => {
-    const broker = new CollaborationBroker({ name: 'Local Dev' });
+    let initialCollabUser: { id?: string; name?: string; avatar?: string } = { name: 'Guest' };
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUser = localStorage.getItem('cortex_user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          if (parsed?.name) {
+            initialCollabUser = {
+              id: parsed.id,
+              name: parsed.name,
+              avatar: parsed.avatar,
+            };
+          }
+        }
+      } catch {
+        // ignore invalid stored user payload
+      }
+    }
+    const broker = new CollaborationBroker(initialCollabUser);
     collabBrokerRef.current = broker;
+    let isCancelled = false;
+    fetch('/api/v1/auth/me', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isCancelled && data?.user) {
+          broker.updateUser({
+            id: data.user.id,
+            name: data.user.name,
+            avatar: data.user.avatar,
+          });
+        }
+      })
+      .catch(() => {});
     const unsub = broker.subscribe((list) => {
       setCollaborators(list);
     });
     return () => {
+      isCancelled = true;
       unsub();
       broker.destroy();
     };
@@ -871,7 +910,7 @@ function CloudIDEPageInner() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              projectId: projectId || 'demo_sql_project',
+              projectId: projectId || getGuestSqlProjectId(),
               query: currentActive.content,
               dialect: 'sqlite',
             }),
@@ -2302,6 +2341,9 @@ function CloudIDEPageInner() {
           isOpen={isShareOpen}
           onClose={() => setIsShareOpen(false)}
           projectName={`${currentLang.name} Sandbox`}
+          projectId={projectId}
+          activeFileName={activeFile?.name}
+          activeFileContent={activeFile?.content}
         />
 
         <FeedbackModal

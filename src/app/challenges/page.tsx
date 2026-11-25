@@ -92,7 +92,11 @@ export default function ChallengesPage() {
           </div>
           <div className="hidden sm:flex items-center space-x-3">
             <div className="p-3 bg-[#16171d] rounded border border-[#2c2f3b] text-center">
-              <span className="text-lg font-bold text-yellow-400">1,280</span>
+              <span className="text-lg font-bold text-yellow-400">
+                {CHALLENGES.filter((c) => solvedIds.has(c.id))
+                  .reduce((sum, c) => sum + (c.difficulty === 'Hard' ? 350 : c.difficulty === 'Medium' ? 200 : 100), 0)
+                  .toLocaleString()}
+              </span>
               <span className="text-[10px] text-gray-400 block">Rating Score</span>
             </div>
           </div>
