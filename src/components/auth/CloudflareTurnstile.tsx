@@ -74,9 +74,10 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
 
     useEffect(() => {
       let isMounted = true;
+      let checkInterval: ReturnType<typeof setInterval> | null = null;
 
       const initTurnstile = () => {
-        if (!containerRef.current || !window.turnstile) return;
+        if (!isMounted || !containerRef.current || !window.turnstile) return;
 
         if (widgetIdRef.current) {
           try {
@@ -84,6 +85,7 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
           } catch {}
           widgetIdRef.current = null;
         }
+        containerRef.current.innerHTML = '';
 
         try {
           const id = window.turnstile.render(containerRef.current, {
@@ -137,18 +139,27 @@ export const CloudflareTurnstile = forwardRef<CloudflareTurnstileRef, Cloudflare
           };
           document.head.appendChild(script);
         } else {
-          const checkInterval = setInterval(() => {
+          checkInterval = setInterval(() => {
+            if (!isMounted) {
+              if (checkInterval) clearInterval(checkInterval);
+              checkInterval = null;
+              return;
+            }
             if (window.turnstile) {
-              clearInterval(checkInterval);
+              if (checkInterval) clearInterval(checkInterval);
+              checkInterval = null;
               initTurnstile();
             }
           }, 100);
-          return () => clearInterval(checkInterval);
         }
       }
 
       return () => {
         isMounted = false;
+        if (checkInterval) {
+          clearInterval(checkInterval);
+          checkInterval = null;
+        }
         if (typeof window !== 'undefined' && window.turnstile && widgetIdRef.current) {
           try {
             window.turnstile.remove(widgetIdRef.current);
