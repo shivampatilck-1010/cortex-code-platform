@@ -2,48 +2,151 @@
 
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { ProjectFile } from '@/lib/execution/types';
-import { LanguageConfig, getLanguageConfig } from '@/config/languages';
-import { detectLanguage } from '@/lib/editor/language-detector';
+import { LanguageConfig, SUPPORTED_LANGUAGES, getLanguageConfig } from '@/config/languages';
+import { detectLanguage, detectLanguageFromFilename } from '@/lib/editor/language-detector';
 import { zipSync, strToU8 } from 'fflate';
 import { SaveStatus } from '@/types/ide';
 
-export function getStarterContentForFile(filename: string, langConfig: LanguageConfig): string {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const baseName = filename.substring(0, filename.lastIndexOf('.')) || filename;
+function toValidTypeIdentifier(raw: string, fallback: string): string {
+  const cleaned = raw.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[^a-zA-Z_]+/, '');
+  return cleaned || fallback;
+}
 
-  switch (ext) {
-    case 'java':
-      return `public class ${baseName} {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}\n`;
-    case 'cs':
-      return `using System;\n\nnamespace CortexApp {\n    class ${baseName} {\n        static void Main(string[] args) {\n            Console.WriteLine("Hello, World!");\n        }\n    }\n}\n`;
-    case 'cpp':
-    case 'cc':
-    case 'cxx':
-      return `#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello, World!" << endl;\n    return 0;\n}\n`;
-    case 'c':
-      return `#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}\n`;
-    case 'py':
-      return `# Python Script\nprint("Hello, World!")\n`;
-    case 'js':
-    case 'mjs':
-      return `// JavaScript Node script\nconsole.log("Hello, World!");\n`;
-    case 'ts':
-      return `// TypeScript Module\nconst greeting: string = "Hello, World!";\nconsole.log(greeting);\n`;
-    case 'rs':
-      return `fn main() {\n    println!("Hello, World!");\n}\n`;
-    case 'go':
-      return `package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello, World!")\n}\n`;
-    case 'html':
-      return `<!DOCTYPE html>\n<html>\n<head>\n  <title>Preview</title>\n</head>\n<body>\n  <h1>Hello, World!</h1>\n</body>\n</html>\n`;
-    case 'css':
-      return `/* Styles */\nbody {\n  margin: 0;\n}\n`;
-    case 'sql':
-      return `-- SQL Query\nSELECT 1;\n`;
-    case 'md':
-      return `# ${baseName}\n\n`;
-    default:
-      return langConfig.starterCode || '';
+const KNOWN_EXTENSION_STARTERS: Record<string, (baseName: string, filename: string) => string> = {
+  java: (base) =>
+    `public class ${toValidTypeIdentifier(base, 'Main')} {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}\n`,
+  cs: (base) =>
+    `using System;\n\nnamespace CortexApp {\n    class ${toValidTypeIdentifier(base, 'Program')} {\n        static void Main(string[] args) {\n            Console.WriteLine("Hello, World!");\n        }\n    }\n}\n`,
+  cpp: () =>
+    `#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!\\n";\n    return 0;\n}\n`,
+  cc: () =>
+    `#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!\\n";\n    return 0;\n}\n`,
+  cxx: () =>
+    `#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!\\n";\n    return 0;\n}\n`,
+  'c++': () =>
+    `#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!\\n";\n    return 0;\n}\n`,
+  hpp: (base) => `#pragma once\n\n// ${base} C++ header declarations\n`,
+  c: () => `#include <stdio.h>\n\nint main(void) {\n    printf("Hello, World!\\n");\n    return 0;\n}\n`,
+  h: (base) => {
+    const guard = `${toValidTypeIdentifier(base, 'HEADER').toUpperCase()}_H`;
+    return `#ifndef ${guard}\n#define ${guard}\n\n#endif\n`;
+  },
+  py: () => `# Python 3.14 Script\nprint("Hello, World!")\n`,
+  pyw: () => `# Python Script\nprint("Hello, World!")\n`,
+  js: () => `// JavaScript (Node.js 22 LTS)\nconsole.log("Hello, World!");\n`,
+  mjs: () => `// JavaScript ES Module\nconsole.log("Hello, World!");\n`,
+  cjs: () => `// JavaScript CommonJS\nconsole.log("Hello, World!");\n`,
+  jsx: () => `// JSX Component\nexport default function App() {\n  return <h1>Hello, World!</h1>;\n}\n`,
+  ts: () => `// TypeScript 5.6+ Module\nconst greeting: string = "Hello, World!";\nconsole.log(greeting);\n`,
+  mts: () => `// TypeScript ES Module\nconst greeting: string = "Hello, World!";\nconsole.log(greeting);\n`,
+  tsx: () => `// TypeScript React Component\nexport default function App() {\n  return <h1>Hello, World!</h1>;\n}\n`,
+  rs: () => `fn main() {\n    println!("Hello, World!");\n}\n`,
+  go: () => `package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello, World!")\n}\n`,
+  kt: () => `fun main() {\n    println("Hello, World!")\n}\n`,
+  kts: () => `println("Hello, World!")\n`,
+  swift: () => `import Foundation\n\nprint("Hello, World!")\n`,
+  php: () => `<?php\necho "Hello, World!\\n";\n`,
+  rb: () => `# Ruby Script\nputs "Hello, World!"\n`,
+  dart: () => `void main() {\n  print('Hello, World!');\n}\n`,
+  scala: () => `@main def run(): Unit =\n  println("Hello, World!")\n`,
+  sc: () => `println("Hello, World!")\n`,
+  hs: () => `main :: IO ()\nmain = putStrLn "Hello, World!"\n`,
+  exs: () => `IO.puts("Hello, World!")\n`,
+  ex: () => `defmodule Main do\n  def run, do: IO.puts("Hello, World!")\nend\n`,
+  fs: () => `[<EntryPoint>]\nlet main _ =\n    printfn "Hello, World!"\n    0\n`,
+  fsx: () => `printfn "Hello, World!"\n`,
+  r: () => `cat("Hello, World!\\n")\n`,
+  sh: () => `#!/bin/bash\necho "Hello, World!"\n`,
+  bash: () => `#!/bin/bash\necho "Hello, World!"\n`,
+  lua: () => `print("Hello, World!")\n`,
+  pl: () => `#!/usr/bin/perl\nuse strict;\nuse warnings;\nprint "Hello, World!\\n";\n`,
+  pm: (base) => `package ${toValidTypeIdentifier(base, 'Module')};\nuse strict;\nuse warnings;\n1;\n`,
+  html: () => `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <title>Preview</title>\n</head>\n<body>\n  <h1>Hello, World!</h1>\n</body>\n</html>\n`,
+  htm: () => `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <title>Preview</title>\n</head>\n<body>\n  <h1>Hello, World!</h1>\n</body>\n</html>\n`,
+  css: () => `/* Styles */\nbody {\n  margin: 0;\n  font-family: system-ui, sans-serif;\n}\n`,
+  scss: () => `/* SCSS Styles */\nbody {\n  margin: 0;\n}\n`,
+  sql: () => `-- SQL Query\nSELECT 1 AS status;\n`,
+  json: () => `{\n  "name": "cortex-project",\n  "version": "1.0.0"\n}\n`,
+  yaml: () => `# YAML Configuration\nname: cortex-project\nversion: 1.0.0\n`,
+  yml: () => `# YAML Configuration\nname: cortex-project\nversion: 1.0.0\n`,
+  toml: () => `# TOML Configuration\nname = "cortex-project"\nversion = "1.0.0"\n`,
+  ini: () => `[cortex]\nversion = 1.0.0\n`,
+  xml: () => `<?xml version="1.0" encoding="UTF-8"?>\n<root />\n`,
+  svg: () => `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"></svg>\n`,
+  md: (base) => `# ${base}\n\n`,
+  markdown: (base) => `# ${base}\n\n`,
+  txt: () => ``,
+  log: () => ``,
+};
+
+export function getStarterContentForFile(filename: string, langConfig?: LanguageConfig): string {
+  const dotIdx = filename.lastIndexOf('.');
+  const ext = dotIdx !== -1 ? filename.substring(dotIdx + 1).toLowerCase() : '';
+  const baseName = dotIdx > 0 ? filename.substring(0, dotIdx) : filename || 'main';
+
+  if (ext && KNOWN_EXTENSION_STARTERS[ext]) {
+    return KNOWN_EXTENSION_STARTERS[ext](baseName, filename);
   }
+
+  const extLangId = detectLanguageFromFilename(filename);
+  if (extLangId) {
+    return getLanguageConfig(extLangId).starterCode || '';
+  }
+
+  if (dotIdx !== -1 && !langConfig) {
+    return '';
+  }
+
+  return langConfig?.starterCode || '';
+}
+
+/**
+ * Returns true if the current buffer is empty or still equals an unmodified
+ * starter/boilerplate template (so renaming a file extension or switching
+ * languages can cleanly refresh the template without discarding user code).
+ */
+export function isUntouchedStarterCode(content: string, currentFilename?: string): boolean {
+  const normalized = content.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return true;
+
+  for (const lang of SUPPORTED_LANGUAGES) {
+    if (lang.starterCode.replace(/\r\n/g, '\n').trim() === normalized) {
+      return true;
+    }
+    const fromDefault = getStarterContentForFile(lang.defaultFileName, lang).replace(/\r\n/g, '\n').trim();
+    if (fromDefault && fromDefault === normalized) {
+      return true;
+    }
+  }
+
+  if (currentFilename) {
+    const extId = detectLanguageFromFilename(currentFilename);
+    const cfg = extId ? getLanguageConfig(extId) : undefined;
+    const forFile = getStarterContentForFile(currentFilename, cfg).replace(/\r\n/g, '\n').trim();
+    if (forFile && forFile === normalized) {
+      return true;
+    }
+  }
+
+  for (const builder of Object.values(KNOWN_EXTENSION_STARTERS)) {
+    const sample = builder('main', 'main.tmp').replace(/\r\n/g, '\n').trim();
+    if (sample && sample === normalized) {
+      return true;
+    }
+  }
+
+  // Also catch legacy hardcoded Python 3.12+ default boilerplate across workspaces
+  if (
+    normalized.startsWith('# Universal Online Platform - ') &&
+    normalized.split('\n').length <= 24
+  ) {
+    return true;
+  }
+  if (normalized === '# Python Script\nprint("Hello, World!")') {
+    return true;
+  }
+
+  return false;
 }
 
 export interface UseIdeFilesOptions {

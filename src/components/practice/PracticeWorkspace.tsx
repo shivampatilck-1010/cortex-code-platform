@@ -686,7 +686,7 @@ export const PracticeWorkspace: React.FC<PracticeWorkspaceProps> = ({
                           value={langId}
                           className="bg-white text-zinc-900 dark:bg-[#1C1C1E] dark:text-zinc-100"
                         >
-                          {cfg?.name || langId}
+                          {cfg ? `${cfg.name} (${cfg.version})` : langId}
                         </option>
                       );
                     })}

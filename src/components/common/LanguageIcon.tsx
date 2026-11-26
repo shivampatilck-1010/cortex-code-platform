@@ -518,6 +518,62 @@ export const LanguageIcon: React.FC<LanguageIconProps> = ({
         </svg>
       );
 
+    case 'scala':
+    case 'sc':
+      return (
+        <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={`flex-shrink-0 ${className}`}>
+          <rect width="32" height="32" rx="6" fill="#DC322F" />
+          <path d="M8 9.5L24 7V11L8 13.5V9.5ZM8 16L24 13.5V17.5L8 20V16ZM8 22.5L24 20V24L8 26.5V22.5Z" fill="#FFFFFF" />
+        </svg>
+      );
+
+    case 'haskell':
+    case 'hs':
+      return (
+        <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={`flex-shrink-0 ${className}`}>
+          <rect width="32" height="32" rx="6" fill="#5E5086" />
+          <path d="M6 23L11.5 16L6 9H9.5L15 16L9.5 23H6ZM12 23L17.5 16L12 9H15.5L24.5 23H21L18.5 19L15.5 23H12ZM22 15.5H26V13.5H20.7L22 15.5ZM23.8 18.5H26V16.5H22.5L23.8 18.5Z" fill="#FFFFFF" />
+        </svg>
+      );
+
+    case 'elixir':
+    case 'exs':
+    case 'ex':
+      return (
+        <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={`flex-shrink-0 ${className}`}>
+          <rect width="32" height="32" rx="6" fill="#4B275F" />
+          <path d="M16.5 6C12 10.5 10 14.8 10 18.8C10 22.8 12.7 26 16.5 26C20.1 26 22.5 23.4 22.5 20.1C22.5 17 20.4 14.3 18.4 11.4C17.4 10 16.7 8.1 16.5 6Z" fill="#C084FC" />
+        </svg>
+      );
+
+    case 'fsharp':
+    case 'fs':
+    case 'fsx':
+      return (
+        <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={`flex-shrink-0 ${className}`}>
+          <rect width="32" height="32" rx="6" fill="#378BBA" />
+          <path d="M15.2 7L7 16L15.2 25V20.2L11.3 16L15.2 11.8V7ZM16.8 7V11.8L20.7 16L16.8 20.2V25L25 16L16.8 7Z" fill="#FFFFFF" />
+        </svg>
+      );
+
+    case 'html':
+    case 'htm':
+      return (
+        <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={`flex-shrink-0 ${className}`}>
+          <rect width="32" height="32" rx="6" fill="#E34F26" />
+          <path d="M9 10L6 16L9 22M23 10L26 16L23 22M18 9L14 23" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+
+    case 'css':
+    case 'scss':
+      return (
+        <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={`flex-shrink-0 ${className}`}>
+          <rect width="32" height="32" rx="6" fill="#1572B6" />
+          <path d="M12 10H22L21 15H13.5L13 18H20.5L19.5 22L15.5 23L11.5 22" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+
     default:
       return (
         <svg

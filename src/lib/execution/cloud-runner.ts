@@ -6,7 +6,7 @@ import { zipSync, strToU8 } from 'fflate';
 import { resolveMainFile } from './path-sanitizer';
 
 export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
-  python: 100,      // Python 3.12.5
+  python: 113,      // Python 3.14.0
   javascript: 102,  // Node.js 22.08.0
   typescript: 101,  // TypeScript 5.6.2
   cpp: 105,         // C++ (GCC 14.1.0)
@@ -21,6 +21,10 @@ export const JUDGE0_LANGUAGE_IDS: Record<string, number> = {
   swift: 83,        // Swift (5.2.3)
   r: 99,            // R (4.4.1)
   dart: 90,         // Dart (2.19.2)
+  scala: 112,       // Scala (3.4.2)
+  haskell: 61,      // Haskell (GHC 8.8.1)
+  elixir: 57,       // Elixir (1.9.4)
+  fsharp: 87,       // F# (.NET Core SDK 3.1)
   sql: 82,          // SQL (SQLite 3.27.2)
   bash: 46,         // Bash 5.0.0
   lua: 64,          // Lua 5.3.5

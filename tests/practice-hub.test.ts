@@ -869,6 +869,49 @@ async function runPracticeHubTests() {
     projectDb.getFile = origGetFile;
   }
 
+  const { getChallengeLanguages, getChallengeStarterTemplate } = await import(
+    '../src/lib/challenges/language-templates'
+  );
+  const { getStarterContentForFile, isUntouchedStarterCode } = await import('../src/hooks/useIdeFiles');
+  const { getLanguageConfig } = await import('../src/config/languages');
+
+  const dsaLangs = getChallengeLanguages(twoSumProblem!);
+  assert.ok(dsaLangs.length >= 20, `DSA challenges must expose 20+ languages, got ${dsaLangs.length}`);
+  assert.ok(
+    dsaLangs.includes('java') && dsaLangs.includes('rust') && dsaLangs.includes('go') && dsaLangs.includes('scala'),
+    'Practice language selector must include Java, Rust, Go, Scala alongside Python/C++/JS'
+  );
+  assert.strictEqual(
+    getChallengeStarterTemplate(twoSumProblem!, 'rust').includes('fn main()'),
+    true,
+    'Challenge Rust template must include fn main()'
+  );
+  assert.strictEqual(
+    getLanguageConfig('python').version,
+    '3.14.0',
+    'Python runtime config must use latest 3.14.0'
+  );
+  assert.strictEqual(
+    getLanguageConfig('html').id,
+    'html',
+    'getLanguageConfig(html) must resolve html rather than falling back to python'
+  );
+  assert.strictEqual(
+    isUntouchedStarterCode(getStarterContentForFile('main.py', getLanguageConfig('python')), 'main.py'),
+    true,
+    'isUntouchedStarterCode must detect Python starter code'
+  );
+  assert.strictEqual(
+    getStarterContentForFile('solution.cpp', getLanguageConfig('cpp')).includes('#include <iostream>'),
+    true,
+    '.cpp starter code must contain C++ boilerplate, never Python'
+  );
+  assert.strictEqual(
+    getStarterContentForFile('notes.txt', getLanguageConfig('plaintext')).includes('Python'),
+    false,
+    '.txt file starter code must not receive Python boilerplate'
+  );
+
   console.log('[PASS] /ide Practice Hub integration and theme support contracts verified');
   console.log('\n======================================================');
   console.log('ALL CORTEX PRACTICE HUB TESTS PASSED!');

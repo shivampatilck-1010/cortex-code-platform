@@ -38,6 +38,7 @@ import {
 } from '@/components/panels/ProblemDetailsPanel';
 import { usePracticeProgress } from '@/components/practice/usePracticeProgress';
 import { Challenge, CHALLENGES } from '@/lib/challenges/challenges-data';
+import { getChallengeLanguages, getChallengeStarterTemplate } from '@/lib/challenges/language-templates';
 import { OutputPanel } from '@/components/panels/OutputPanel';
 import { TerminalPanel } from '@/components/panels/TerminalPanel';
 import { TestCasesPanel } from '@/components/panels/TestCasesPanel';
@@ -66,7 +67,7 @@ import { detectLanguage, detectLanguageFromFilename, getMonacoLanguage } from '@
 import { zipSync, strToU8 } from 'fflate';
 import { formatSqlResultsToAsciiTable } from '@/lib/sql/formatter';
 import { useIdeLayout, useIdeDebugger } from '@/hooks';
-import { getStarterContentForFile } from '@/hooks/useIdeFiles';
+import { getStarterContentForFile, isUntouchedStarterCode } from '@/hooks/useIdeFiles';
 import { getGuestSqlProjectId } from '@/lib/sql/guest-session';
 import { Badge } from '@/components/ui/Badge';
 import { triggerThemeRippleTransition } from '@/lib/theme/ripple-transition';
@@ -694,7 +695,7 @@ function CloudIDEPageInner() {
       selected.name,
       selected.content,
       fileLanguageOverrides[selected.id],
-      currentLang.id
+      'plaintext'
     );
     const conf = getLanguageConfig(detected);
     if (conf) {
@@ -718,7 +719,7 @@ function CloudIDEPageInner() {
             nextActiveFile.name,
             nextActiveFile.content,
             fileLanguageOverrides[nextActiveFile.id],
-            currentLang.id
+            'plaintext'
           );
           const conf = getLanguageConfig(detected);
           if (conf) setCurrentLang(conf);
@@ -730,8 +731,12 @@ function CloudIDEPageInner() {
   };
 
   const handleCreateNewTabFile = async () => {
-    const nonFolders = files.filter((f) => !f.isFolder);
-    const fileName = `file_${nonFolders.length + 1}${currentLang.fileExtension}`;
+    let idx = files.filter((f) => !f.isFolder).length + 1;
+    let fileName = `file_${idx}${currentLang.fileExtension}`;
+    while (files.some((f) => f.name.toLowerCase() === fileName.toLowerCase())) {
+      idx++;
+      fileName = `file_${idx}${currentLang.fileExtension}`;
+    }
     const initialContent = getStarterContentForFile(fileName, currentLang);
     const path = `/${fileName}`;
 
@@ -807,18 +812,72 @@ function CloudIDEPageInner() {
     }
   };
 
-  // Language Change Handler: Preserves user code and saves manual override in local state
+  // Language Change Handler: Replaces untouched starter code & extension cleanly, preserves custom user code
   const handleLanguageChange = (newLang: LanguageConfig) => {
     if (newLang.id === currentLang.id) return;
 
-    if (activeFileId) {
-      setFileLanguageOverrides((prev) => {
-        const updated = { ...prev, [activeFileId]: newLang.id };
-        try {
-          localStorage.setItem('cortex_file_language_overrides', JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
+    const currentActive = files.find((f) => f.id === activeFileId && !f.isFolder);
+    if (currentActive) {
+      const currentExtLang = detectLanguageFromFilename(currentActive.name);
+      const isStarter = isUntouchedStarterCode(currentActive.content, currentActive.name);
+
+      if (isStarter && currentExtLang !== newLang.id) {
+        const dotIdx = currentActive.name.lastIndexOf('.');
+        const stem = dotIdx > 0 ? currentActive.name.substring(0, dotIdx) : currentActive.name;
+        const baseName = `${stem}${newLang.fileExtension}`;
+        let candidateName = baseName;
+        let suffix = 2;
+        while (
+          files.some(
+            (f) => f.id !== currentActive.id && f.name.toLowerCase() === candidateName.toLowerCase()
+          )
+        ) {
+          candidateName = `${stem}_${suffix}${newLang.fileExtension}`;
+          suffix++;
+        }
+
+        const parentPath = currentActive.path.substring(0, currentActive.path.lastIndexOf('/'));
+        const nextPath = parentPath === '' ? `/${candidateName}` : `${parentPath}/${candidateName}`;
+        const nextContent = getStarterContentForFile(candidateName, newLang);
+
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === currentActive.id
+              ? { ...f, name: candidateName, path: nextPath, content: nextContent }
+              : f
+          )
+        );
+        setFileLanguageOverrides((prev) => {
+          const next = { ...prev };
+          delete next[currentActive.id];
+          try {
+            localStorage.setItem('cortex_file_language_overrides', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+
+        if (projectId) {
+          if (saveFileRef.current) {
+            clearTimeout(saveFileRef.current);
+            saveFileRef.current = null;
+          }
+          fetch(`/api/v1/projects/${projectId}/files/${currentActive.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: candidateName, path: nextPath, content: nextContent }),
+          })
+            .then((res) => syncTimestampFromPatch(currentActive.id, res))
+            .catch(() => {});
+        }
+      } else {
+        setFileLanguageOverrides((prev) => {
+          const updated = { ...prev, [activeFileId]: newLang.id };
+          try {
+            localStorage.setItem('cortex_file_language_overrides', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+      }
     }
 
     setCurrentLang(newLang);
@@ -1543,17 +1602,18 @@ function CloudIDEPageInner() {
 
   const handleLaunchChallenge = useCallback(
     async (challenge: Challenge, preferredLang?: string, forceResetCode = false): Promise<ProjectFile | null> => {
+      const challengeLangs = getChallengeLanguages(challenge);
       const langKey =
-        challenge.track === 'SQL' && challenge.starterTemplates['sql']
+        challenge.track === 'SQL'
           ? 'sql'
-          : preferredLang && challenge.starterTemplates[preferredLang]
+          : preferredLang && challengeLangs.includes(preferredLang)
             ? preferredLang
-            : challenge.starterTemplates['python']
+            : challengeLangs.includes('python')
               ? 'python'
-              : Object.keys(challenge.starterTemplates)[0] || 'python';
+              : challengeLangs[0] || 'python';
 
       const targetLang = getLanguageConfig(langKey);
-      const starterCode = challenge.starterTemplates[langKey] || targetLang.starterCode || '';
+      const starterCode = getChallengeStarterTemplate(challenge, langKey) || targetLang.starterCode || '';
       const fileName = `${challenge.slug}${targetLang.fileExtension}`;
       const filePath = `/${fileName}`;
 
@@ -1725,7 +1785,7 @@ function CloudIDEPageInner() {
   const activeChallengeFile = useMemo(() => {
     if (!activePracticeChallenge) return null;
     const allowedNames = new Set(
-      Object.keys(activePracticeChallenge.starterTemplates).map(
+      getChallengeLanguages(activePracticeChallenge).map(
         (langKey) => `${activePracticeChallenge.slug}${getLanguageConfig(langKey).fileExtension}`
       )
     );
@@ -1743,7 +1803,7 @@ function CloudIDEPageInner() {
   const isChallengeFileActive = useMemo(() => {
     if (!activePracticeChallenge || !activeFile) return false;
     const allowedNames = new Set(
-      Object.keys(activePracticeChallenge.starterTemplates).map(
+      getChallengeLanguages(activePracticeChallenge).map(
         (langKey) => `${activePracticeChallenge.slug}${getLanguageConfig(langKey).fileExtension}`
       )
     );
@@ -1846,9 +1906,10 @@ function CloudIDEPageInner() {
   const handleStopDebug = stopDebug;
   const handleStepOver = stepOver;
 
-  const availPracticeLangs = activePracticeChallenge
-    ? Object.keys(activePracticeChallenge.starterTemplates)
-    : [];
+  const availPracticeLangs = useMemo(
+    () => (activePracticeChallenge ? getChallengeLanguages(activePracticeChallenge) : []),
+    [activePracticeChallenge]
+  );
   const resolvedPracticeLangId = activeChallengeFile
     ? detectLanguage(
         activeChallengeFile.name,
@@ -2382,6 +2443,7 @@ function CloudIDEPageInner() {
               isDarkMode={isDarkMode}
               onToggleDarkMode={handleToggleDarkMode}
               currentLanguage={currentLang}
+              onLanguageChange={handleLanguageChange}
               isExecutable={currentLang.executable !== false}
               selectedSqlDialect={selectedSqlDialect}
               onSqlDialectChange={setSelectedSqlDialect}
@@ -2466,10 +2528,10 @@ function CloudIDEPageInner() {
                       onCreateFile={async (name, isFolder, parentFolderId) => {
                         const parent = parentFolderId ? files.find((f) => f.id === parentFolderId) : null;
                         const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
-                        const detectedLangId = detectLanguage(name, '');
+                        const detectedLangId = detectLanguage(name, '', undefined, 'plaintext');
                         const detectedLang = getLanguageConfig(detectedLangId);
-                        const starter = getStarterContentForFile(name, detectedLang);
-                        const initialContent = isFolder ? '' : (starter || detectedLang.starterCode || '');
+                        const starter = isFolder ? '' : getStarterContentForFile(name, detectedLang);
+                        const initialContent = starter;
                         const path = parent ? `${parentPath}/${name}` : `/${name}`;
 
                         if (projectId) {
@@ -2539,6 +2601,19 @@ function CloudIDEPageInner() {
                         const parentPath = f ? f.path.substring(0, f.path.lastIndexOf('/')) : '';
                         const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
 
+                        let updatedContent = f?.content ?? '';
+                        const oldDetectedId = f ? detectLanguage(f.name, f.content, fileLanguageOverrides[id], currentLang.id) : currentLang.id;
+                        const newDetectedId = detectLanguage(newName, '', undefined, 'plaintext');
+                        const newConf = getLanguageConfig(newDetectedId);
+                        const shouldReplaceStarter =
+                          Boolean(f && !f.isFolder) &&
+                          oldDetectedId !== newDetectedId &&
+                          isUntouchedStarterCode(f?.content || '', f?.name);
+
+                        if (shouldReplaceStarter) {
+                          updatedContent = getStarterContentForFile(newName, newConf);
+                        }
+
                         if (projectId) {
                           if (id === activeFileId && saveFileRef.current) {
                             clearTimeout(saveFileRef.current);
@@ -2551,7 +2626,9 @@ function CloudIDEPageInner() {
                               body: JSON.stringify({
                                 name: newName,
                                 path: newPath,
-                                ...(id === activeFileId && f ? { content: f.content } : {}),
+                                ...(shouldReplaceStarter || (id === activeFileId && f)
+                                  ? { content: updatedContent }
+                                  : {}),
                               }),
                             });
                             await syncTimestampFromPatch(id, renameRes);
@@ -2561,8 +2638,9 @@ function CloudIDEPageInner() {
                           } catch (e) { console.error(e); }
                         }
 
-                        if (id === activeFileId && f && !f.isFolder) {
+                        if (f && !f.isFolder) {
                           setFileLanguageOverrides((prev) => {
+                            if (!(id in prev)) return prev;
                             const next = { ...prev };
                             delete next[id];
                             try {
@@ -2571,10 +2649,8 @@ function CloudIDEPageInner() {
                             return next;
                           });
 
-                          const detected = detectLanguage(newName, f.content, undefined, currentLang.id);
-                          const conf = getLanguageConfig(detected);
-                          if (conf) {
-                            setCurrentLang(conf);
+                          if (id === activeFileId && newConf) {
+                            setCurrentLang(newConf);
                           }
                         }
 
@@ -2585,6 +2661,7 @@ function CloudIDEPageInner() {
                               ...file,
                               name: newName,
                               path: newPath,
+                              content: updatedContent,
                             };
                           })
                         );

@@ -29,7 +29,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { LanguageConfig } from '@/config/languages';
+import { LanguageConfig, SUPPORTED_LANGUAGES, getLanguageConfig } from '@/config/languages';
 import { LanguageIcon } from '@/components/common/LanguageIcon';
 import { detectLanguageFromFilename } from '@/lib/editor/language-detector';
 import { ExecutionResult, ProjectFile } from '@/lib/execution/types';
@@ -50,6 +50,7 @@ export interface CortexIdeShellProps {
   isDarkMode: boolean;
   onToggleDarkMode: (coords?: { x: number; y: number }) => void;
   currentLanguage: LanguageConfig;
+  onLanguageChange?: (lang: LanguageConfig) => void;
   isExecutable?: boolean;
   selectedSqlDialect?: 'sqlite' | 'postgresql' | 'mysql' | 'mssql' | 'oracle';
   onSqlDialectChange?: (dialect: 'sqlite' | 'postgresql' | 'mysql' | 'mssql' | 'oracle') => void;
@@ -140,6 +141,7 @@ export const CortexIdeShell: React.FC<CortexIdeShellProps> = ({
   isDarkMode,
   onToggleDarkMode,
   currentLanguage,
+  onLanguageChange,
   isExecutable = true,
   selectedSqlDialect = 'sqlite',
   onSqlDialectChange,
@@ -394,8 +396,31 @@ export const CortexIdeShell: React.FC<CortexIdeShellProps> = ({
           </kbd>
         </button>
 
-        {/* Right: AI Complete Dot + Graphite Run Split + Minimal Theme Icon */}
+        {/* Right: Language Picker + AI Complete Dot + Graphite Run Split + Minimal Theme Icon */}
         <div className="flex items-center gap-2 shrink-0">
+          {onLanguageChange && (
+            <div className="hidden sm:flex items-center gap-1.5 h-7 px-2 rounded-md bg-black/[0.04] dark:bg-[#141418] border border-black/[0.07] dark:border-white/[0.08] hover:border-black/[0.14] dark:hover:border-white/[0.14] transition-colors">
+              <LanguageIcon languageId={currentLanguage.id} className="w-3.5 h-3.5 shrink-0" />
+              <select
+                value={currentLanguage.id}
+                onChange={(e) => onLanguageChange(getLanguageConfig(e.target.value))}
+                aria-label="Select IDE language"
+                data-testid="ide-language-select"
+                className="bg-transparent text-[11.5px] font-medium text-zinc-700 dark:text-zinc-200 focus:outline-none cursor-pointer max-w-[165px]"
+              >
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option
+                    key={lang.id}
+                    value={lang.id}
+                    className="bg-white text-zinc-900 dark:bg-[#18181C] dark:text-zinc-100"
+                  >
+                    {lang.name} ({lang.version})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={onToggleAiComplete}

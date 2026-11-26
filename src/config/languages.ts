@@ -26,21 +26,21 @@ export const SUPPORTED_LANGUAGES: LanguageConfig[] = [
   {
     id: 'python',
     name: 'Python',
-    version: '3.12+',
+    version: '3.14.0',
     aliases: ['py', 'python3'],
     monacoLang: 'python',
     fileExtension: '.py',
     defaultFileName: 'main.py',
-    compiler: 'CPython 3.12 (GCC 14)',
+    compiler: 'CPython 3.14.0 (GCC 14)',
     runCommand: 'python3 main.py',
     debuggerSupported: true,
     packageManager: 'pip',
-    pistonRuntime: { language: 'python', version: '3.12.5' },
-    starterCode: `# Universal Online Platform - Python 3.12+
+    pistonRuntime: { language: 'python', version: '3.14.0' },
+    starterCode: `# Universal Online Platform - Python 3.14
 import sys
 
 def main():
-    print("[Cortex] Python 3.12+ Cloud IDE")
+    print(f"[Cortex] Python {sys.version.split()[0]} Cloud IDE")
     numbers = [1, 2, 3, 4, 5]
     squared = [x**2 for x in numbers]
     print(f"Squares: {squared}")
@@ -621,6 +621,163 @@ features:
     executable: false,
   },
   {
+    id: 'scala',
+    name: 'Scala',
+    version: '3.4.2',
+    aliases: ['scala', 'sc'],
+    monacoLang: 'scala',
+    fileExtension: '.scala',
+    defaultFileName: 'Main.scala',
+    compiler: 'Scala 3.4.2 (JVM)',
+    buildCommand: 'scalac Main.scala',
+    runCommand: 'scala Main',
+    debuggerSupported: false,
+    packageManager: 'sbt / scala-cli',
+    pistonRuntime: { language: 'scala', version: '3.4.2' },
+    starterCode: `// Universal Online Platform - Scala 3.4.2
+@main def run(): Unit =
+  println("[Cortex] Scala 3 Functional & JVM Runtime")
+  val data = List(1, 2, 3, 4, 5).map(_ * 10)
+  println(s"Mapped sequence: \${data.mkString(", ")}")
+`,
+    memoryLimitMb: 256,
+    timeoutSec: 15,
+    category: 'enterprise',
+  },
+  {
+    id: 'haskell',
+    name: 'Haskell',
+    version: 'GHC 8.8',
+    aliases: ['hs', 'haskell'],
+    monacoLang: 'plaintext',
+    fileExtension: '.hs',
+    defaultFileName: 'Main.hs',
+    compiler: 'GHC 8.8.1',
+    buildCommand: 'ghc -O2 Main.hs -o main',
+    runCommand: './main',
+    debuggerSupported: false,
+    packageManager: 'cabal / stack',
+    pistonRuntime: { language: 'haskell', version: '9.0.1' },
+    starterCode: `-- Universal Online Platform - Haskell (GHC)
+module Main where
+
+main :: IO ()
+main = do
+  putStrLn "[Cortex] Haskell Pure Functional Runtime"
+  print (map (* 2) [1..5])
+`,
+    memoryLimitMb: 256,
+    timeoutSec: 12,
+    category: 'systems',
+  },
+  {
+    id: 'elixir',
+    name: 'Elixir',
+    version: '1.9+',
+    aliases: ['exs', 'ex', 'elixir'],
+    monacoLang: 'plaintext',
+    fileExtension: '.exs',
+    defaultFileName: 'main.exs',
+    compiler: 'Elixir (BEAM VM)',
+    runCommand: 'elixir main.exs',
+    debuggerSupported: false,
+    packageManager: 'mix / hex',
+    pistonRuntime: { language: 'elixir', version: '1.11.3' },
+    starterCode: `# Universal Online Platform - Elixir (BEAM VM)
+IO.puts("[Cortex] Elixir Concurrent Actor Sandbox")
+result = 1..5 |> Enum.map(&(&1 * &1))
+IO.inspect(result, label: "Squares")
+`,
+    memoryLimitMb: 256,
+    timeoutSec: 12,
+    category: 'scripting',
+  },
+  {
+    id: 'fsharp',
+    name: 'F#',
+    version: '.NET Core',
+    aliases: ['fs', 'fsx', 'fsharp'],
+    monacoLang: 'fsharp',
+    fileExtension: '.fs',
+    defaultFileName: 'Program.fs',
+    compiler: 'F# (.NET SDK)',
+    buildCommand: 'dotnet build',
+    runCommand: 'dotnet run',
+    debuggerSupported: false,
+    packageManager: 'NuGet',
+    pistonRuntime: { language: 'fsharp.net', version: '5.0.201' },
+    starterCode: `// Universal Online Platform - F# (.NET)
+open System
+
+[<EntryPoint>]
+let main _ =
+    printfn "[Cortex] F# Functional .NET Runtime"
+    [1..5] |> List.map (fun x -> x * x) |> printfn "Squares: %A"
+    0
+`,
+    memoryLimitMb: 256,
+    timeoutSec: 12,
+    category: 'enterprise',
+  },
+  {
+    id: 'html',
+    name: 'HTML5',
+    version: 'HTML5',
+    aliases: ['html', 'htm'],
+    monacoLang: 'html',
+    fileExtension: '.html',
+    defaultFileName: 'index.html',
+    compiler: 'Browser DOM Preview',
+    runCommand: '',
+    debuggerSupported: false,
+    starterCode: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cortex Preview</title>
+</head>
+<body>
+  <h1>Hello from Cortex Web Preview</h1>
+</body>
+</html>
+`,
+    memoryLimitMb: 64,
+    timeoutSec: 5,
+    category: 'web',
+    executable: false,
+  },
+  {
+    id: 'css',
+    name: 'CSS',
+    version: 'CSS3',
+    aliases: ['css', 'scss'],
+    monacoLang: 'css',
+    fileExtension: '.css',
+    defaultFileName: 'styles.css',
+    compiler: 'CSS Stylesheet',
+    runCommand: '',
+    debuggerSupported: false,
+    starterCode: `/* Cortex IDE Stylesheet */
+:root {
+  --bg: #0c0c0e;
+  --fg: #f4f4f5;
+  --accent: #f59e0b;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+`,
+    memoryLimitMb: 64,
+    timeoutSec: 5,
+    category: 'web',
+    executable: false,
+  },
+  {
     id: 'markdown',
     name: 'Markdown',
     version: 'CommonMark',
@@ -636,10 +793,27 @@ features:
 Welcome to your project in Cortex IDE.
 
 ## Features
-- 28+ Supported Languages
+- 25+ Supported Languages
 - Isolated SQL Sandbox
 - Real-time Collaboration
 `,
+    memoryLimitMb: 64,
+    timeoutSec: 5,
+    category: 'config',
+    executable: false,
+  },
+  {
+    id: 'plaintext',
+    name: 'Plain Text',
+    version: 'UTF-8',
+    aliases: ['txt', 'text', 'plaintext'],
+    monacoLang: 'plaintext',
+    fileExtension: '.txt',
+    defaultFileName: 'notes.txt',
+    compiler: 'Plain Text',
+    runCommand: '',
+    debuggerSupported: false,
+    starterCode: '',
     memoryLimitMb: 64,
     timeoutSec: 5,
     category: 'config',

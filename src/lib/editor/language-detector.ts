@@ -10,18 +10,22 @@
 
 export const EXTENSION_TO_LANGUAGE_MAP: Record<string, string> = {
   '.py': 'python',
+  '.pyw': 'python',
   '.c': 'c',
   '.cpp': 'cpp',
   '.cc': 'cpp',
   '.cxx': 'cpp',
+  '.c++': 'cpp',
   '.h': 'c',
   '.hpp': 'cpp',
   '.java': 'java',
   '.js': 'javascript',
   '.jsx': 'javascript',
   '.mjs': 'javascript',
+  '.cjs': 'javascript',
   '.ts': 'typescript',
   '.tsx': 'typescript',
+  '.mts': 'typescript',
   '.html': 'html',
   '.htm': 'html',
   '.css': 'css',
@@ -33,6 +37,13 @@ export const EXTENSION_TO_LANGUAGE_MAP: Record<string, string> = {
   '.kts': 'kotlin',
   '.swift': 'swift',
   '.cs': 'csharp',
+  '.scala': 'scala',
+  '.sc': 'scala',
+  '.hs': 'haskell',
+  '.exs': 'elixir',
+  '.ex': 'elixir',
+  '.fs': 'fsharp',
+  '.fsx': 'fsharp',
   '.sql': 'sql',
   '.r': 'r',
   '.dart': 'dart',
@@ -51,6 +62,8 @@ export const EXTENSION_TO_LANGUAGE_MAP: Record<string, string> = {
   '.svg': 'xml',
   '.toml': 'yaml',
   '.ini': 'yaml',
+  '.txt': 'plaintext',
+  '.log': 'plaintext',
 };
 
 export const MONACO_LANGUAGE_MAP: Record<string, string> = {
@@ -77,6 +90,13 @@ export const MONACO_LANGUAGE_MAP: Record<string, string> = {
   swift: 'swift',
   csharp: 'csharp',
   cs: 'csharp',
+  scala: 'scala',
+  haskell: 'plaintext',
+  hs: 'plaintext',
+  elixir: 'plaintext',
+  exs: 'plaintext',
+  fsharp: 'fsharp',
+  fs: 'fsharp',
   sql: 'sql',
   r: 'r',
   dart: 'dart',
@@ -95,6 +115,8 @@ export const MONACO_LANGUAGE_MAP: Record<string, string> = {
   md: 'markdown',
   toml: 'ini',
   ini: 'ini',
+  plaintext: 'plaintext',
+  txt: 'plaintext',
 };
 
 const SHEBANG_PATTERNS: Array<{ pattern: RegExp; lang: string }> = [
