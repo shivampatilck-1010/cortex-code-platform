@@ -1,19 +1,16 @@
 'use client';
 
 import React from 'react';
-import { 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  Clock, 
-  Cpu, 
-  Terminal, 
-  ChevronRight, 
-  ChevronDown,
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
+  Cpu,
+  Play,
   Wand2,
-  Info
 } from 'lucide-react';
-import { ExecutionResult, DiagnosticError } from '@/lib/execution/types';
+import { ExecutionResult } from '@/lib/execution/types';
 
 export interface OutputPanelProps {
   result: ExecutionResult | null;
@@ -28,6 +25,10 @@ export interface OutputPanelProps {
   onRun?: () => void;
 }
 
+/**
+ * Zero-overflow horizontal split Output & Stdin panel.
+ * Renders execution stream on the left and persistent side-by-side Stdin input on the right.
+ */
 export const OutputPanel: React.FC<OutputPanelProps> = ({
   result,
   isRunning,
@@ -42,250 +43,201 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
 }) => {
   const effectiveStdin = stdin !== undefined ? stdin : customStdin;
   const handleStdinChange = onStdinChange || onChangeCustomStdin;
-  const displayedStdin = (result?.stdin && result.stdin.trim())
-    ? result.stdin
-    : (effectiveStdin && effectiveStdin.trim() ? effectiveStdin : '');
-  if (isRunning) {
-    return (
-      <div className={`flex items-center justify-center h-full space-x-2 ${isDarkMode ? 'bg-[#141518] text-gray-400' : 'bg-white text-slate-500'}`}>
-        <div className="w-4 h-4 border-2 border-[#ff9100] border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs font-mono">Running...</span>
-      </div>
-    );
-  }
+  const displayedStdin =
+    result?.stdin && result.stdin.trim()
+      ? result.stdin
+      : effectiveStdin && effectiveStdin.trim()
+        ? effectiveStdin
+        : '';
 
-  if (!result) {
-    return (
-      <div className={`h-full flex flex-col text-xs font-mono select-text overflow-hidden transition-colors duration-200 ${
-        isDarkMode ? 'bg-[#141518] text-gray-200' : 'bg-white text-slate-800'
-      }`}>
-        <div className="flex-1 flex flex-col items-center justify-center space-y-2 p-4">
-          <Terminal className="w-6 h-6 opacity-30" />
-          <p className="text-xs font-mono text-center">Press Run (Ctrl+Enter) to execute</p>
-        </div>
+  const isSuccess = result?.status === 'success';
+  const hasErrors =
+    result?.status === 'compilation_error' || result?.status === 'runtime_error';
 
-        {handleStdinChange && (
-          <div className={`border-t p-3 space-y-2 shrink-0 ${
-            isDarkMode ? 'bg-[#101114] border-[#252830]' : 'bg-slate-50 border-slate-200'
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-heading font-semibold uppercase tracking-wider ${
-                isDarkMode ? 'text-gray-300' : 'text-slate-700'
-              }`}>
-                Program Input (stdin)
+  return (
+    <div
+      data-testid="ide-output-split"
+      className={`${
+        isDarkMode ? 'dark bg-[#0F0F12] text-zinc-200' : 'bg-[#F8F8FA] text-zinc-800'
+      } h-full flex divide-x divide-black/[0.07] dark:divide-white/[0.07] font-mono text-[12px] overflow-hidden select-text`}
+    >
+      {/* Left: Execution Output Stream */}
+      <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden">
+        {result && !isRunning && (
+          <div className="h-8 px-3 border-b border-black/[0.06] dark:border-white/[0.06] flex items-center justify-between gap-2 shrink-0 bg-black/[0.015] dark:bg-white/[0.02]">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {isSuccess ? (
+                <span className="inline-flex items-center gap-1.5 font-sans font-medium text-[11.5px] text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Completed</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 font-sans font-medium text-[11.5px] text-rose-600 dark:text-rose-400">
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>
+                    {result.status === 'compilation_error'
+                      ? 'Compilation Failed'
+                      : 'Runtime Error'}
+                  </span>
+                </span>
+              )}
+              <span className="text-[11px] text-zinc-500">Exit {result.exitCode}</span>
+            </div>
+
+            <div className="flex items-center gap-3 text-[11px] text-zinc-500 shrink-0">
+              <span className="inline-flex items-center gap-1" title="Execution Time">
+                <Clock className="w-3 h-3" />
+                <span>{result.executionTimeMs} ms</span>
               </span>
-              {onRun && (
+              <span className="inline-flex items-center gap-1" title="Memory">
+                <Cpu className="w-3 h-3" />
+                <span>{result.memoryUsageMb} MB</span>
+              </span>
+              {hasErrors && onTriggerAutoFix && (
                 <button
                   type="button"
-                  onClick={onRun}
-                  className="px-2.5 py-1 rounded text-xs font-semibold bg-[#ff9100] text-black hover:bg-[#ffa726] transition shadow-sm"
+                  onClick={onTriggerAutoFix}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-sans font-medium text-[11px] border border-amber-500/35 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/15 transition-colors"
+                  title="Quick Fix"
                 >
-                  Run with Input
+                  <Wand2 className="w-3 h-3" />
+                  <span>Quick Fix</span>
                 </button>
               )}
             </div>
-            <textarea
-              value={effectiveStdin}
-              onChange={(e) => handleStdinChange(e.target.value)}
-              placeholder="Enter program input here (e.g. for cin >> or input())..."
-              rows={2}
-              className={`w-full p-2 text-xs font-mono rounded resize-y border outline-none ${
-                isDarkMode
-                  ? 'bg-[#18191d] border-[#262832] text-gray-200 focus:border-[#ff9100]'
-                  : 'bg-white border-slate-300 text-slate-800 focus:border-[#ff9100]'
-              }`}
-            />
           </div>
         )}
-      </div>
-    );
-  }
 
-  const isSuccess = result.status === 'success';
-  const hasErrors = result.status === 'compilation_error' || result.status === 'runtime_error';
-
-  return (
-    <div className={`h-full flex flex-col text-xs font-mono select-text overflow-hidden transition-colors duration-200 ${
-      isDarkMode ? 'bg-[#141518] text-gray-200' : 'bg-white text-slate-800'
-    }`}>
-      {/* Telemetry Header */}
-      <div className={`px-3.5 py-2 border-b flex items-center justify-between transition-colors duration-200 ${
-        isDarkMode ? 'bg-[#18191e] border-[#252830]' : 'bg-slate-100 border-slate-200'
-      }`}>
-        <div className="flex items-center space-x-2.5">
-          {isSuccess ? (
-            <div className={`flex items-center space-x-1.5 font-heading font-bold text-xs ${
-              isDarkMode ? 'text-emerald-400' : 'text-emerald-600'
-            }`}>
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Completed</span>
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 leading-relaxed">
+          {isRunning ? (
+            <div className="h-full flex items-center justify-center gap-2 text-zinc-500">
+              <span className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+              <span>Running program...</span>
+            </div>
+          ) : !result ? (
+            <div className="h-full flex items-center justify-center text-zinc-500">
+              <span>
+                Press{' '}
+                <kbd className="mx-1 px-1.5 py-0.5 rounded bg-black/[0.05] dark:bg-white/[0.06] text-[11px]">
+                  Ctrl + Enter
+                </kbd>{' '}
+                to run
+              </span>
             </div>
           ) : (
-            <div className={`flex items-center space-x-1.5 font-heading font-bold text-xs ${
-              isDarkMode ? 'text-rose-400' : 'text-rose-600'
-            }`}>
-              <XCircle className="w-4 h-4" />
-              <span>{result.status === 'compilation_error' ? 'Compilation Failed' : 'Runtime Error'}</span>
-            </div>
-          )}
-          <span className={`text-xs font-mono ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>
-            Exit Code {result.exitCode}
-          </span>
-        </div>
-
-        <div className={`flex items-center space-x-3.5 text-xs ${isDarkMode ? 'text-gray-300' : 'text-slate-600'}`}>
-          <div className="flex items-center space-x-1.5" title="Execution Time">
-            <Clock className={`w-3.5 h-3.5 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`} />
-            <span className="font-mono">{result.executionTimeMs} ms</span>
-          </div>
-          <div className="flex items-center space-x-1.5" title="Memory">
-            <Cpu className={`w-3.5 h-3.5 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`} />
-            <span className="font-mono">{result.memoryUsageMb} MB</span>
-          </div>
-
-          {hasErrors && onTriggerAutoFix && (
-            <button
-              onClick={onTriggerAutoFix}
-              className="flex items-center space-x-1.5 px-3 py-1 rounded bg-[#ff9100] hover:bg-[#e08000] text-slate-950 font-heading font-bold text-xs transition shadow-sm"
-              title="Quick Fix"
-            >
-              <Wand2 className="w-3.5 h-3.5" />
-              <span>Quick Fix</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Output Stream Content */}
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
-        {/* Diagnostics & Line Errors */}
-        {result.diagnostics && result.diagnostics.length > 0 && (
-          <div className={`rounded p-2.5 space-y-1.5 border ${
-            isDarkMode ? 'bg-rose-950/20 border-rose-800/40 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-900'
-          }`}>
-            <div className={`flex items-center justify-between font-heading font-bold text-xs pb-1.5 border-b ${
-              isDarkMode ? 'text-rose-400 border-rose-900/30' : 'text-rose-700 border-rose-200'
-            }`}>
-              <div className="flex items-center space-x-1.5">
-                <AlertTriangle className="w-4 h-4" />
-                <span>Problems ({result.diagnostics.length})</span>
-              </div>
-            </div>
-            {result.diagnostics.map((diag, i) => (
-              <div
-                key={i}
-                onClick={() => {
-                  if (onJumpToLine) onJumpToLine(diag.line);
-                  if (onTriggerAutoFix) onTriggerAutoFix();
-                }}
-                className={`flex items-center justify-between p-2 rounded cursor-pointer transition text-xs group ${
-                  isDarkMode ? 'text-rose-200 hover:bg-rose-900/30' : 'text-rose-900 hover:bg-rose-100/70'
-                }`}
-              >
-                <div className="flex items-center space-x-2.5 truncate">
-                  <span className="text-[#ff9100] font-heading font-bold flex-shrink-0">Line {diag.line}</span>
-                  <span className="truncate font-mono">{diag.message}</span>
+            <>
+              {/* Diagnostics */}
+              {result.diagnostics && result.diagnostics.length > 0 && (
+                <div className="rounded-md p-2.5 space-y-1 border border-rose-500/25 bg-rose-500/[0.06] text-rose-700 dark:text-rose-200">
+                  <div className="flex items-center gap-1.5 font-sans font-medium text-[11.5px] text-rose-600 dark:text-rose-400 pb-1 border-b border-rose-500/20">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Problems ({result.diagnostics.length})</span>
+                  </div>
+                  {result.diagnostics.map((diag, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        if (onJumpToLine) onJumpToLine(diag.line);
+                        if (onTriggerAutoFix) onTriggerAutoFix();
+                      }}
+                      className="w-full flex items-center justify-between px-2 py-1 rounded text-left text-[11.5px] hover:bg-rose-500/10 group transition-colors"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="text-amber-600 dark:text-amber-400 font-medium shrink-0">
+                          Line {diag.line}
+                        </span>
+                        <span className="truncate">{diag.message}</span>
+                      </span>
+                      <span className="text-[11px] font-sans text-amber-600 dark:text-amber-400 opacity-0 group-hover:opacity-100 shrink-0 ml-2">
+                        Quick Fix
+                      </span>
+                    </button>
+                  ))}
                 </div>
-                <span className="text-xs text-[#ff9100] font-heading font-semibold opacity-0 group-hover:opacity-100 transition flex-shrink-0 ml-2">Quick Fix &rarr;</span>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
 
-        {/* Standard Input (stdin) Display */}
-        {Boolean(displayedStdin) && (
-          <div>
-            <span className={`text-xs uppercase font-heading font-bold tracking-wider block mb-1.5 ${
-              isDarkMode ? 'text-amber-400' : 'text-amber-700'
-            }`}>
-              Standard Input (stdin):
-            </span>
-            <pre className={`p-3 rounded whitespace-pre-wrap leading-relaxed font-mono text-[13px] border ${
-              isDarkMode ? 'text-amber-300 bg-[#18191d] border-[#262832]' : 'text-amber-900 bg-amber-50/50 border-amber-200 shadow-sm'
-            }`}>
-              {displayedStdin}
-            </pre>
-          </div>
-        )}
+              {/* Echoed Standard Input (stdin) */}
+              {Boolean(displayedStdin) && (
+                <div className="space-y-1">
+                  <span className="text-[10.5px] uppercase tracking-wider text-zinc-500 block">
+                    Standard Input (stdin)
+                  </span>
+                  <pre className="p-2.5 rounded-md whitespace-pre-wrap break-words bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] text-zinc-700 dark:text-zinc-300">
+                    {displayedStdin}
+                  </pre>
+                </div>
+              )}
 
-        {/* Clean Empty Output Notice */}
-        {isSuccess && !result.stdout && !result.stderr && (
-          <div className={`text-xs py-2 ${isDarkMode ? 'text-gray-400' : 'text-slate-500'}`}>
-            Process completed with exit code 0 (no output).
-          </div>
-        )}
+              {isSuccess && !result.stdout && !result.stderr && (
+                <div className="text-zinc-500 py-1">
+                  Process completed with exit code 0 (no output).
+                </div>
+              )}
 
-        {/* Standard Output */}
-        {result.stdout && (
-          <div>
-            <span className={`text-xs uppercase font-heading font-bold tracking-wider block mb-1.5 ${
-              isDarkMode ? 'text-gray-400' : 'text-slate-600'
-            }`}>
-              Standard Output:
-            </span>
-            <pre className={`p-3 rounded whitespace-pre-wrap leading-relaxed font-mono text-[13px] border ${
-              isDarkMode ? 'text-gray-200 bg-[#18191d] border-[#262832]' : 'text-slate-900 bg-slate-50 border-slate-200 shadow-sm'
-            }`}>
-              {result.stdout}
-            </pre>
-          </div>
-        )}
+              {result.stdout && (
+                <div className="space-y-1">
+                  <span className="text-[10.5px] uppercase tracking-wider text-zinc-500 block">
+                    Standard Output
+                  </span>
+                  <pre className="p-2.5 rounded-md whitespace-pre-wrap break-words bg-white dark:bg-[#141418] border border-black/[0.06] dark:border-white/[0.07] text-zinc-900 dark:text-zinc-100">
+                    {result.stdout}
+                  </pre>
+                </div>
+              )}
 
-        {/* Standard Error */}
-        {result.stderr && (
-          <div>
-            <span className={`text-xs uppercase font-heading font-bold tracking-wider block mb-1.5 ${
-              isDarkMode ? 'text-rose-400' : 'text-rose-700'
-            }`}>
-              Standard Error:
-            </span>
-            <pre className={`p-3 rounded whitespace-pre-wrap leading-relaxed font-mono text-[13px] border ${
-              isDarkMode ? 'text-rose-300 bg-rose-950/20 border-rose-900/40' : 'text-rose-900 bg-rose-50 border-rose-200 shadow-sm'
-            }`}>
-              {result.stderr}
-            </pre>
-            {hasErrors && (result.stderr.includes('EOFError') || result.stderr.toLowerCase().includes('eof when reading') || result.stderr.toLowerCase().includes('expected input')) && (
-              <div className={`mt-2 p-2.5 rounded text-xs border ${
-                isDarkMode ? 'bg-amber-950/20 border-amber-800/40 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-800'
-              }`}>
-                Note: This program exited while waiting for input via stdin. Enter your input in the Program Input box below and run again.
-              </div>
-            )}
-          </div>
-        )}
+              {result.stderr && (
+                <div className="space-y-1">
+                  <span className="text-[10.5px] uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
+                    Standard Error
+                  </span>
+                  <pre className="p-2.5 rounded-md whitespace-pre-wrap break-words bg-rose-500/[0.05] border border-rose-500/20 text-rose-700 dark:text-rose-300">
+                    {result.stderr}
+                  </pre>
+                  {hasErrors &&
+                    (result.stderr.includes('EOFError') ||
+                      result.stderr.toLowerCase().includes('eof when reading') ||
+                      result.stderr.toLowerCase().includes('expected input')) && (
+                      <div className="p-2 rounded-md text-[11px] font-sans border border-amber-500/25 bg-amber-500/[0.07] text-amber-700 dark:text-amber-300">
+                        This program waited for stdin. Add input on the right and click Run with Input.
+                      </div>
+                    )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Interactive Stdin Input Box */}
+      {/* Right: Side-by-Side Stdin Input (Never clips off bottom) */}
       {handleStdinChange && (
-        <div className={`border-t p-3 space-y-2 shrink-0 ${
-          isDarkMode ? 'bg-[#101114] border-[#252830]' : 'bg-slate-50 border-slate-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <span className={`text-xs font-heading font-semibold uppercase tracking-wider ${
-              isDarkMode ? 'text-gray-300' : 'text-slate-700'
-            }`}>
+        <div
+          data-testid="ide-stdin-pane"
+          className="w-[34%] min-w-[200px] max-w-[360px] h-full flex flex-col bg-black/[0.015] dark:bg-black/25 shrink-0"
+        >
+          <div className="h-8 px-3 flex items-center justify-between border-b border-black/[0.05] dark:border-white/[0.05] shrink-0">
+            <span className="text-[10.5px] uppercase tracking-wider text-zinc-500">
               Program Input (stdin)
             </span>
             {onRun && (
               <button
                 type="button"
                 onClick={onRun}
-                className="px-2.5 py-1 rounded text-xs font-semibold bg-[#ff9100] text-black hover:bg-[#ffa726] transition shadow-sm"
+                disabled={isRunning}
+                data-testid="ide-run-with-stdin-btn"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-sans text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
               >
-                Run with Input
+                <Play className="w-2.5 h-2.5 fill-current" />
+                <span>Run</span>
               </button>
             )}
           </div>
           <textarea
             value={effectiveStdin}
             onChange={(e) => handleStdinChange(e.target.value)}
-            placeholder="Enter program input here (e.g. for cin >> or input())..."
-            rows={2}
-            className={`w-full p-2 text-xs font-mono rounded resize-y border outline-none ${
-              isDarkMode
-                ? 'bg-[#18191d] border-[#262832] text-gray-200 focus:border-[#ff9100]'
-                : 'bg-white border-slate-300 text-slate-800 focus:border-[#ff9100]'
-            }`}
+            placeholder="Optional stdin lines..."
+            data-testid="ide-stdin-textarea"
+            className="flex-1 w-full p-3 bg-transparent text-[12px] text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:outline-none resize-none"
           />
         </div>
       )}

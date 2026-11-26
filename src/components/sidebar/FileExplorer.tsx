@@ -387,29 +387,29 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   return (
     <div 
       style={width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
-      className={`w-full flex flex-col h-full text-xs select-none shadow-md transition-colors overflow-hidden ${
+      className={`w-full flex flex-col h-full text-xs select-none transition-colors overflow-hidden ${
         isDarkMode 
-          ? 'bg-[#101114]' 
-          : 'bg-[#f8fafc]'
+          ? 'bg-[#0F0F12] text-zinc-200' 
+          : 'bg-[#F8F8FA] text-zinc-800'
       }`}
       onClick={() => {
         // Clicking outside any specific row doesn't reset activeFile, but lets user deselect folder
       }}
     >
       {/* Sidebar Header */}
-      <div className={`px-3 py-2.5 border-b flex items-center justify-between transition-colors ${
-        isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-[#f1f5f9] border-[#e2e8f0]'
+      <div className={`h-[34px] px-3 border-b flex items-center justify-between shrink-0 transition-colors ${
+        isDarkMode ? 'bg-[#0F0F12] border-white/[0.07]' : 'bg-[#F8F8FA] border-black/[0.08]'
       }`}>
         <div className="flex items-center space-x-1.5 truncate">
-          <span className={`font-heading font-semibold uppercase tracking-wider text-xs ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
+          <span className={`font-semibold uppercase tracking-wider text-[11px] ${
+            isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
           }`}>
-            Files
+            Explorer
           </span>
           {selectedFolderName && (
             <span 
               onClick={() => setSelectedFolderId(null)}
-              className="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer font-mono truncate max-w-[70px]"
+              className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer font-mono truncate max-w-[70px]"
               title={`Selected folder: ${selectedFolderName}. Click to select root.`}
             >
               in /{selectedFolderName}
@@ -417,11 +417,11 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
         </div>
 
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-0.5">
           <button
             onClick={() => handleStartCreate('file', selectedFolderId || undefined)}
-            className={`p-1 rounded transition border border-transparent ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
+            className={`p-1 rounded transition ${
+              isDarkMode ? 'hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-100' : 'hover:bg-black/[0.05] text-zinc-500 hover:text-zinc-900'
             }`}
             title={selectedFolderName ? `New File in ${selectedFolderName}` : 'New File (root)'}
           >
@@ -429,16 +429,16 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           </button>
           <button
             onClick={() => handleStartCreate('folder', selectedFolderId || undefined)}
-            className={`p-1 rounded transition border border-transparent ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
+            className={`p-1 rounded transition ${
+              isDarkMode ? 'hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-100' : 'hover:bg-black/[0.05] text-zinc-500 hover:text-zinc-900'
             }`}
             title={selectedFolderName ? `New Subfolder in ${selectedFolderName}` : 'New Folder (root)'}
           >
             <FolderPlus className="w-3.5 h-3.5" />
           </button>
           <label
-            className={`p-1 rounded transition cursor-pointer border border-transparent ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
+            className={`p-1 rounded transition cursor-pointer ${
+              isDarkMode ? 'hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-100' : 'hover:bg-black/[0.05] text-zinc-500 hover:text-zinc-900'
             }`}
             title="Upload Files or ZIP"
           >
@@ -461,8 +461,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           </label>
           <button
             onClick={onExportProject}
-            className={`p-1 rounded transition border border-transparent ${
-              isDarkMode ? 'hover:bg-[#1f2024] text-gray-400 hover:text-white' : 'hover:bg-[#e2e8f0] text-gray-600 hover:text-gray-900 hover:border-slate-300'
+            className={`p-1 rounded transition ${
+              isDarkMode ? 'hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-100' : 'hover:bg-black/[0.05] text-zinc-500 hover:text-zinc-900'
             }`}
             title="Export Project (ZIP)"
           >
@@ -473,19 +473,19 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
       {/* Quick Search Input */}
       <div className={`px-2.5 py-2 border-b ${
-        isDarkMode ? 'border-[#1f2024] bg-[#0b0c0e]' : 'border-[#e2e8f0] bg-[#ffffff]'
+        isDarkMode ? 'border-white/[0.06] bg-[#0F0F12]' : 'border-black/[0.06] bg-[#F8F8FA]'
       }`}>
         <div className="relative">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2" />
+          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2 top-1.5" />
           <input
             type="text"
-            placeholder="Search files..."
+            placeholder="Filter files..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full pl-7 pr-2 py-1 rounded text-xs border focus:outline-none focus:border-[#ff9100] transition font-mono ${
+            className={`w-full h-7 pl-7 pr-2 rounded-md text-xs border focus:outline-none focus:border-amber-500/70 transition font-mono ${
               isDarkMode 
-                ? 'bg-[#15161b] text-gray-200 border-[#262832] placeholder-gray-500' 
-                : 'bg-[#ffffff] text-[#1f2328] border-[#cbd5e1] placeholder-gray-500'
+                ? 'bg-[#141418] text-zinc-200 border-white/[0.08] placeholder-zinc-500' 
+                : 'bg-white text-zinc-900 border-black/[0.08] placeholder-zinc-400'
             }`}
           />
         </div>
@@ -566,39 +566,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
         {/* Root level items & nested children */}
         {rootFiles.map((file) => renderItem(file, 0))}
-      </div>
-
-      {/* Bottom Left Corner: Feedback & Error Detection Section */}
-      <div className={`p-2 border-t flex items-center justify-between flex-shrink-0 ${
-        isDarkMode ? 'border-[#1f2024] bg-[#0e0f13]' : 'border-[#e2e8f0] bg-[#f8fafc]'
-      }`}>
-        <button
-          onClick={onOpenFeedback}
-          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition border ${
-            hasActiveError
-              ? 'bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20 hover:border-red-500/60'
-              : isDarkMode
-              ? 'bg-[#15161b] border-[#22242c] text-gray-400 hover:text-white hover:bg-[#1a1c23] hover:border-[#2f323e]'
-              : 'bg-white border-[#cbd5e1] text-gray-700 hover:bg-gray-50'
-          }`}
-          title="Send feedback or report an error / bug to the team"
-        >
-          <div className="flex items-center space-x-2 truncate">
-            {hasActiveError ? (
-              <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 animate-pulse" />
-            ) : (
-              <MessageSquarePlus className="w-3.5 h-3.5 text-[#ff9100] flex-shrink-0" />
-            )}
-            <span className="truncate font-heading font-medium text-[11px]">
-              {hasActiveError ? 'Error Detected • Report' : 'Feedback / Bug Report'}
-            </span>
-          </div>
-          {hasActiveError ? (
-            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 animate-ping" />
-          ) : (
-            <span className="text-[10px] text-gray-500 font-mono flex-shrink-0">Mail/DB</span>
-          )}
-        </button>
       </div>
     </div>
   );

@@ -2,12 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { 
-  BarChart3, 
-  ExternalLink, 
-  CheckCircle2, 
-  Zap, 
-  Code2 
+import {
+  BarChart2,
+  ExternalLink,
+  CheckCircle2,
+  Zap,
+  Code2,
 } from 'lucide-react';
 
 export interface BenchmarkPresetItem {
@@ -179,27 +179,24 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
     <div
       style={{ width: `${width}px` }}
       className={`h-full flex flex-col select-none text-xs transition-colors duration-200 ${
-        isDarkMode ? 'bg-[#101114] text-[#e6edf3]' : 'bg-white text-slate-800'
+        isDarkMode ? 'bg-[#0F0F12] text-zinc-200' : 'bg-[#F8F8FA] text-zinc-800'
       }`}
     >
       {/* Header */}
-      <div className={`h-10 px-3.5 border-b flex items-center justify-between shrink-0 transition-colors ${
-        isDarkMode ? 'border-[#1f2024] bg-[#0d0e11]' : 'border-slate-200 bg-slate-50'
+      <div className={`h-[34px] px-3 border-b flex items-center justify-between shrink-0 transition-colors ${
+        isDarkMode ? 'border-white/[0.07] bg-[#0F0F12]' : 'border-black/[0.08] bg-[#F8F8FA]'
       }`}>
         <div className="flex items-center space-x-2">
-          <BarChart3 className="w-4 h-4 text-[#ff9100]" />
+          <BarChart2 className="w-3.5 h-3.5 text-amber-500" />
           <span className={`font-semibold uppercase tracking-wider text-[11px] ${
-            isDarkMode ? 'text-gray-200' : 'text-slate-800'
+            isDarkMode ? 'text-zinc-300' : 'text-zinc-700'
           }`}>
-            Benchmark
-          </span>
-          <span className="px-1.5 py-0.2 bg-[#ff9100]/15 text-[#ff9100] text-[10px] rounded font-mono font-medium">
-            Presets
+            Telemetry
           </span>
         </div>
         <Link
           href="/compare"
-          className="flex items-center space-x-1 text-[11px] text-[#ff9100] hover:text-[#ffaa33] transition"
+          className="flex items-center space-x-1 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition"
           title="Open Full Benchmark Suite"
         >
           <span>Suite</span>
@@ -250,18 +247,18 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
                 className={`w-full text-left p-2.5 rounded-lg border transition-all ${
                   isSelected
                     ? isDarkMode
-                      ? 'bg-[#181920] border-[#ff9100]/50 shadow-sm'
-                      : 'bg-amber-50/70 border-[#ff9100] shadow-sm'
+                      ? 'bg-[#18181C] border-amber-500/45'
+                      : 'bg-white border-amber-500/50 shadow-sm'
                     : isDarkMode
-                      ? 'bg-[#121318] border-[#1e2026] hover:border-[#2a2c38] hover:bg-[#15161d]'
-                      : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100/70'
+                      ? 'bg-[#121216] border-white/[0.06] hover:border-white/[0.12] hover:bg-[#16161B]'
+                      : 'bg-white/70 border-black/[0.07] hover:border-black/[0.14]'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className={`font-semibold text-xs truncate ${
                     isSelected
-                      ? 'text-[#ff9100]'
-                      : isDarkMode ? 'text-gray-200' : 'text-slate-800'
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : isDarkMode ? 'text-zinc-200' : 'text-zinc-800'
                   }`}>
                     {preset.name}
                   </span>
@@ -348,9 +345,13 @@ export const BenchmarkSidebar: React.FC<BenchmarkSidebarProps> = ({
             {/* Launch Compare Route Button */}
             <Link
               href="/compare"
-              className="w-full py-2 px-3 bg-[#ff9100] hover:bg-[#ffa726] text-slate-950 font-semibold rounded-lg flex items-center justify-center space-x-1.5 transition shadow"
+              className={`w-full py-2 px-3 rounded-md border text-xs font-medium flex items-center justify-center space-x-1.5 transition ${
+                isDarkMode
+                  ? 'bg-[#222227] hover:bg-[#2a2a30] text-zinc-100 border-white/[0.1]'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-white border-black/15'
+              }`}
             >
-              <Zap className="w-3.5 h-3.5 fill-current" />
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
               <span>Launch Comparative Benchmark</span>
             </Link>
           </div>

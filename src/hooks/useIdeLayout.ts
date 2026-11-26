@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { EditorLayoutMode, BottomPanelTab } from '@/types/ide';
 
-export type SidebarTab = 'files' | 'benchmark' | 'practice' | 'learn';
+export type SidebarTab = 'files' | 'search' | 'benchmark' | 'practice' | 'learn';
 
 export interface UseIdeLayoutReturn {
   sidebarWidth: number;
@@ -34,10 +34,10 @@ export interface UseIdeLayoutReturn {
 }
 
 export function useIdeLayout(): UseIdeLayoutReturn {
-  const [sidebarWidth, setSidebarWidth] = useState<number>(240);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>('files');
-  const [dockHeight, setDockHeight] = useState<number>(280);
+  const [dockHeight, setDockHeight] = useState<number>(240);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
   const [editorLayoutMode, setEditorLayoutMode] = useState<EditorLayoutMode>('code');
   const [activeBottomTab, setActiveBottomTab] = useState<BottomPanelTab>('output');
@@ -98,7 +98,7 @@ export function useIdeLayout(): UseIdeLayoutReturn {
       }
 
       const savedTab = localStorage.getItem('cortex_active_sidebar_tab') as SidebarTab;
-      if (savedTab && ['files', 'benchmark', 'practice', 'learn'].includes(savedTab)) {
+      if (savedTab && ['files', 'search', 'benchmark', 'practice', 'learn'].includes(savedTab)) {
         setActiveSidebarTab(savedTab);
       }
 
@@ -182,15 +182,15 @@ export function useIdeLayout(): UseIdeLayoutReturn {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizingSidebar) {
-        const containerLeft = fileExplorerRef.current?.getBoundingClientRect().left ?? 0;
+        const containerLeft = fileExplorerRef.current?.getBoundingClientRect().left ?? 44;
         const desiredWidth = e.clientX - containerLeft;
-        const maxWidth = typeof window !== 'undefined' ? Math.min(600, Math.floor(window.innerWidth * 0.45)) : 500;
-        const newWidth = Math.min(Math.max(desiredWidth, 160), maxWidth);
+        const maxWidth = typeof window !== 'undefined' ? Math.min(440, Math.floor(window.innerWidth * 0.45)) : 440;
+        const newWidth = Math.min(Math.max(desiredWidth, 200), maxWidth);
         setSidebarWidth(newWidth);
       } else if (isResizingDock) {
-        const newHeight = window.innerHeight - e.clientY;
-        const maxHeight = Math.floor(window.innerHeight * 0.75);
-        setDockHeight(Math.min(Math.max(newHeight, 140), maxHeight));
+        const newHeight = window.innerHeight - e.clientY - 24;
+        const maxHeight = Math.floor(window.innerHeight * 0.72);
+        setDockHeight(Math.min(Math.max(newHeight, 120), maxHeight));
       }
     };
 

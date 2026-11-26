@@ -51,7 +51,10 @@ export interface MonacoCodeEditorProps {
   isDebugging?: boolean;
   isExecutable?: boolean;
   practiceMode?: boolean;
+  hideChrome?: boolean;
+  showMinimap?: boolean;
   tabSize?: number;
+  jumpToLine?: { fileId: string; line: number; nonce: number } | null;
   onFormatReady?: (formatFn: () => void) => void;
 }
 
@@ -97,7 +100,10 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   isDebugging = false,
   isExecutable = true,
   practiceMode = false,
+  hideChrome = false,
+  showMinimap = false,
   tabSize = 4,
+  jumpToLine = null,
   onFormatReady,
 }) => {
   const [isRunDropdownOpen, setIsRunDropdownOpen] = useState(false);
@@ -221,27 +227,30 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       });
     }
 
-    // Define Cortex deep dark theme with #0b0c0e background
+    // Define Cortex calm monochrome dark theme with #0C0C0E background
     monaco.editor.defineTheme('cortex-dark', {
       base: 'vs-dark',
       inherit: true,
       rules: [
-        { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'ff9100' },
-        { token: 'string', foreground: 'ce9178' },
-        { token: 'number', foreground: 'b5cea8' },
-        { token: 'type', foreground: '4ec9b0' },
+        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'C084FC' },
+        { token: 'keyword.operator', foreground: '93C5FD' },
+        { token: 'identifier.function', foreground: '7DD3FC' },
+        { token: 'entity.name.function', foreground: '7DD3FC' },
+        { token: 'string', foreground: '86EFAC' },
+        { token: 'number', foreground: 'FDBA74' },
+        { token: 'type', foreground: '93C5FD' },
       ],
       colors: {
-        'editor.background': '#0b0c0e',
-        'editor.foreground': '#e6edf3',
-        'editorLineNumber.foreground': '#4d4c4b',
-        'editorLineNumber.activeForeground': '#ff9100',
-        'editor.lineHighlightBackground': '#14161b',
-        'editorCursor.foreground': '#ff9100',
-        'editorWhitespace.foreground': '#222329',
-        'editorIndentGuide.background': '#1c1d24',
-        'editorIndentGuide.activeBackground': '#3a3b45',
+        'editor.background': '#0C0C0E',
+        'editor.foreground': '#F4F4F5',
+        'editorLineNumber.foreground': '#52525B',
+        'editorLineNumber.activeForeground': '#A1A1AA',
+        'editor.lineHighlightBackground': '#18181C',
+        'editorCursor.foreground': '#F59E0B',
+        'editorWhitespace.foreground': '#27272A',
+        'editorIndentGuide.background': '#1C1C22',
+        'editorIndentGuide.activeBackground': '#3F3F46',
       },
     });
 
@@ -250,22 +259,23 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       base: 'vs-dark',
       inherit: true,
       rules: [
-        { token: 'comment', foreground: '71717a', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'f59e0b' },
-        { token: 'string', foreground: 'ce9178' },
-        { token: 'number', foreground: 'b5cea8' },
-        { token: 'type', foreground: '4ec9b0' },
+        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'C084FC' },
+        { token: 'keyword.operator', foreground: '93C5FD' },
+        { token: 'string', foreground: '86EFAC' },
+        { token: 'number', foreground: 'FDBA74' },
+        { token: 'type', foreground: '7DD3FC' },
       ],
       colors: {
         'editor.background': '#1C1C1E',
-        'editor.foreground': '#f4f4f5',
-        'editorLineNumber.foreground': '#52525b',
-        'editorLineNumber.activeForeground': '#a1a1aa',
+        'editor.foreground': '#F4F4F5',
+        'editorLineNumber.foreground': '#52525B',
+        'editorLineNumber.activeForeground': '#A1A1AA',
         'editor.lineHighlightBackground': '#262629',
-        'editorCursor.foreground': '#f59e0b',
-        'editorWhitespace.foreground': '#27272a',
-        'editorIndentGuide.background': '#27272a',
-        'editorIndentGuide.activeBackground': '#3f3f46',
+        'editorCursor.foreground': '#F59E0B',
+        'editorWhitespace.foreground': '#27272A',
+        'editorIndentGuide.background': '#27272A',
+        'editorIndentGuide.activeBackground': '#3F3F46',
       },
     });
 
@@ -274,19 +284,19 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       base: 'vs',
       inherit: true,
       rules: [
-        { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'd97706' },
-        { token: 'string', foreground: 'b45309' },
-        { token: 'number', foreground: '047857' },
-        { token: 'type', foreground: '0284c7' },
+        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '7C3AED' },
+        { token: 'string', foreground: '15803D' },
+        { token: 'number', foreground: 'C2410C' },
+        { token: 'type', foreground: '0369A1' },
       ],
       colors: {
-        'editor.background': '#ffffff',
-        'editor.foreground': '#1f2937',
-        'editorLineNumber.foreground': '#9ca3af',
-        'editorLineNumber.activeForeground': '#ff9100',
-        'editor.lineHighlightBackground': '#f8f9fa',
-        'editorCursor.foreground': '#ff9100',
+        'editor.background': '#FFFFFF',
+        'editor.foreground': '#18181B',
+        'editorLineNumber.foreground': '#A1A1AA',
+        'editorLineNumber.activeForeground': '#52525B',
+        'editor.lineHighlightBackground': '#F4F4F6',
+        'editorCursor.foreground': '#D97706',
       },
     });
 
@@ -462,13 +472,28 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       editorRef.current.updateOptions({
         fontSize,
         tabSize,
-        lineHeight: practiceMode ? 20 : undefined,
-        minimap: { enabled: !practiceMode },
+        lineHeight: practiceMode ? 20 : 21,
+        minimap: { enabled: !practiceMode && Boolean(showMinimap) },
         scrollBeyondLastLine: false,
-        padding: practiceMode ? { top: 10, bottom: 10 } : { top: 0, bottom: 0 },
+        renderLineHighlight: 'line',
+        padding: { top: 10, bottom: 10 },
       });
     }
-  }, [fontSize, tabSize, practiceMode]);
+  }, [fontSize, tabSize, practiceMode, showMinimap]);
+
+  // Jump to requested search line when file matches
+  useEffect(() => {
+    if (
+      jumpToLine &&
+      jumpToLine.fileId === activeFileId &&
+      jumpToLine.line > 0 &&
+      editorRef.current
+    ) {
+      editorRef.current.revealLineInCenter(jumpToLine.line);
+      editorRef.current.setPosition({ lineNumber: jumpToLine.line, column: 1 });
+      editorRef.current.focus();
+    }
+  }, [jumpToLine, activeFileId]);
 
   // Recalculate layout on fullscreen or resize
   useEffect(() => {
@@ -537,17 +562,19 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     decorationsRef.current = editor.deltaDecorations(decorationsRef.current, newDecorations);
   }, [breakpoints, activeLine, diagnostics]);
 
+  const suppressTopChrome = Boolean(practiceMode || hideChrome);
+
   return (
     <div className={`flex flex-col h-full ${
-      practiceMode
-        ? (isDarkMode ? 'bg-[#1C1C1E]' : 'bg-white')
-        : `${isDarkMode ? 'bg-[#0b0c0e] border-[#1f2024]' : 'bg-white border-slate-200'} border-r`
+      suppressTopChrome
+        ? (isDarkMode ? (practiceMode ? 'bg-[#1C1C1E]' : 'bg-[#0C0C0E]') : 'bg-white')
+        : `${isDarkMode ? 'bg-[#0C0C0E] border-white/[0.07]' : 'bg-white border-black/[0.08]'} border-r`
     } ${
       isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : ''
     }`}>
-      {/* File Tabs Bar (hidden in Practice Mode) */}
-      {!practiceMode && (
-      <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-[#f1f3f7] border-slate-200'} flex items-center justify-between border-b text-xs select-none`}>
+      {/* File Tabs Bar (hidden when managed by PracticeWorkspace or CortexIdeShell) */}
+      {!suppressTopChrome && (
+      <div className={`h-9 ${isDarkMode ? 'bg-[#0F0F12] border-white/[0.07]' : 'bg-[#F4F4F6] border-black/[0.08]'} flex items-center justify-between border-b text-xs select-none`}>
         <div className="flex items-center overflow-x-auto h-full">
           {tabFiles.map((file) => {
               const isActive = file.id === activeFile?.id;
@@ -828,7 +855,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       <div className={`flex-1 relative select-text transition-colors ${
         practiceMode
           ? (isDarkMode ? 'bg-[#1C1C1E]' : 'bg-white')
-          : (isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#ffffff]')
+          : (isDarkMode ? 'bg-[#0C0C0E]' : 'bg-[#FFFFFF]')
       }`}>
         {/* Copilot-Style Inline Quick-Fix Widget */}
         {isQuickFixOpen && (
@@ -849,20 +876,24 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
         {!activeFile ? (
           <div className={`flex flex-col items-center justify-center h-full text-center p-8 select-none ${
-            isDarkMode ? 'text-zinc-500 bg-[#0b0c0e]' : 'text-slate-400 bg-white'
+            isDarkMode ? 'text-zinc-500 bg-[#0C0C0E]' : 'text-zinc-500 bg-white'
           }`}>
-            <FileCode className="w-12 h-12 mb-3 opacity-30 text-[#ff9100]" />
-            <h3 className={`text-base font-semibold mb-1 ${isDarkMode ? 'text-zinc-200' : 'text-slate-800'}`}>
+            <FileCode className="w-10 h-10 mb-3 opacity-35 text-amber-500" />
+            <h3 className={`text-sm font-semibold mb-1 ${isDarkMode ? 'text-zinc-200' : 'text-zinc-800'}`}>
               No Files Open
             </h3>
-            <p className={`text-xs max-w-sm mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-slate-500'}`}>
-              Select a file from the explorer on the left or create a new file to begin editing.
+            <p className="text-xs max-w-sm mb-4 text-zinc-500">
+              Select a file from Explorer or create a new file to begin editing.
             </p>
             {onNewFile && (
               <button
                 type="button"
                 onClick={onNewFile}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-[#ff9100] hover:bg-[#ffa726] text-black transition shadow-sm"
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition ${
+                  isDarkMode
+                    ? 'bg-[#222227] border-white/[0.1] text-zinc-100 hover:bg-[#2a2a30]'
+                    : 'bg-zinc-900 border-black/15 text-white hover:bg-zinc-800'
+                }`}
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>New File</span>
@@ -888,15 +919,15 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             }}
             onMount={handleEditorMount}
             options={{
-              fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
               fontSize,
-              lineHeight: practiceMode ? 20 : undefined,
+              lineHeight: practiceMode ? 20 : 21,
               fontLigatures: true,
               wordWrap,
-              minimap: { enabled: !practiceMode },
+              minimap: { enabled: !practiceMode && Boolean(showMinimap) },
               glyphMargin: !practiceMode,
               scrollBeyondLastLine: false,
-              padding: practiceMode ? { top: 10, bottom: 10 } : undefined,
+              padding: { top: 10, bottom: 10 },
               smoothScrolling: true,
               automaticLayout: true,
               formatOnPaste: false,
@@ -904,7 +935,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
               tabSize,
               cursorBlinking: 'smooth',
               lineNumbersMinChars: 3,
-              renderLineHighlight: 'all',
+              renderLineHighlight: 'line',
               selectOnLineNumbers: true,
               contextmenu: true,
               dragAndDrop: true,

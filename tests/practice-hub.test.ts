@@ -99,6 +99,9 @@ async function runPracticeHubTests() {
     'src/components/practice/PracticeProblemTable.tsx',
     'src/components/practice/PracticeWorkspace.tsx',
     'src/components/panels/ProblemDetailsPanel.tsx',
+    'src/components/layout/CortexIdeShell.tsx',
+    'src/components/sidebar/SearchSidebar.tsx',
+    'src/components/panels/OutputPanel.tsx',
     'src/components/panels/TestCasesPanel.tsx',
     'src/components/practice/usePracticeProgress.ts',
     'src/app/ide/page.tsx',
@@ -780,6 +783,22 @@ async function runPracticeHubTests() {
       ideContent.includes('highlightTab={isPracticeProblemMode') &&
       !ideContent.includes('hideSidebar={isPracticeProblemMode}'),
     'ide/page.tsx must keep GlobalSidebar accessible and exit Practice Problem Mode when switching sidebar tabs'
+  );
+
+  const ideShellContent = fs.readFileSync(path.join(projectRoot, 'src/components/layout/CortexIdeShell.tsx'), 'utf8');
+  assert.ok(
+    ideShellContent.includes('ide-command-palette-trigger') &&
+      ideShellContent.includes('ide-ai-complete-toggle') &&
+      ideShellContent.includes('ide-run-btn') &&
+      ideShellContent.includes('ide-status-bar') &&
+      ideShellContent.includes('status-bar-feedback-btn'),
+    'CortexIdeShell must render flagship titlebar, Cmd+K palette, AI dot toggle, graphite Run button, and status bar'
+  );
+
+  const outputPanelContent = fs.readFileSync(path.join(projectRoot, 'src/components/panels/OutputPanel.tsx'), 'utf8');
+  assert.ok(
+    outputPanelContent.includes('ide-output-split') && outputPanelContent.includes('ide-stdin-pane'),
+    'OutputPanel must render side-by-side Output and Stdin panes'
   );
 
   assert.ok(ideContent.includes('handleThemeChange'), 'ide/page.tsx must sync SettingsModal theme changes with isDarkMode');

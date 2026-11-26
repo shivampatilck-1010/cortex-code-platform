@@ -69,27 +69,24 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
     <div
       style={{ width: `${width}px` }}
       className={`h-full flex flex-col select-none text-xs transition-colors duration-200 ${
-        isDarkMode ? 'bg-[#101114] text-[#e6edf3]' : 'bg-white text-slate-800'
+        isDarkMode ? 'bg-[#0F0F12] text-zinc-200' : 'bg-[#F8F8FA] text-zinc-800'
       }`}
     >
       {/* Header */}
-      <div className={`h-10 px-3.5 border-b flex items-center justify-between shrink-0 transition-colors ${
-        isDarkMode ? 'border-[#1f2024] bg-[#0d0e11]' : 'border-slate-200 bg-slate-50'
+      <div className={`h-[34px] px-3 border-b flex items-center justify-between shrink-0 transition-colors ${
+        isDarkMode ? 'border-white/[0.07] bg-[#0F0F12]' : 'border-black/[0.08] bg-[#F8F8FA]'
       }`}>
         <div className="flex items-center space-x-2">
-          <BookOpen className="w-4 h-4 text-[#ff9100]" />
+          <BookOpen className="w-3.5 h-3.5 text-amber-500" />
           <span className={`font-semibold uppercase tracking-wider text-[11px] ${
-            isDarkMode ? 'text-gray-200' : 'text-slate-800'
+            isDarkMode ? 'text-zinc-300' : 'text-zinc-700'
           }`}>
-            Learn
-          </span>
-          <span className="px-1.5 py-0.2 bg-[#ff9100]/15 text-[#ff9100] text-[10px] rounded font-mono font-medium">
-            Courses
+            Reference
           </span>
         </div>
         <Link
           href="/learn"
-          className="flex items-center space-x-1 text-[11px] text-[#ff9100] hover:text-[#ffaa33] transition"
+          className="flex items-center space-x-1 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition"
           title="Open Learning Catalog"
         >
           <span>Catalog</span>
@@ -211,8 +208,8 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
                           onClick={() => handleSelectLesson(lesson, course)}
                           className={`px-2 py-1 rounded text-[10px] font-medium transition flex items-center space-x-1 border ${
                             isDarkMode
-                              ? 'bg-[#1e2028] hover:bg-[#ff9100] hover:text-black text-gray-300 border-[#2b2d3a]'
-                              : 'bg-white hover:bg-[#ff9100] hover:text-black text-slate-700 border-slate-200 shadow-sm'
+                              ? 'bg-[#222227] hover:bg-[#2a2a30] text-zinc-200 border-white/[0.08]'
+                              : 'bg-white hover:bg-zinc-100 text-zinc-700 border-black/[0.08]'
                           }`}
                           title="Load lesson starter code into IDE"
                         >

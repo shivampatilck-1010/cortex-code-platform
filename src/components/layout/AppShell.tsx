@@ -9,6 +9,8 @@ interface AppShellProps {
   isDarkMode?: boolean;
   hideSidebar?: boolean;
   highlightTab?: SidebarTab | null;
+  hideSidebarLogo?: boolean;
+  hasPracticeSession?: boolean;
 }
 
 export const AppShell: React.FC<AppShellProps> = ({
@@ -17,6 +19,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   isDarkMode: propDarkMode,
   hideSidebar = false,
   highlightTab,
+  hideSidebarLogo = false,
+  hasPracticeSession = false,
 }) => {
   const [internalDarkMode, setInternalDarkMode] = useState<boolean>(true);
 
@@ -34,14 +38,18 @@ export const AppShell: React.FC<AppShellProps> = ({
   const isDarkMode = propDarkMode !== undefined ? propDarkMode : internalDarkMode;
 
   return (
-    <div className={`flex h-screen w-screen overflow-hidden transition-colors duration-200 ${
-      isDarkMode ? 'bg-[#0a0b0d]' : 'bg-[#f8fafc]'
-    }`}>
+    <div
+      className={`flex h-screen w-screen overflow-hidden transition-colors duration-150 ${
+        isDarkMode ? 'dark bg-[#0A0A0C]' : 'bg-[#F4F4F6]'
+      }`}
+    >
       {!hideSidebar && (
         <GlobalSidebar
           onOpenSettings={onOpenSettings}
           isDarkMode={isDarkMode}
           highlightTab={highlightTab}
+          hideLogo={hideSidebarLogo}
+          hasPracticeSession={hasPracticeSession}
         />
       )}
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">

@@ -63,46 +63,46 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
   };
 
   return (
-    <div className={`h-full flex flex-col text-xs font-mono select-text overflow-hidden transition-colors duration-200 ${
-      isDarkMode ? 'bg-[#141518] text-gray-200' : 'bg-white text-slate-800'
+    <div className={`h-full flex flex-col text-xs font-mono select-text overflow-hidden transition-colors duration-150 ${
+      isDarkMode ? 'bg-[#0F0F12] text-zinc-200' : 'bg-[#F8F8FA] text-zinc-800'
     }`}>
       {/* Sub-tabs header */}
-      <div className={`px-3 border-b flex items-center justify-between transition-colors duration-200 ${
-        isDarkMode ? 'bg-[#18191d] border-[#252830]' : 'bg-slate-100 border-slate-200'
+      <div className={`px-3 h-9 border-b flex items-center justify-between transition-colors duration-150 shrink-0 ${
+        isDarkMode ? 'bg-[#0F0F12] border-white/[0.06]' : 'bg-[#F8F8FA] border-black/[0.06]'
       }`}>
-        <div className="flex space-x-1">
+        <div className="flex space-x-1 h-full items-center">
           <button
             onClick={() => setActiveTab('tests')}
-            className={`py-2 px-3.5 border-b-2 font-heading font-semibold text-xs tracking-wide transition ${
+            className={`h-full px-3 border-b-[1.5px] font-sans font-medium text-[11.5px] transition ${
               activeTab === 'tests'
-                ? 'border-[#ff9100] text-[#ff9100]'
+                ? 'border-amber-500 text-zinc-950 dark:text-zinc-100'
                 : isDarkMode
-                  ? 'border-transparent text-gray-400 hover:text-gray-200'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-transparent text-zinc-500 hover:text-zinc-300'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
             }`}
           >
             Tests ({totalCount > 0 ? `${passedCount}/${totalCount}` : 0})
           </button>
           <button
             onClick={() => setActiveTab('custom')}
-            className={`py-2 px-3.5 border-b-2 font-heading font-semibold text-xs tracking-wide transition ${
+            className={`h-full px-3 border-b-[1.5px] font-sans font-medium text-[11.5px] transition ${
               activeTab === 'custom'
-                ? 'border-[#ff9100] text-[#ff9100]'
+                ? 'border-amber-500 text-zinc-950 dark:text-zinc-100'
                 : isDarkMode
-                  ? 'border-transparent text-gray-400 hover:text-gray-200'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-transparent text-zinc-500 hover:text-zinc-300'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
             }`}
           >
             Input (stdin)
           </button>
           <button
             onClick={() => setActiveTab('benchmark')}
-            className={`py-2 px-3.5 border-b-2 font-heading font-semibold text-xs tracking-wide transition ${
+            className={`h-full px-3 border-b-[1.5px] font-sans font-medium text-[11.5px] transition ${
               activeTab === 'benchmark'
-                ? 'border-[#ff9100] text-[#ff9100]'
+                ? 'border-amber-500 text-zinc-950 dark:text-zinc-100'
                 : isDarkMode
-                  ? 'border-transparent text-gray-400 hover:text-gray-200'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-transparent text-zinc-500 hover:text-zinc-300'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-900'
             }`}
           >
             Benchmark
@@ -113,8 +113,8 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setShowAddModal(!showAddModal)}
-              className={`p-1.5 rounded transition border border-transparent ${
-                isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#252830]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300'
+              className={`p-1 rounded transition ${
+                isDarkMode ? 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.05]'
               }`}
               title="Add Test Case"
             >
@@ -123,13 +123,15 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
             <button
               onClick={onRunAllTests}
               disabled={isRunningTests || totalCount === 0}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-heading font-bold transition shadow-sm ${
-                isRunningTests
-                  ? 'bg-gray-700 text-gray-300 cursor-not-allowed'
-                  : 'bg-[#ff9100] hover:bg-[#e08000] text-slate-950'
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-[11.5px] font-sans font-medium border transition ${
+                isRunningTests || totalCount === 0
+                  ? 'bg-zinc-800/60 text-zinc-500 border-transparent cursor-not-allowed'
+                  : isDarkMode
+                    ? 'bg-[#222227] hover:bg-[#2a2a30] text-zinc-100 border-white/[0.1]'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-white border-black/15'
               }`}
             >
-              <Play className={`w-3.5 h-3.5 ${isRunningTests ? 'animate-spin' : 'fill-current'}`} />
+              <Play className={`w-3 h-3 text-emerald-400 ${isRunningTests ? 'animate-spin' : 'fill-current'}`} />
               <span>{isRunningTests ? 'Running...' : 'Run Tests'}</span>
             </button>
           </div>
@@ -339,9 +341,13 @@ export const TestCasesPanel: React.FC<TestCasesPanelProps> = ({
               </div>
               <button
                 onClick={onRunBenchmark}
-                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#ff9100] hover:bg-[#e08000] text-slate-950 font-heading font-bold rounded text-xs transition shadow-sm"
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded border text-xs font-sans font-medium transition ${
+                  isDarkMode
+                    ? 'bg-[#222227] hover:bg-[#2a2a30] text-zinc-100 border-white/[0.1]'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-white border-black/15'
+                }`}
               >
-                <Gauge className="w-3.5 h-3.5" />
+                <Gauge className="w-3.5 h-3.5 text-amber-500" />
                 <span>Run Benchmark</span>
               </button>
             </div>

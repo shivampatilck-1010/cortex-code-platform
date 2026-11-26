@@ -16,11 +16,14 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AppShell } from '@/components/layout/AppShell';
+import { GlobalSidebar } from '@/components/layout/GlobalSidebar';
+import { CortexIdeShell, CommandPaletteItem } from '@/components/layout/CortexIdeShell';
 import { Navbar } from '@/components/layout/Navbar';
 import { MonacoCodeEditor } from '@/components/editor/MonacoCodeEditor';
 import { CodeVisualizationWorkspace } from '@/components/visualization/CodeVisualizationWorkspace';
 import { TraceSession } from '@/lib/visualization/types';
 import { FileExplorer } from '@/components/sidebar/FileExplorer';
+import { SearchSidebar } from '@/components/sidebar/SearchSidebar';
 import { BenchmarkSidebar } from '@/components/sidebar/BenchmarkSidebar';
 import { LearnSidebar } from '@/components/sidebar/LearnSidebar';
 import { PracticeHub } from '@/components/practice/PracticeHub';
@@ -130,6 +133,7 @@ class IdeErrorBoundary extends React.Component<
 function CloudIDEPageInner() {
   const router = useRouter();
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState<string>('cortex-workspace');
   const [isProjectLoading, setIsProjectLoading] = useState(true);
 
   useEffect(() => {
@@ -139,7 +143,10 @@ function CloudIDEPageInner() {
         const urlParams = new URLSearchParams(window.location.search);
         const id = urlParams.get('projectId');
         const challengeParam = urlParams.get('challenge');
+        const tabParam = urlParams.get('tab');
         const challengeQuerySuffix = challengeParam ? `&challenge=${encodeURIComponent(challengeParam)}` : '';
+        const tabQuerySuffix = tabParam ? `&tab=${encodeURIComponent(tabParam)}` : '';
+        const preservedQuerySuffix = `${challengeQuerySuffix}${tabQuerySuffix}`;
 
         const loadAndHydrateProject = async (targetId: string): Promise<'ok' | 'unauth' | 'missing'> => {
           const res = await fetch(`/api/v1/projects/${targetId}`);
@@ -147,6 +154,9 @@ function CloudIDEPageInner() {
             const data = await res.json();
             if (mounted && data?.project) {
               setProjectId(data.project.id);
+              if (data.project.name) {
+                setProjectName(data.project.name);
+              }
               if (Array.isArray(data.files) && data.files.length > 0) {
                 setFiles(data.files);
                 data.files.forEach((f: any) => {
@@ -208,7 +218,7 @@ function CloudIDEPageInner() {
             }
           }
           if (targetId) {
-            router.replace(`/ide?projectId=${targetId}${challengeQuerySuffix}`);
+            router.replace(`/ide?projectId=${targetId}${preservedQuerySuffix}`);
             await loadAndHydrateProject(targetId);
           }
         };
@@ -217,13 +227,14 @@ function CloudIDEPageInner() {
           const status = await loadAndHydrateProject(id);
           if (status === 'unauth') {
             // Unauthenticated: preserve projectId and route to login
-            const returnUrl = `/ide?projectId=${encodeURIComponent(id)}${challengeQuerySuffix}`;
+            const returnUrl = `/ide?projectId=${encodeURIComponent(id)}${preservedQuerySuffix}`;
             router.replace(`/login?redirect=${encodeURIComponent(returnUrl)}`);
             return;
           }
           if (status === 'missing') {
             // Bad ID or not found, strip it and hydrate default project
-            router.replace(challengeParam ? `/ide?challenge=${encodeURIComponent(challengeParam)}` : '/ide');
+            const fallbackQuery = preservedQuerySuffix ? `?${preservedQuerySuffix.replace(/^&/, '')}` : '';
+            router.replace(`/ide${fallbackQuery}`);
             await resolveOrCreateDefaultProject();
           }
         } else {
@@ -442,9 +453,42 @@ function CloudIDEPageInner() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
-  const [fontSize, setFontSize] = useState(14);
+  const [fontSize, setFontSize] = useState(13);
+  const [showMinimap, setShowMinimap] = useState(false);
+  const [ideCursorPos, setIdeCursorPos] = useState<{ line: number; col: number }>({
+    line: 1,
+    col: 1,
+  });
+  const [searchJumpTarget, setSearchJumpTarget] = useState<{
+    fileId: string;
+    line: number;
+    nonce: number;
+  } | null>(null);
+  const ideFormatFnRef = useRef<(() => void) | null>(null);
+  const [selectedSqlDialect, setSelectedSqlDialect] = useState<
+    'sqlite' | 'postgresql' | 'mysql' | 'mssql' | 'oracle'
+  >('sqlite');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [theme, setTheme] = useState('cortex-dark');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedMinimap = localStorage.getItem('cortex_ide_minimap');
+      if (savedMinimap === 'true') {
+        setShowMinimap(true);
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleMinimap = useCallback((enabled: boolean) => {
+    setShowMinimap(enabled);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cortex_ide_minimap', String(enabled));
+      } catch {}
+    }
+  }, []);
 
   // Trigger Monaco layout recalculation on layout mode or dock/sidebar dimension change
   useEffect(() => {
@@ -963,7 +1007,7 @@ function CloudIDEPageInner() {
             body: JSON.stringify({
               projectId: projectId || getGuestSqlProjectId(),
               query: currentActive.content,
-              dialect: 'sqlite',
+              dialect: selectedSqlDialect,
             }),
           });
           if (res.ok) {
@@ -1317,7 +1361,7 @@ function CloudIDEPageInner() {
               body: JSON.stringify({
                 projectId: projectId || 'demo_sql_project',
                 query: targetFile.content,
-                dialect: 'sqlite',
+                dialect: selectedSqlDialect,
               }),
             });
             if (res.ok) {
@@ -1656,6 +1700,28 @@ function CloudIDEPageInner() {
     }
   }, [isProjectLoading, handleLaunchChallenge]);
 
+  const appliedQueryTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const tabParam = new URLSearchParams(window.location.search).get('tab');
+    if (
+      tabParam &&
+      (tabParam === 'files' ||
+        tabParam === 'search' ||
+        tabParam === 'practice' ||
+        tabParam === 'benchmark' ||
+        tabParam === 'learn') &&
+      appliedQueryTabRef.current !== tabParam
+    ) {
+      appliedQueryTabRef.current = tabParam;
+      if (tabParam !== 'practice') {
+        setActivePracticeChallenge(null);
+      }
+      setActiveSidebarTab(tabParam);
+      setIsSidebarOpen(true);
+    }
+  }, [setActiveSidebarTab, setIsSidebarOpen]);
+
   const activeChallengeFile = useMemo(() => {
     if (!activePracticeChallenge) return null;
     const allowedNames = new Set(
@@ -1780,11 +1846,6 @@ function CloudIDEPageInner() {
   const handleStopDebug = stopDebug;
   const handleStepOver = stepOver;
 
-  
-  if (isProjectLoading) {
-    return <div className="min-h-screen bg-[#0b0c0e] flex items-center justify-center text-white">Loading workspace...</div>;
-  }
-    
   const availPracticeLangs = activePracticeChallenge
     ? Object.keys(activePracticeChallenge.starterTemplates)
     : [];
@@ -1837,13 +1898,214 @@ function CloudIDEPageInner() {
     ? CHALLENGES.findIndex((c) => c.id === activePracticeChallenge.id) + 1
     : 0;
 
+  const isFlagshipIdeMode = !isPracticeHubOpen && !isPracticeProblemMode;
+  const openIdeTabs = useMemo(
+    () => files.filter((f) => !f.isFolder && openFileIds.includes(f.id)),
+    [files, openFileIds]
+  );
+  const activeIdeTab =
+    openIdeTabs.find((f) => f.id === activeFileId) ||
+    (openIdeTabs.length > 0 ? openIdeTabs[0] : null);
+  const ideHasActiveError = Boolean(
+    (executionResult && executionResult.status !== 'success') ||
+      executionResult?.stderr?.trim()
+  );
+
+  const commandPaletteItems = useMemo<CommandPaletteItem[]>(() => {
+    const fileItems: CommandPaletteItem[] = files
+      .filter((f) => !f.isFolder)
+      .map((f) => ({
+        id: `file-${f.id}`,
+        label: f.path.replace(/^\/+/, '') || f.name,
+        category: 'File',
+        keywords: f.name,
+        action: () => {
+          setActivePracticeChallenge(null);
+          handleSelectFile(f.id);
+        },
+      }));
+
+    const commandItems: CommandPaletteItem[] = [
+      {
+        id: 'cmd-run',
+        label: 'Run Active File',
+        category: 'Command',
+        shortcut: 'Ctrl+Enter',
+        action: () => {
+          setActiveBottomTab('output');
+          setIsBottomCollapsed(false);
+          void handleRun();
+        },
+      },
+      {
+        id: 'cmd-run-stdin',
+        label: 'Run with Stdin Input',
+        category: 'Command',
+        action: () => {
+          setActiveBottomTab('output');
+          setIsBottomCollapsed(false);
+          setTimeout(() => {
+            const box = document.querySelector<HTMLTextAreaElement>('[data-testid="ide-stdin-textarea"]');
+            box?.focus();
+          }, 50);
+          if (customStdin.trim()) void handleRun();
+        },
+      },
+      {
+        id: 'cmd-run-tests',
+        label: 'Run Automated Tests',
+        category: 'Command',
+        action: () => {
+          setActiveBottomTab('tests');
+          setIsBottomCollapsed(false);
+          void handleRunAllTests();
+        },
+      },
+      {
+        id: 'cmd-debug',
+        label: 'Start Visual Debugger',
+        category: 'Command',
+        action: () => handleStartDebug(),
+      },
+      {
+        id: 'cmd-format',
+        label: 'Format Active Document',
+        category: 'Command',
+        action: () => ideFormatFnRef.current?.(),
+      },
+      {
+        id: 'cmd-toggle-sidebar',
+        label: 'Toggle Left Sidebar',
+        category: 'Navigation',
+        shortcut: 'Ctrl+B',
+        action: () => setIsSidebarOpen((v) => !v),
+      },
+      {
+        id: 'cmd-toggle-workbench',
+        label: 'Toggle Bottom Workbench',
+        category: 'Navigation',
+        shortcut: 'Ctrl+J',
+        action: () => setIsBottomCollapsed((v) => !v),
+      },
+      {
+        id: 'cmd-open-files',
+        label: 'Show Explorer Sidebar',
+        category: 'Navigation',
+        action: () => {
+          setActivePracticeChallenge(null);
+          setActiveSidebarTab('files');
+          setIsSidebarOpen(true);
+        },
+      },
+      {
+        id: 'cmd-open-search',
+        label: 'Search Across Workspace Files',
+        category: 'Navigation',
+        action: () => {
+          setActivePracticeChallenge(null);
+          setActiveSidebarTab('search');
+          setIsSidebarOpen(true);
+        },
+      },
+      {
+        id: 'cmd-open-practice',
+        label: 'Open Practice Hub',
+        category: 'Navigation',
+        action: () => {
+          setActiveSidebarTab('practice');
+          setIsSidebarOpen(true);
+        },
+      },
+      {
+        id: 'cmd-open-benchmark',
+        label: 'Show Telemetry & Benchmarks',
+        category: 'Navigation',
+        action: () => {
+          setActivePracticeChallenge(null);
+          setActiveSidebarTab('benchmark');
+          setIsSidebarOpen(true);
+        },
+      },
+      {
+        id: 'cmd-open-learn',
+        label: 'Show Reference & Courses',
+        category: 'Navigation',
+        action: () => {
+          setActivePracticeChallenge(null);
+          setActiveSidebarTab('learn');
+          setIsSidebarOpen(true);
+        },
+      },
+      {
+        id: 'cmd-theme',
+        label: isDarkMode ? 'Switch to Light Theme' : 'Switch to Dark Theme',
+        category: 'Command',
+        action: () => handleToggleDarkMode(),
+      },
+      {
+        id: 'cmd-ai-complete',
+        label: enableInlineSuggestions ? 'Disable AI Complete' : 'Enable AI Complete',
+        category: 'Command',
+        action: () => handleToggleInlineSuggestions(),
+      },
+      {
+        id: 'cmd-minimap',
+        label: showMinimap ? 'Hide Editor Minimap' : 'Show Editor Minimap',
+        category: 'Command',
+        action: () => handleToggleMinimap(!showMinimap),
+      },
+      {
+        id: 'cmd-settings',
+        label: 'Open IDE Settings',
+        category: 'Command',
+        action: () => setIsSettingsOpen(true),
+      },
+      {
+        id: 'cmd-feedback',
+        label: 'Send Feedback or Report Issue',
+        category: 'Command',
+        action: () => setIsFeedbackOpen(true),
+      },
+    ];
+
+    const practiceItems: CommandPaletteItem[] = CHALLENGES.map((ch) => ({
+      id: `practice-${ch.id}`,
+      label: `Practice: ${ch.title} (${ch.difficulty})`,
+      category: 'Practice',
+      keywords: `${ch.track} ${ch.tags.join(' ')}`,
+      action: () => void handleLaunchChallenge(ch, currentLang?.id),
+    }));
+
+    return [...fileItems, ...commandItems, ...practiceItems];
+  }, [
+    files,
+    handleSelectFile,
+    customStdin,
+    isDarkMode,
+    enableInlineSuggestions,
+    showMinimap,
+    handleToggleMinimap,
+    currentLang?.id,
+    handleLaunchChallenge,
+    setActiveBottomTab,
+    setActiveSidebarTab,
+    setIsBottomCollapsed,
+    setIsSidebarOpen,
+  ]);
+
+  if (isProjectLoading) {
+    return <div className="min-h-screen bg-[#0A0A0C] flex items-center justify-center text-zinc-300 text-xs font-mono">Loading workspace...</div>;
+  }
+
   return (
     <AppShell
       isDarkMode={isDarkMode}
       onOpenSettings={() => setIsSettingsOpen(true)}
+      hideSidebar={isFlagshipIdeMode}
       highlightTab={isPracticeProblemMode ? 'practice' : undefined}
+      hasPracticeSession={Boolean(activePracticeChallenge)}
     >
-      <div className={`flex flex-col h-full w-full ${isDarkMode ? 'bg-[#0b0c0e] text-[#e6edf3]' : 'bg-[#f8fafc] text-[#0f172a]'} overflow-hidden font-sans select-none`}>
+      <div className={`flex flex-col h-full w-full ${isDarkMode ? 'bg-[#0A0A0C] text-zinc-100' : 'bg-[#F4F4F6] text-zinc-900'} overflow-hidden font-sans select-none`}>
         {isPracticeHubOpen ? (
           <PracticeHub
             isDarkMode={isDarkMode}
@@ -2095,580 +2357,552 @@ function CloudIDEPageInner() {
           />
         ) : (
           <>
-        {/* 1. Header Navigation */}
-        <div>
-          <Navbar
-            isDarkMode={isDarkMode}
-            currentLanguage={currentLang}
-            onLanguageChange={handleLanguageChange}
-            onRun={handleRun}
-            isRunning={isRunning}
-            onDebug={handleStartDebug}
-            isDebugging={isDebugging}
-            onVisualize={handleRunTrace}
-            isVisualizing={isTracing}
-            layoutMode={editorLayoutMode}
-            onLayoutModeChange={setEditorLayoutMode}
-            autoFixEnabled={aiSettings.autoFixErrors}
-            onToggleAutoFix={() =>
-              setAiSettings((s) => ({ ...s, autoFixErrors: !s.autoFixErrors }))
-            }
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenShare={() => setIsShareOpen(true)}
-          />
-        </div>
+            <Navbar
+              hideVisibleBar
+              isDarkMode={isDarkMode}
+              currentLanguage={currentLang}
+              onLanguageChange={handleLanguageChange}
+              onRun={handleRun}
+              isRunning={isRunning}
+              onDebug={handleStartDebug}
+              isDebugging={isDebugging}
+              onVisualize={handleRunTrace}
+              isVisualizing={isTracing}
+              layoutMode={editorLayoutMode}
+              onLayoutModeChange={setEditorLayoutMode}
+              autoFixEnabled={aiSettings.autoFixErrors}
+              onToggleAutoFix={() =>
+                setAiSettings((s) => ({ ...s, autoFixErrors: !s.autoFixErrors }))
+              }
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenShare={() => setIsShareOpen(true)}
+            />
+            <CortexIdeShell
+              workspaceName={projectName || 'cortex-workspace'}
+              isDarkMode={isDarkMode}
+              onToggleDarkMode={handleToggleDarkMode}
+              currentLanguage={currentLang}
+              isExecutable={currentLang.executable !== false}
+              selectedSqlDialect={selectedSqlDialect}
+              onSqlDialectChange={setSelectedSqlDialect}
+              openTabs={openIdeTabs}
+              activeTab={activeIdeTab}
+              onSelectTab={handleSelectFile}
+              onCloseTab={handleCloseFileTab}
+              onNewFile={handleCreateNewTabFile}
+              aiCompleteEnabled={enableInlineSuggestions}
+              onToggleAiComplete={handleToggleInlineSuggestions}
+              isRunning={isRunning}
+              onRun={handleRun}
+              onRunWithStdin={() => {
+                setActiveBottomTab('output');
+                setIsBottomCollapsed(false);
+                setTimeout(() => {
+                  const box = document.querySelector<HTMLTextAreaElement>(
+                    '[data-testid="ide-stdin-textarea"]'
+                  );
+                  box?.focus();
+                }, 60);
+                if (customStdin.trim()) {
+                  void handleRun();
+                }
+              }}
+              onRunTests={() => {
+                setActiveBottomTab('tests');
+                setIsBottomCollapsed(false);
+                void handleRunAllTests();
+              }}
+              onDebug={handleStartDebug}
+              onFormatCode={() => ideFormatFnRef.current?.()}
+              editorLayoutMode={editorLayoutMode}
+              onChangeEditorLayoutMode={setEditorLayoutMode}
+              onClearOutput={() => setExecutionResult(null)}
+              executionResult={executionResult}
+              saveStatus={saveStatus}
+              cursorPos={ideCursorPos}
+              tabSize={4}
+              hasActiveError={ideHasActiveError}
+              onOpenFeedback={() => setIsFeedbackOpen(true)}
+              activeSidebarTab={activeSidebarTab}
+              isSidebarOpen={isSidebarOpen}
+              sidebarWidth={sidebarWidth}
+              onResizeSidebar={setSidebarWidth}
+              onToggleSidebarOpen={() => setIsSidebarOpen((prev) => !prev)}
+              activeBottomTab={activeBottomTab}
+              onChangeBottomTab={setActiveBottomTab}
+              isBottomOpen={!isBottomCollapsed}
+              onToggleBottomOpen={(open) => {
+                if (typeof open === 'boolean') {
+                  setIsBottomCollapsed(!open);
+                } else {
+                  setIsBottomCollapsed((prev) => !prev);
+                }
+              }}
+              bottomHeight={dockHeight}
+              onResizeBottom={setDockHeight}
+              sidebarRef={fileExplorerRef}
+              commandPaletteItems={commandPaletteItems}
+              renderRail={() => (
+                <GlobalSidebar
+                  hideLogo
+                  isDarkMode={isDarkMode}
+                  onOpenSettings={() => setIsSettingsOpen(true)}
+                  hasPracticeSession={Boolean(activePracticeChallenge)}
+                />
+              )}
+              renderLeftPanel={(panel) => (
+                <>
+                  {panel === 'files' && (
+                    <FileExplorer
+                      width={sidebarWidth}
+                      files={files}
+                      activeFileId={activeFileId}
+                      onSelectFile={handleSelectFile}
+                      currentLanguage={currentLang}
+                      onOpenFeedback={() => setIsFeedbackOpen(true)}
+                      hasActiveError={ideHasActiveError}
+                      onUploadFiles={handleUploadFiles}
+                      onDownloadFile={handleDownloadFile}
+                      onCreateFile={async (name, isFolder, parentFolderId) => {
+                        const parent = parentFolderId ? files.find((f) => f.id === parentFolderId) : null;
+                        const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
+                        const detectedLangId = detectLanguage(name, '');
+                        const detectedLang = getLanguageConfig(detectedLangId);
+                        const starter = getStarterContentForFile(name, detectedLang);
+                        const initialContent = isFolder ? '' : (starter || detectedLang.starterCode || '');
+                        const path = parent ? `${parentPath}/${name}` : `/${name}`;
 
-        {/* 2. Main Work Area: Standard 3-Pane IDE Workspace */}
-        <div className={`flex-1 flex overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#f1f5f9]'}`}>
-              {/* Left Contextual Sidebar (Resizable width & Collapsible with smooth sliding animation) */}
-              <div 
-                ref={fileExplorerRef}
-                style={{ 
-                  width: isSidebarOpen ? `${sidebarWidth}px` : 0, 
-                  minWidth: isSidebarOpen ? `${sidebarWidth}px` : 0, 
-                  maxWidth: isSidebarOpen ? `${sidebarWidth}px` : 0,
-                  opacity: isSidebarOpen ? 1 : 0,
-                }} 
-                className={`${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-white border-slate-200'} flex flex-col h-full shadow-md overflow-hidden shrink-0 ${
-                  !isSidebarOpen ? 'border-r-0 pointer-events-none' : 'border-r'
-                } ${
-                  isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'
-                }`}
-              >
-                <div 
-                  style={{ 
-                    width: `${sidebarWidth}px`, 
-                    minWidth: `${sidebarWidth}px`,
-                    transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
-                  }} 
-                  className={`h-full flex flex-col shrink-0 ${
-                    isResizingSidebar ? '' : 'transition-transform duration-300 ease-in-out'
-                  }`}
-                >
-                  {activeSidebarTab === 'files' && (
-                <FileExplorer
-                  width={sidebarWidth}
-                  files={files}
-                  activeFileId={activeFileId}
-                  onSelectFile={handleSelectFile}
-                  currentLanguage={currentLang}
-                  onOpenFeedback={() => setIsFeedbackOpen(true)}
-                  hasActiveError={Boolean((executionResult && executionResult.status !== 'success') || executionResult?.stderr?.trim())}
-                  onUploadFiles={handleUploadFiles}
-                  onDownloadFile={handleDownloadFile}
-                  onCreateFile={async (name, isFolder, parentFolderId) => {
-                    const parent = parentFolderId ? files.find((f) => f.id === parentFolderId) : null;
-                    const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
-                    const detectedLangId = detectLanguage(name, '');
-                    const detectedLang = getLanguageConfig(detectedLangId);
-                    const starter = getStarterContentForFile(name, detectedLang);
-                    const initialContent = isFolder ? '' : (starter || detectedLang.starterCode || '');
-                    const path = parent ? `${parentPath}/${name}` : `/${name}`;
-                    
-                    if (projectId) {
-                      try {
-                        const res = await fetch(`/api/v1/projects/${projectId}/files`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ name, path, content: initialContent, isFolder })
-                        });
-                        if (res.ok) {
-                          const data = await res.json();
-                          const newF = data.file;
+                        if (projectId) {
+                          try {
+                            const res = await fetch(`/api/v1/projects/${projectId}/files`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ name, path, content: initialContent, isFolder })
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              const newF = data.file;
+                              setFiles((prev) => [...prev, newF]);
+                              if (newF.updatedAt) lastFetchTimestampRef.current[newF.id] = newF.updatedAt;
+                              if (!isFolder) {
+                                setOpenFileIds((prev) => [...prev, newF.id]);
+                                setActiveFileId(newF.id);
+                                setCurrentLang(detectedLang);
+                              }
+                            }
+                          } catch (e) { console.error(e); }
+                        } else {
+                          const newF: ProjectFile = {
+                            id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                            name,
+                            path,
+                            content: initialContent,
+                            isFolder,
+                            parentId: parentFolderId,
+                          };
                           setFiles((prev) => [...prev, newF]);
-                          if (newF.updatedAt) lastFetchTimestampRef.current[newF.id] = newF.updatedAt;
                           if (!isFolder) {
                             setOpenFileIds((prev) => [...prev, newF.id]);
                             setActiveFileId(newF.id);
                             setCurrentLang(detectedLang);
                           }
                         }
-                      } catch (e) { console.error(e); }
-                    } else {
-                      const newF: ProjectFile = {
-                        id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                        name,
-                        path,
-                        content: initialContent,
-                        isFolder,
-                        parentId: parentFolderId,
-                      };
-                      setFiles((prev) => [...prev, newF]);
-                      if (!isFolder) {
-                        setOpenFileIds((prev) => [...prev, newF.id]);
-                        setActiveFileId(newF.id);
-                        setCurrentLang(detectedLang);
-                      }
-                    }
-                  }}
-                  onDeleteFile={async (id) => {
-                    const getDescendantIds = (targetId: string): string[] => {
-                      const children = files.filter((f) => f.parentId === targetId);
-                      return [targetId, ...children.flatMap((c) => getDescendantIds(c.id))];
-                    };
-                    const toDelete = getDescendantIds(id);
-                    if (toDelete.includes(activeFileId) && saveFileRef.current) {
-                      clearTimeout(saveFileRef.current);
-                      saveFileRef.current = null;
-                    }
-                    if (projectId) {
-                       try {
-                         await fetch(`/api/v1/projects/${projectId}/files/${id}`, { method: 'DELETE' });
-                       } catch (e) { console.error(e); }
-                    }
-                    setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
-                    setOpenFileIds((prev) => prev.filter((openId) => !toDelete.includes(openId)));
-                    if (toDelete.includes(activeFileId)) {
-                      const remainingOpen = openFileIds.filter((openId) => !toDelete.includes(openId));
-                      if (remainingOpen[0]) {
-                        handleSelectFile(remainingOpen[0]);
-                      } else {
-                        setActiveFileId('');
-                      }
-                    }
-                  }}
-                  onRenameFile={async (id, newName) => {
-                    const f = files.find((x) => x.id === id);
-                    const parentPath = f ? f.path.substring(0, f.path.lastIndexOf('/')) : '';
-                    const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
-
-                    if (projectId) {
-                      if (id === activeFileId && saveFileRef.current) {
-                        clearTimeout(saveFileRef.current);
-                        saveFileRef.current = null;
-                      }
-                      try {
-                        const renameRes = await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            name: newName,
-                            path: newPath,
-                            ...(id === activeFileId && f ? { content: f.content } : {}),
-                          }),
-                        });
-                        await syncTimestampFromPatch(id, renameRes);
-                        if (id === activeFileId && renameRes.ok) {
-                          setSaveStatus('saved');
-                        }
-                      } catch (e) { console.error(e); }
-                    }
-
-                    if (id === activeFileId && f && !f.isFolder) {
-                      // Clear override so new extension takes effect
-                      setFileLanguageOverrides((prev) => {
-                        const next = { ...prev };
-                        delete next[id];
-                        try {
-                          localStorage.setItem('cortex_file_language_overrides', JSON.stringify(next));
-                        } catch {}
-                        return next;
-                      });
-
-                      // Re-detect language from new filename without explicit override
-                      const detected = detectLanguage(newName, f.content, undefined, currentLang.id);
-                      const conf = getLanguageConfig(detected);
-                      if (conf) {
-                        setCurrentLang(conf);
-                      }
-                    }
-
-                    setFiles((prev) =>
-                      prev.map((file) => {
-                        if (file.id !== id) return file;
-                        return {
-                          ...file,
-                          name: newName,
-                          path: newPath,
+                      }}
+                      onDeleteFile={async (id) => {
+                        const getDescendantIds = (targetId: string): string[] => {
+                          const children = files.filter((f) => f.parentId === targetId);
+                          return [targetId, ...children.flatMap((c) => getDescendantIds(c.id))];
                         };
-                      })
-                    );
-                  }}
-                  onExportProject={() => {
-                    const zipData: Record<string, Uint8Array> = {};
-                    files.forEach((f) => {
-                      if (!f.isFolder) {
-                        const cleanPath = f.path.replace(/^\/+/, '') || f.name;
-                        const content = f.id === activeFileId ? (activeFile?.content || f.content || '') : (f.content || '');
-                        zipData[cleanPath] = strToU8(content);
-                      }
-                    });
-                    const zipped = zipSync(zipData);
-                    const blob = new Blob([zipped as any], { type: 'application/zip' });
-                    const url = URL.createObjectURL(blob);
-                    const dl = document.createElement('a');
-                    dl.href = url;
-                    dl.download = `${projectId || 'cortex-project'}.zip`;
-                    document.body.appendChild(dl);
-                    dl.click();
-                    document.body.removeChild(dl);
-                    URL.revokeObjectURL(url);
-                  }}
-                  onImportProject={async (file) => {
-                    if (!projectId) return;
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    
-                    try {
-                      const res = await fetch(`/api/v1/projects/${projectId}/import`, {
-                        method: 'POST',
-                        body: formData,
-                      });
-                      if (res.ok) {
-                        const data = await res.json();
-                        const importedFiles = data.files || [];
-                        setFiles(importedFiles);
-                        importedFiles.forEach((f: any) => {
-                          if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
-                        });
-                        if (importedFiles.length > 0) {
-                           const firstFile = importedFiles.find((f: ProjectFile) => !f.isFolder);
-                           if (firstFile) {
-                             setActiveFileId(firstFile.id);
-                             setOpenFileIds([firstFile.id]);
-                           }
+                        const toDelete = getDescendantIds(id);
+                        if (toDelete.includes(activeFileId) && saveFileRef.current) {
+                          clearTimeout(saveFileRef.current);
+                          saveFileRef.current = null;
                         }
-                      }
-                    } catch (e) {
-                      console.error('Import failed', e);
-                    }
-                  }}
-                  isDarkMode={isDarkMode}
-                />
-              )}
+                        if (projectId) {
+                          try {
+                            await fetch(`/api/v1/projects/${projectId}/files/${id}`, { method: 'DELETE' });
+                          } catch (e) { console.error(e); }
+                        }
+                        setFiles((prev) => prev.filter((f) => !toDelete.includes(f.id)));
+                        setOpenFileIds((prev) => prev.filter((openId) => !toDelete.includes(openId)));
+                        if (toDelete.includes(activeFileId)) {
+                          const remainingOpen = openFileIds.filter((openId) => !toDelete.includes(openId));
+                          if (remainingOpen[0]) {
+                            handleSelectFile(remainingOpen[0]);
+                          } else {
+                            setActiveFileId('');
+                          }
+                        }
+                      }}
+                      onRenameFile={async (id, newName) => {
+                        const f = files.find((x) => x.id === id);
+                        const parentPath = f ? f.path.substring(0, f.path.lastIndexOf('/')) : '';
+                        const newPath = parentPath === '' ? `/${newName}` : `${parentPath}/${newName}`;
 
-              {activeSidebarTab === 'benchmark' && (
-                <BenchmarkSidebar
-                  width={sidebarWidth}
-                  isDarkMode={isDarkMode}
-                  onLoadCode={(code, lang) => {
-                    const foundLang = SUPPORTED_LANGUAGES.find(
-                      (l) => l.id === lang || l.monacoLang === lang
-                    );
-                    if (foundLang) handleLanguageChange(foundLang);
-                    if (activeFile) {
-                      setFiles((prev) =>
-                        prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
-                      );
-                    }
-                  }}
-                />
-              )}
+                        if (projectId) {
+                          if (id === activeFileId && saveFileRef.current) {
+                            clearTimeout(saveFileRef.current);
+                            saveFileRef.current = null;
+                          }
+                          try {
+                            const renameRes = await fetch(`/api/v1/projects/${projectId}/files/${id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                name: newName,
+                                path: newPath,
+                                ...(id === activeFileId && f ? { content: f.content } : {}),
+                              }),
+                            });
+                            await syncTimestampFromPatch(id, renameRes);
+                            if (id === activeFileId && renameRes.ok) {
+                              setSaveStatus('saved');
+                            }
+                          } catch (e) { console.error(e); }
+                        }
 
-              {activeSidebarTab === 'learn' && (
-                <LearnSidebar
-                  width={sidebarWidth}
-                  isDarkMode={isDarkMode}
-                  currentLanguage={currentLang?.id}
-                  onLoadLesson={(code, lang, title) => {
-                    const foundLang = SUPPORTED_LANGUAGES.find(
-                      (l) => l.id === lang || l.monacoLang === lang
-                    );
-                    if (foundLang) handleLanguageChange(foundLang);
-                    if (activeFile) {
-                      setFiles((prev) =>
-                        prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
-                      );
-                    }
-                  }}
-                />
-              )}
-            </div>
-          </div>
+                        if (id === activeFileId && f && !f.isFolder) {
+                          setFileLanguageOverrides((prev) => {
+                            const next = { ...prev };
+                            delete next[id];
+                            try {
+                              localStorage.setItem('cortex_file_language_overrides', JSON.stringify(next));
+                            } catch {}
+                            return next;
+                          });
 
-          {/* Horizontal Resize Splitter */}
-          <div
-            onMouseDown={startResizingSidebar}
-            style={{
-              width: !isSidebarOpen ? 0 : undefined,
-              opacity: !isSidebarOpen ? 0 : 1,
-              pointerEvents: !isSidebarOpen ? 'none' : 'auto',
-            }}
-            className={`hover:w-1.5 ${isDarkMode ? 'bg-[#1f2024]' : 'bg-slate-200'} hover:bg-[#ff9100] active:bg-[#ff9100] cursor-col-resize z-20 select-none flex-shrink-0 ${
-              !isSidebarOpen ? 'w-0 overflow-hidden' : 'w-1'
-            } ${isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'}`}
-            title="Drag to adjust sidebar size"
-          />
+                          const detected = detectLanguage(newName, f.content, undefined, currentLang.id);
+                          const conf = getLanguageConfig(detected);
+                          if (conf) {
+                            setCurrentLang(conf);
+                          }
+                        }
 
-          {/* Center & Bottom Area */}
-          <div className={`flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-white'}`}>
-            {/* Center Pane: Multi-Layout (Code, Visualize, Split View) */}
-            <div className="flex-1 flex overflow-hidden relative">
-              <div className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${editorLayoutMode === 'split' ? (isDarkMode ? 'w-1/2 border-r border-[#1f2024]' : 'w-1/2 border-r border-slate-200') : 'w-full'} h-full overflow-hidden relative select-text`} style={{ userSelect: 'text' }}>
-                  <MonacoCodeEditor
-                    files={files}
-                    openFileIds={openFileIds}
-                    activeFileId={activeFileId}
-                    onSelectFile={handleSelectFile}
-                    saveStatus={saveStatus}
-                    onForceSave={handleForceSave}
-                    onCloseFile={handleCloseFileTab}
-                    onNewFile={handleCreateNewTabFile}
-                    onContentChange={handleContentChange}
-                    language={getMonacoLanguage(currentLang.id || activeFile?.name || '')}
-                    theme={theme}
-                    fontSize={fontSize}
-                    breakpoints={breakpoints}
-                    onToggleBreakpoint={toggleBreakpoint}
-                    activeLine={activeDebugLine}
-                    diagnostics={executionResult?.diagnostics}
-                    onCursorChange={(l, c) => {
-                      if (collabBrokerRef.current) {
-                        collabBrokerRef.current.updateCursor(activeFileId, l, c);
-                      }
-                    }}
-                    isDarkMode={isDarkMode}
-                    onToggleDarkMode={handleToggleDarkMode}
-                    isFullscreen={isFullscreen}
-                    onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
-                    quickFixResult={fixResult}
-                    isQuickFixOpen={isQuickFixOpen}
-                    onCloseQuickFix={() => setIsQuickFixOpen(false)}
-                    onApplyExplanationComment={handleApplyExplanationComment}
-                    onApplyLiveFix={handleApplyLiveFix}
-                    aiProvider={aiSettings.provider === 'gemini' || Boolean(aiSettings.apiKey) ? 'gemini' : 'offline'}
-                    apiKey={aiSettings.apiKey || ''}
-                    onSaveApiKey={handleSaveApiKey}
-                    isAnalyzingFix={isAnalyzingFix}
-                    onReanalyzeWithKey={handleReanalyzeWithKey}
-                    enableInlineSuggestions={enableInlineSuggestions}
-                    onToggleInlineSuggestions={handleToggleInlineSuggestions}
-                    onRun={handleRun}
-                    isRunning={isRunning}
-                    onDebug={handleStartDebug}
-                    isDebugging={isDebugging}
-                    isExecutable={currentLang.executable !== false}
-                  />
-              </div>
-
-              {(editorLayoutMode === 'visualize' || editorLayoutMode === 'split') && (
-                <div className={`${editorLayoutMode === 'split' ? 'w-1/2' : 'w-full'} h-full overflow-hidden relative`}>
-                  <CodeVisualizationWorkspace
-                    traceSession={traceSession}
-                    isLoading={isTracing}
-                    language={currentLang.id}
-                    sourceCode={activeFile?.content || ''}
-                    onRunTrace={handleRunTrace}
-                    onStepChange={(line) => setActiveDebugLine(line)}
-                    showSourcePane={editorLayoutMode === 'visualize'}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Vertical Resize Splitter */}
-            {!isBottomCollapsed && (
-              <div
-                onMouseDown={startResizingDock}
-                className={`h-1 hover:h-1.5 ${isDarkMode ? 'bg-[#1f2024]' : 'bg-slate-200'} hover:bg-[#ff9100] active:bg-[#ff9100] cursor-row-resize transition-all z-20 select-none flex-shrink-0`}
-                title="Drag to adjust bottom bar size"
-              />
-            )}
-
-            {/* Bottom Dock: Tabbed Panels with Resizable Height */}
-            <div
-              style={{ height: isBottomCollapsed ? 36 : dockHeight }}
-              className={`border-t ${isDarkMode ? 'border-[#1f2024] bg-[#0b0c0e]' : 'border-slate-200 bg-slate-50'} flex flex-col ${
-                isResizingDock ? '' : 'transition-all duration-150'
-              }`}
-            >
-              {/* Dock Tab Selector Header */}
-              <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-slate-100 border-slate-200'} flex items-center justify-between px-2 text-xs select-none border-b transition-colors`}>
-                <div className="flex items-center space-x-1">
-                  {[
-                    { id: 'output', label: 'Output', icon: TermIcon },
-                    { id: 'terminal', label: 'Terminal', icon: TermIcon },
-                    { id: 'tests', label: 'Tests', icon: CheckSquare },
-                    { id: 'ai', label: 'Assistant', icon: Sparkles },
-                    { id: 'debug', label: 'Debugger', icon: Bug },
-                    { id: 'preview', label: 'Preview', icon: Globe },
-                  ].map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = activeBottomTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => {
-                          setActiveBottomTab(tab.id as any);
-                          setIsBottomCollapsed(false);
-                        }}
-                        className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded transition font-heading font-semibold text-xs tracking-wide border ${
-                          isActive && !isBottomCollapsed
-                            ? isDarkMode
-                              ? 'bg-[#18191f] text-[#ff9100] border-transparent border-b-2 border-b-[#ff9100]'
-                              : 'bg-white text-[#ff9100] border-slate-200 border-b-2 border-b-[#ff9100] shadow-sm'
-                            : isDarkMode
-                              ? 'text-gray-400 hover:text-gray-200 hover:bg-[#14151a] border-transparent'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300 border-transparent'
-                        }`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Right Side: Status Summary & Collapse Toggle */}
-                <div className="flex items-center space-x-2">
-                  {executionResult && !isBottomCollapsed && (
-                    <div className={`hidden sm:flex items-center space-x-2 text-xs font-mono pr-2 border-r ${
-                      isDarkMode ? 'text-gray-300 border-[#1f2024]' : 'text-slate-600 border-slate-300'
-                    }`}>
-                      <Badge variant={executionResult.status === 'success' ? 'emerald' : 'rose'} dot size="sm">
-                        Exit {executionResult.exitCode}
-                      </Badge>
-                      <span>•</span>
-                      <span>{executionResult.executionTimeMs}ms</span>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
-                    className={`p-1 rounded transition border border-transparent ${
-                      isDarkMode
-                        ? 'text-gray-400 hover:text-white hover:bg-[#1c1e24]'
-                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300'
-                    }`}
-                    title={isBottomCollapsed ? 'Expand Dock' : 'Collapse Dock'}
-                  >
-                    {isBottomCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Panel View Container */}
-              {!isBottomCollapsed && (
-                <div className="flex-1 overflow-hidden">
-                  {activeBottomTab === 'output' && (
-                    <OutputPanel
-                      result={executionResult}
-                      isRunning={isRunning}
-                      isDarkMode={isDarkMode}
-                      stdin={customStdin}
-                      customStdin={customStdin}
-                      onStdinChange={setCustomStdin}
-                      onChangeCustomStdin={setCustomStdin}
-                      onRun={handleRun}
-                      onTriggerAutoFix={() => {
-                        if (!activeFile) return;
-                        processAutoFix(
-                          activeFile.content,
-                          executionResult?.stderr || '',
-                          executionResult?.diagnostics || []
+                        setFiles((prev) =>
+                          prev.map((file) => {
+                            if (file.id !== id) return file;
+                            return {
+                              ...file,
+                              name: newName,
+                              path: newPath,
+                            };
+                          })
                         );
                       }}
+                      onExportProject={() => {
+                        const zipData: Record<string, Uint8Array> = {};
+                        files.forEach((f) => {
+                          if (!f.isFolder) {
+                            const cleanPath = f.path.replace(/^\/+/, '') || f.name;
+                            const content = f.id === activeFileId ? (activeFile?.content || f.content || '') : (f.content || '');
+                            zipData[cleanPath] = strToU8(content);
+                          }
+                        });
+                        const zipped = zipSync(zipData);
+                        const blob = new Blob([zipped as any], { type: 'application/zip' });
+                        const url = URL.createObjectURL(blob);
+                        const dl = document.createElement('a');
+                        dl.href = url;
+                        dl.download = `${projectId || 'cortex-project'}.zip`;
+                        document.body.appendChild(dl);
+                        dl.click();
+                        document.body.removeChild(dl);
+                        URL.revokeObjectURL(url);
+                      }}
+                      onImportProject={async (file) => {
+                        if (!projectId) return;
+                        const formData = new FormData();
+                        formData.append('file', file);
+
+                        try {
+                          const res = await fetch(`/api/v1/projects/${projectId}/import`, {
+                            method: 'POST',
+                            body: formData,
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            const importedFiles = data.files || [];
+                            setFiles(importedFiles);
+                            importedFiles.forEach((f: any) => {
+                              if (f.updatedAt) lastFetchTimestampRef.current[f.id] = f.updatedAt;
+                            });
+                            if (importedFiles.length > 0) {
+                              const firstFile = importedFiles.find((f: ProjectFile) => !f.isFolder);
+                              if (firstFile) {
+                                setActiveFileId(firstFile.id);
+                                setOpenFileIds([firstFile.id]);
+                              }
+                            }
+                          }
+                        } catch (e) {
+                          console.error('Import failed', e);
+                        }
+                      }}
+                      isDarkMode={isDarkMode}
                     />
                   )}
-                  {activeBottomTab === 'terminal' && (
-                    <TerminalPanel
+
+                  {panel === 'search' && (
+                    <SearchSidebar
+                      width={sidebarWidth}
                       files={files}
-                      activeFileId={activeFileId}
-                      onSyncFiles={setFiles}
                       isDarkMode={isDarkMode}
-                      stdin={customStdin}
-                      customStdin={customStdin}
-                      onStdinChange={setCustomStdin}
-                      onChangeCustomStdin={setCustomStdin}
+                      onSelectMatch={(fileId, lineNumber) => {
+                        handleSelectFile(fileId);
+                        if (lineNumber && lineNumber > 0) {
+                          setSearchJumpTarget({
+                            fileId,
+                            line: lineNumber,
+                            nonce: Date.now(),
+                          });
+                        }
+                      }}
                     />
                   )}
-                  {activeBottomTab === 'tests' && (
-                    <TestCasesPanel
-                      testCases={testCases}
+
+                  {panel === 'benchmark' && (
+                    <BenchmarkSidebar
+                      width={sidebarWidth}
                       isDarkMode={isDarkMode}
-                      onAddTestCase={(tc) =>
-                        setTestCases((prev) => [...prev, { ...tc, id: `tc_${Date.now()}` }])
-                      }
-                      onDeleteTestCase={(id) =>
-                        setTestCases((prev) => prev.filter((t) => t.id !== id))
-                      }
-                      onRunAllTests={() => handleRunAllTests()}
-                      onRunBenchmark={handleRunBenchmark}
-                      isRunningTests={isRunningTests}
-                      benchmarkResult={benchmarkResult}
-                      customStdin={customStdin}
-                      onChangeCustomStdin={setCustomStdin}
-                    />
-                  )}
-                  {activeBottomTab === 'ai' && (
-                    <AIAssistantPanel
-                      isDarkMode={isDarkMode}
-                      currentCode={activeFile?.content || ''}
-                      language={currentLang.id}
-                      settings={aiSettings}
-                      onUpdateSettings={(s) => setAiSettings((prev) => ({ ...prev, ...s }))}
-                      onTriggerExplain={async () => {
-                        if (!activeFile) return;
-                        setAnalysisMode('explain');
-                        setIsAnalyzingAI(true);
-                        const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'explain');
-                        setAiAnalysis(res);
-                        setIsAnalyzingAI(false);
-                      }}
-                      onTriggerOptimize={async () => {
-                        if (!activeFile) return;
-                        setAnalysisMode('optimize');
-                        setIsAnalyzingAI(true);
-                        const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'optimize');
-                        setAiAnalysis(res);
-                        setIsAnalyzingAI(false);
-                      }}
-                      onTriggerRefactor={async () => {
-                        if (!activeFile) return;
-                        setAnalysisMode('refactor');
-                        setIsAnalyzingAI(true);
-                        const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'refactor');
-                        setAiAnalysis(res);
-                        setIsAnalyzingAI(false);
-                      }}
-                      onTriggerConvert={async (toLang) => {
-                        if (!activeFile) return;
-                        const res = await convertCode(activeFile.content, currentLang.id, toLang);
-                        const targetLangConfig = getLanguageConfig(toLang);
-                        setCurrentLang(targetLangConfig);
-                        handleContentChange(res.convertedCode);
-                      }}
-                      onTriggerAutoFix={() => {
-                        if (!activeFile) return;
-                        processAutoFix(
-                          activeFile.content,
-                          executionResult?.stderr || '',
-                          executionResult?.diagnostics || []
+                      onLoadCode={(code, lang) => {
+                        const foundLang = SUPPORTED_LANGUAGES.find(
+                          (l) => l.id === lang || l.monacoLang === lang
                         );
+                        if (foundLang) handleLanguageChange(foundLang);
+                        if (activeFile) {
+                          setFiles((prev) =>
+                            prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
+                          );
+                        }
                       }}
-                      analysisResult={aiAnalysis}
-                      isAnalyzing={isAnalyzingAI}
-                      analysisMode={analysisMode}
                     />
                   )}
-                  {activeBottomTab === 'debug' && (
-                    <DebuggerPanel
+
+                  {panel === 'learn' && (
+                    <LearnSidebar
+                      width={sidebarWidth}
                       isDarkMode={isDarkMode}
-                      isDebugging={isDebugging}
-                      onStartDebug={handleStartDebug}
-                      onStopDebug={handleStopDebug}
-                      onStepOver={handleStepOver}
-                      onStepInto={() => handleStepOver()}
-                      onStepOut={() => handleStepOver()}
-                      onResume={() => handleStepOver()}
+                      currentLanguage={currentLang?.id}
+                      onLoadLesson={(code, lang) => {
+                        const foundLang = SUPPORTED_LANGUAGES.find(
+                          (l) => l.id === lang || l.monacoLang === lang
+                        );
+                        if (foundLang) handleLanguageChange(foundLang);
+                        if (activeFile) {
+                          setFiles((prev) =>
+                            prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
+                          );
+                        }
+                      }}
+                    />
+                  )}
+                </>
+              )}
+              renderEditor={() => (
+                <div className="flex h-full w-full overflow-hidden relative">
+                  <div
+                    className={`${editorLayoutMode === 'visualize' ? 'hidden ' : ''}${
+                      editorLayoutMode === 'split'
+                        ? isDarkMode
+                          ? 'w-1/2 border-r border-white/[0.07]'
+                          : 'w-1/2 border-r border-black/[0.08]'
+                        : 'w-full'
+                    } h-full overflow-hidden relative select-text`}
+                    style={{ userSelect: 'text' }}
+                  >
+                    <MonacoCodeEditor
+                      hideChrome
+                      showMinimap={showMinimap}
+                      jumpToLine={searchJumpTarget}
+                      onFormatReady={(fn) => {
+                        ideFormatFnRef.current = fn;
+                      }}
+                      files={files}
+                      openFileIds={openFileIds}
+                      activeFileId={activeFileId}
+                      onSelectFile={handleSelectFile}
+                      saveStatus={saveStatus}
+                      onForceSave={handleForceSave}
+                      onCloseFile={handleCloseFileTab}
+                      onNewFile={handleCreateNewTabFile}
+                      onContentChange={handleContentChange}
+                      language={getMonacoLanguage(currentLang.id || activeFile?.name || '')}
+                      theme={theme}
+                      fontSize={fontSize}
                       breakpoints={breakpoints}
                       onToggleBreakpoint={toggleBreakpoint}
                       activeLine={activeDebugLine}
-                      variables={parsedDebugInfo.variables}
-                      callStack={parsedDebugInfo.callStack}
-                    />
-                  )}
-                  {activeBottomTab === 'preview' && (
-                    <WebPreviewPanel
-                      files={files}
+                      diagnostics={executionResult?.diagnostics}
+                      onCursorChange={(l, c) => {
+                        setIdeCursorPos({ line: l, col: c });
+                        if (collabBrokerRef.current) {
+                          collabBrokerRef.current.updateCursor(activeFileId, l, c);
+                        }
+                      }}
                       isDarkMode={isDarkMode}
+                      onToggleDarkMode={handleToggleDarkMode}
+                      isFullscreen={isFullscreen}
+                      onToggleFullscreen={() => setIsFullscreen((prev) => !prev)}
+                      quickFixResult={fixResult}
+                      isQuickFixOpen={isQuickFixOpen}
+                      onCloseQuickFix={() => setIsQuickFixOpen(false)}
+                      onApplyExplanationComment={handleApplyExplanationComment}
+                      onApplyLiveFix={handleApplyLiveFix}
+                      aiProvider={aiSettings.provider === 'gemini' || Boolean(aiSettings.apiKey) ? 'gemini' : 'offline'}
+                      apiKey={aiSettings.apiKey || ''}
+                      onSaveApiKey={handleSaveApiKey}
+                      isAnalyzingFix={isAnalyzingFix}
+                      onReanalyzeWithKey={handleReanalyzeWithKey}
+                      enableInlineSuggestions={enableInlineSuggestions}
+                      onToggleInlineSuggestions={handleToggleInlineSuggestions}
+                      onRun={handleRun}
+                      isRunning={isRunning}
+                      onDebug={handleStartDebug}
+                      isDebugging={isDebugging}
+                      isExecutable={currentLang.executable !== false}
                     />
+                  </div>
+
+                  {(editorLayoutMode === 'visualize' || editorLayoutMode === 'split') && (
+                    <div className={`${editorLayoutMode === 'split' ? 'w-1/2' : 'w-full'} h-full overflow-hidden relative`}>
+                      <CodeVisualizationWorkspace
+                        traceSession={traceSession}
+                        isLoading={isTracing}
+                        language={currentLang.id}
+                        sourceCode={activeFile?.content || ''}
+                        onRunTrace={handleRunTrace}
+                        onStepChange={(line) => setActiveDebugLine(line)}
+                        showSourcePane={editorLayoutMode === 'visualize'}
+                      />
+                    </div>
                   )}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+              renderOutput={() => (
+                <OutputPanel
+                  result={executionResult}
+                  isRunning={isRunning}
+                  isDarkMode={isDarkMode}
+                  stdin={customStdin}
+                  customStdin={customStdin}
+                  onStdinChange={setCustomStdin}
+                  onChangeCustomStdin={setCustomStdin}
+                  onRun={handleRun}
+                  onTriggerAutoFix={() => {
+                    if (!activeFile) return;
+                    processAutoFix(
+                      activeFile.content,
+                      executionResult?.stderr || '',
+                      executionResult?.diagnostics || []
+                    );
+                  }}
+                />
+              )}
+              renderTerminal={() => (
+                <TerminalPanel
+                  files={files}
+                  activeFileId={activeFileId}
+                  onSyncFiles={setFiles}
+                  isDarkMode={isDarkMode}
+                  stdin={customStdin}
+                  customStdin={customStdin}
+                  onStdinChange={setCustomStdin}
+                  onChangeCustomStdin={setCustomStdin}
+                />
+              )}
+              renderTests={() => (
+                <TestCasesPanel
+                  testCases={testCases}
+                  isDarkMode={isDarkMode}
+                  onAddTestCase={(tc) =>
+                    setTestCases((prev) => [...prev, { ...tc, id: `tc_${Date.now()}` }])
+                  }
+                  onDeleteTestCase={(id) =>
+                    setTestCases((prev) => prev.filter((t) => t.id !== id))
+                  }
+                  onRunAllTests={() => handleRunAllTests()}
+                  onRunBenchmark={handleRunBenchmark}
+                  isRunningTests={isRunningTests}
+                  benchmarkResult={benchmarkResult}
+                  customStdin={customStdin}
+                  onChangeCustomStdin={setCustomStdin}
+                />
+              )}
+              renderAssistant={() => (
+                <AIAssistantPanel
+                  isDarkMode={isDarkMode}
+                  currentCode={activeFile?.content || ''}
+                  language={currentLang.id}
+                  settings={aiSettings}
+                  onUpdateSettings={(s) => setAiSettings((prev) => ({ ...prev, ...s }))}
+                  onTriggerExplain={async () => {
+                    if (!activeFile) return;
+                    setAnalysisMode('explain');
+                    setIsAnalyzingAI(true);
+                    const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'explain');
+                    setAiAnalysis(res);
+                    setIsAnalyzingAI(false);
+                  }}
+                  onTriggerOptimize={async () => {
+                    if (!activeFile) return;
+                    setAnalysisMode('optimize');
+                    setIsAnalyzingAI(true);
+                    const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'optimize');
+                    setAiAnalysis(res);
+                    setIsAnalyzingAI(false);
+                  }}
+                  onTriggerRefactor={async () => {
+                    if (!activeFile) return;
+                    setAnalysisMode('refactor');
+                    setIsAnalyzingAI(true);
+                    const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'refactor');
+                    setAiAnalysis(res);
+                    setIsAnalyzingAI(false);
+                  }}
+                  onTriggerConvert={async (toLang) => {
+                    if (!activeFile) return;
+                    const res = await convertCode(activeFile.content, currentLang.id, toLang);
+                    const targetLangConfig = getLanguageConfig(toLang);
+                    setCurrentLang(targetLangConfig);
+                    handleContentChange(res.convertedCode);
+                  }}
+                  onTriggerAutoFix={() => {
+                    if (!activeFile) return;
+                    processAutoFix(
+                      activeFile.content,
+                      executionResult?.stderr || '',
+                      executionResult?.diagnostics || []
+                    );
+                  }}
+                  analysisResult={aiAnalysis}
+                  isAnalyzing={isAnalyzingAI}
+                  analysisMode={analysisMode}
+                />
+              )}
+              renderDebugger={() => (
+                <DebuggerPanel
+                  isDarkMode={isDarkMode}
+                  isDebugging={isDebugging}
+                  onStartDebug={handleStartDebug}
+                  onStopDebug={handleStopDebug}
+                  onStepOver={handleStepOver}
+                  onStepInto={() => handleStepOver()}
+                  onStepOut={() => handleStepOver()}
+                  onResume={() => handleStepOver()}
+                  breakpoints={breakpoints}
+                  onToggleBreakpoint={toggleBreakpoint}
+                  activeLine={activeDebugLine}
+                  variables={parsedDebugInfo.variables}
+                  callStack={parsedDebugInfo.callStack}
+                />
+              )}
+              renderPreview={() => (
+                <WebPreviewPanel
+                  files={files}
+                  isDarkMode={isDarkMode}
+                />
+              )}
+            />
           </>
         )}
 
@@ -2697,6 +2931,8 @@ function CloudIDEPageInner() {
           theme={theme}
           onChangeTheme={handleThemeChange}
           isDarkMode={isDarkMode}
+          showMinimap={showMinimap}
+          onToggleMinimap={handleToggleMinimap}
         />
 
         <ShareModal

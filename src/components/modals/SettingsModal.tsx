@@ -38,6 +38,8 @@ interface SettingsModalProps {
   theme: string;
   onChangeTheme: (theme: string) => void;
   isDarkMode?: boolean;
+  showMinimap?: boolean;
+  onToggleMinimap?: (enabled: boolean) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -50,6 +52,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   theme,
   onChangeTheme,
   isDarkMode: propDarkMode,
+  showMinimap = false,
+  onToggleMinimap,
 }) => {
   const isDarkMode = propDarkMode ?? (theme !== 'light' && theme !== 'cortex-light');
   const [activeSection, setActiveSection] = useState<
@@ -442,8 +446,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className={`${mutedClass} font-mono text-xs`}>4 Spaces</span>
                   </div>
                   <div className={`flex items-center justify-between pt-2.5 border-t ${dividerClass}`}>
+                    <span className={`font-heading font-semibold text-xs ${headingClass}`}>Show Editor Minimap</span>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(showMinimap)}
+                      onChange={(e) => onToggleMinimap?.(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#F59E0B] cursor-pointer"
+                    />
+                  </div>
+                  <div className={`flex items-center justify-between pt-2.5 border-t ${dividerClass}`}>
                     <span className={`font-heading font-semibold text-xs ${headingClass}`}>Auto Bracket Matching</span>
-                    <input type="checkbox" defaultChecked className="w-4 h-4 rounded accent-[#ff9100] cursor-pointer" />
+                    <input type="checkbox" defaultChecked className="w-4 h-4 rounded accent-[#F59E0B] cursor-pointer" />
                   </div>
                 </div>
               </div>

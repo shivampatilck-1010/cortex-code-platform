@@ -24,6 +24,7 @@ export interface NavbarProps {
   selectedSqlDialect?: 'sqlite' | 'postgresql' | 'mysql' | 'mssql' | 'oracle';
   onSqlDialectChange?: (dialect: 'sqlite' | 'postgresql' | 'mysql' | 'mssql' | 'oracle') => void;
   isDarkMode?: boolean;
+  hideVisibleBar?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = (props) => {
@@ -33,10 +34,12 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
     selectedSqlDialect = 'sqlite',
     onSqlDialectChange,
     isDarkMode = true,
+    hideVisibleBar = false,
   } = props;
 
   const isExecutable = currentLanguage?.executable !== false;
-  const hasVisibleContent = currentLanguage?.id === 'sql' && Boolean(onSqlDialectChange);
+  const hasVisibleContent =
+    !hideVisibleBar && currentLanguage?.id === 'sql' && Boolean(onSqlDialectChange);
 
   return (
     <>
