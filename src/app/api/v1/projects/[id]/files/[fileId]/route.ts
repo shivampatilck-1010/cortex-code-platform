@@ -51,6 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const trimmedName = body.name.trim();
       if (
         !trimmedName ||
+        trimmedName === '.' ||
         trimmedName.includes('/') ||
         trimmedName.includes('\\') ||
         trimmedName.includes('..') ||

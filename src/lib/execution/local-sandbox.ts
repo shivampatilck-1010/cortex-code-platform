@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
-import { createRequire } from 'module';
 import { ExecutionRequest, ExecutionResult, DiagnosticError } from './types';
 import { getLanguageConfig } from '@/config/languages';
 import { parseDiagnostics } from './diagnostics-parser';
@@ -166,13 +165,9 @@ export async function executeInLocalSandbox(req: ExecutionRequest): Promise<Exec
       const sqlContent = mainFile?.content || '';
       cleanup(tmpDir);
       try {
-        const customReq = createRequire(import.meta.url);
-        const { DatabaseSync } = customReq('node:sqlite');
         const { splitSqlStatements, validateSqlSandboxSecurity, isSqlDataQuery } = await import('@/lib/sql/database-engine');
-        const db = new DatabaseSync(':memory:');
         const normalizedSql = sqlContent.trim();
         if (!normalizedSql) {
-          db.close();
           return {
             status: 'runtime_error',
             exitCode: 1,
@@ -188,7 +183,6 @@ export async function executeInLocalSandbox(req: ExecutionRequest): Promise<Exec
         try {
           validateSqlSandboxSecurity(normalizedSql);
         } catch (secErr: any) {
-          db.close();
           return {
             status: 'runtime_error',
             exitCode: 1,
@@ -205,28 +199,48 @@ export async function executeInLocalSandbox(req: ExecutionRequest): Promise<Exec
         const lastStmt = statements.length > 0 ? statements[statements.length - 1] : normalizedSql;
         const isDataQuery = isSqlDataQuery(lastStmt);
 
-        let stdout = '';
-        if (isDataQuery) {
-          if (statements.length > 1) {
-            db.exec(statements.slice(0, -1).join('\n;\n') + '\n;');
-          }
-          const stmt = db.prepare(lastStmt);
-          const rows = stmt.all() as Record<string, unknown>[];
-          if (rows.length > 0) {
-            const cols = Object.keys(rows[0]);
-            stdout = rows
-              .map((row) => cols.map((c) => (row[c] === null || row[c] === undefined ? '' : String(row[c]))).join('|'))
-              .join('\n');
-          }
-        } else {
-          db.exec(normalizedSql);
-          stdout = 'Query executed successfully.';
+        const sqlResult = await runSqlSandboxInChildProcess(
+          {
+            normalizedSql,
+            statements,
+            lastStmt,
+            isDataQuery,
+          },
+          timeoutMs
+        );
+
+        if (sqlResult.timedOut) {
+          return {
+            status: 'timeout',
+            exitCode: 124,
+            stdout: '',
+            stderr: sqlResult.error || 'SQLite query execution timed out.',
+            executionTimeMs: Date.now() - startTime,
+            memoryUsageMb: 8,
+            timestamp: new Date().toISOString(),
+            provider: 'local_worker',
+            stdin: req.stdin || '',
+          };
         }
-        db.close();
+
+        if (!sqlResult.ok) {
+          return {
+            status: 'runtime_error',
+            exitCode: 1,
+            stdout: '',
+            stderr: sqlResult.error || 'SQLite execution failed',
+            executionTimeMs: Date.now() - startTime,
+            memoryUsageMb: 4,
+            timestamp: new Date().toISOString(),
+            provider: 'local_worker',
+            stdin: req.stdin || '',
+          };
+        }
+
         return {
           status: 'success',
           exitCode: 0,
-          stdout,
+          stdout: sqlResult.stdout || '',
           stderr: '',
           executionTimeMs: Date.now() - startTime,
           memoryUsageMb: 8,
@@ -352,14 +366,20 @@ function runProcess(
     proc.stdout?.setEncoding('utf-8');
     proc.stderr?.setEncoding('utf-8');
 
+    let killFallbackTimer: ReturnType<typeof setTimeout> | undefined;
+
     // Hard process-tree kill on timeout
     const timer = setTimeout(() => {
       if (isClosed) return;
       timedOut = true;
       terminateProcessTree(proc, isWindows);
-      setTimeout(() => {
+      killFallbackTimer = setTimeout(() => {
         if (!isClosed) {
           isClosed = true;
+          proc.stdin?.destroy();
+          proc.stdout?.destroy();
+          proc.stderr?.destroy();
+          if (typeof proc.unref === 'function') proc.unref();
           resolve({
             stdout: stdout.replace(/\r\n/g, '\n'),
             stderr: stderr.replace(/\r\n/g, '\n'),
@@ -368,7 +388,9 @@ function runProcess(
           });
         }
       }, 400);
+      if (typeof killFallbackTimer.unref === 'function') killFallbackTimer.unref();
     }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
 
     if (proc.stdin) {
       proc.stdin.on('error', () => {});
@@ -401,6 +423,7 @@ function runProcess(
       if (isClosed) return;
       isClosed = true;
       clearTimeout(timer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
       resolve({
         stdout: stdout.replace(/\r\n/g, '\n'),
         stderr: (stderr + err.message).replace(/\r\n/g, '\n'),
@@ -413,6 +436,7 @@ function runProcess(
       if (isClosed) return;
       isClosed = true;
       clearTimeout(timer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
       resolve({
         stdout: stdout.replace(/\r\n/g, '\n'),
         stderr: stderr.replace(/\r\n/g, '\n'),
@@ -420,6 +444,132 @@ function runProcess(
         timedOut,
       });
     });
+  });
+}
+
+/**
+ * Executes an in-memory SQLite query inside an isolated short-lived child process
+ * so runaway native queries can be terminated cleanly on timeout.
+ */
+function runSqlSandboxInChildProcess(
+  payload: {
+    normalizedSql: string;
+    statements: string[];
+    lastStmt: string;
+    isDataQuery: boolean;
+  },
+  timeoutMs: number
+): Promise<{ ok: boolean; stdout?: string; error?: string; timedOut?: boolean }> {
+  return new Promise((resolve) => {
+    const inlineRunner = [
+      "const { DatabaseSync } = require('node:sqlite');",
+      "let raw = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (c) => { raw += c; });",
+      "process.stdin.on('end', () => {",
+      '  let db = null;',
+      '  try {',
+      '    const input = JSON.parse(raw);',
+      "    db = new DatabaseSync(':memory:');",
+      "    let stdout = '';",
+      '    if (input.isDataQuery) {',
+      '      if (input.statements.length > 1) {',
+      "        db.exec(input.statements.slice(0, -1).join('\\n;\\n') + '\\n;');",
+      '      }',
+      '      const stmt = db.prepare(input.lastStmt);',
+      '      const rows = stmt.all();',
+      '      if (rows.length > 0) {',
+      '        const cols = Object.keys(rows[0]);',
+      '        stdout = rows',
+      "          .map((row) => cols.map((c) => (row[c] === null || row[c] === undefined ? '' : String(row[c]))).join('|'))",
+      "          .join('\\n');",
+      '      }',
+      '    } else {',
+      '      db.exec(input.normalizedSql);',
+      "      stdout = 'Query executed successfully.';",
+      '    }',
+      '    process.stdout.write(JSON.stringify({ ok: true, stdout }));',
+      '  } catch (err) {',
+      "    process.stdout.write(JSON.stringify({ ok: false, error: (err && err.message) || 'SQLite execution failed' }));",
+      '  } finally {',
+      '    if (db) { try { db.close(); } catch {} }',
+      '  }',
+      '});',
+    ].join('\n');
+
+    const childEnv = { ...process.env };
+    delete childEnv.NODE_OPTIONS;
+
+    const isWindows = process.platform === 'win32';
+    const proc = spawn(process.execPath, ['--no-warnings', '-e', inlineRunner], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      detached: !isWindows,
+      env: childEnv,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timedOut = false;
+    let killFallbackTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (res: { ok: boolean; stdout?: string; error?: string; timedOut?: boolean }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
+      resolve(res);
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminateProcessTree(proc, isWindows);
+      killFallbackTimer = setTimeout(() => {
+        proc.stdin?.destroy();
+        proc.stdout?.destroy();
+        proc.stderr?.destroy();
+        if (typeof proc.unref === 'function') proc.unref();
+        finish({ ok: false, timedOut: true, error: 'SQLite query execution timed out.' });
+      }, 300);
+      if (typeof killFallbackTimer.unref === 'function') killFallbackTimer.unref();
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+
+    proc.stdout?.setEncoding('utf8');
+    proc.stderr?.setEncoding('utf8');
+    proc.stdout?.on('data', (chunk) => {
+      if (stdout.length < EXECUTION_LIMITS.maxOutputSizeBytes) {
+        stdout += chunk;
+      }
+    });
+    proc.stderr?.on('data', (chunk) => {
+      if (stderr.length < EXECUTION_LIMITS.maxOutputSizeBytes) {
+        stderr += chunk;
+      }
+    });
+
+    proc.on('error', (err) => {
+      finish({ ok: false, error: err?.message || 'Failed to spawn SQLite sandbox worker' });
+    });
+
+    proc.on('close', () => {
+      if (timedOut) {
+        finish({ ok: false, timedOut: true, error: 'SQLite query execution timed out.' });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout.trim());
+        finish(parsed);
+      } catch {
+        finish({ ok: false, error: stderr.trim() || 'SQLite execution failed' });
+      }
+    });
+
+    if (proc.stdin) {
+      proc.stdin.on('error', () => {});
+      proc.stdin.end(JSON.stringify(payload));
+    }
   });
 }
 
@@ -434,7 +584,12 @@ function terminateProcessTree(proc: any, isWindows: boolean) {
   try {
     if (isWindows) {
       // Force kill entire process tree on Windows
-      spawn('taskkill.exe', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true });
+      const tk = spawn('taskkill.exe', ['/pid', String(proc.pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      tk.on('error', () => {});
+      tk.unref();
     } else {
       // Force kill process group on POSIX
       try {

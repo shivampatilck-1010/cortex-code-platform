@@ -235,6 +235,27 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
     setFloatingTooltip(null);
   };
 
+  const handleLogoClick = (e: React.MouseEvent) => {
+    const isFilesRoute = pathname === '/ide' || pathname.startsWith('/ide');
+
+    if (isFilesRoute) {
+      e.preventDefault();
+      if (!isSidebarOpen || activeSidebarTab !== 'files') {
+        window.dispatchEvent(
+          new CustomEvent('cortex:sidebar-tab-toggle', {
+            detail: { tab: 'files' },
+          })
+        );
+      }
+    } else {
+      try {
+        localStorage.setItem('cortex_active_sidebar_tab', 'files');
+        localStorage.setItem('cortex_sidebar_open', 'true');
+        localStorage.setItem('cortex_file_explorer_collapsed', 'false');
+      } catch {}
+    }
+  };
+
   const handleNavClick = (item: NavItem, e: React.MouseEvent) => {
     const isFilesRoute = pathname === '/ide' || pathname.startsWith('/ide');
 
@@ -316,6 +337,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
           }`}>
             <Link
               href="/ide"
+              onClick={handleLogoClick}
               onMouseEnter={(e) => showFloatingTooltip('Cortex', 'Code Beyond Limits', e)}
               onMouseMove={moveFloatingTooltip}
               onMouseLeave={hideFloatingTooltip}

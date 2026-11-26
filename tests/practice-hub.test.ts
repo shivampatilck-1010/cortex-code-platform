@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import assert from 'node:assert';
+import { NextRequest } from 'next/server';
 import {
   CHALLENGES,
   DSA_CHALLENGES,
@@ -13,6 +14,9 @@ import { executeInLocalSandbox } from '../src/lib/execution/local-sandbox';
 import { runTestCases } from '../src/lib/execution/engine';
 import { executeArenaTestCase } from '../src/lib/arena/execute-test';
 import { executeSqlQuery } from '../src/lib/sql/database-engine';
+import { ClassroomAuth } from '../src/lib/classroom/auth';
+import { projectDb } from '../src/lib/project/db';
+import { PATCH as patchProjectFile } from '../src/app/api/v1/projects/[id]/files/[fileId]/route';
 import { detectEmojisInText } from './test-utils';
 
 console.log('[Test Suite] Running Cortex Practice Hub & Catalog Verification Tests...');
@@ -101,6 +105,10 @@ async function runPracticeHubTests() {
     'src/app/challenges/page.tsx',
     'src/app/challenges/[id]/page.tsx',
     'src/components/modals/SettingsModal.tsx',
+    'src/components/layout/GlobalSidebar.tsx',
+    'src/app/api/v1/projects/[id]/files/[fileId]/route.ts',
+    'src/lib/sql/database-engine.ts',
+    'src/lib/execution/local-sandbox.ts',
   ];
 
   const forbiddenBrands = ['CipherSchools', 'LeetCode', 'THANKS2026'];
@@ -324,7 +332,7 @@ async function runPracticeHubTests() {
     const verifyUpdated = await executeSqlQuery(`${advSqlProjectId}_rec_dml`, 'SELECT x FROM t_upd;', 'sqlite');
     assert.strictEqual(verifyUpdated.rows[0]?.[0], 2, 'Non-looping WITH RECURSIVE UPDATE must update row to 2');
 
-    // 2) Bounded recursive CTE with explicit LIMIT must succeed in both engines
+    // 2) Bounded recursive CTEs (including OFFSET, comma-offset, arithmetic grouping, CTE self-limit, and dialects) must succeed
     const boundedRecursiveSql = `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT * FROM cnt LIMIT 5;`;
     const localBoundedRec = await executeInLocalSandbox({
       language: 'sql',
@@ -336,6 +344,61 @@ async function runPracticeHubTests() {
     assert.deepStrictEqual(localBoundedRec.stdout.trim().split('\n'), ['1', '2', '3', '4', '5']);
     const engineBoundedRec = await executeSqlQuery(`${advSqlProjectId}_rec_ok`, boundedRecursiveSql, 'sqlite');
     assert.ok(!engineBoundedRec.error && engineBoundedRec.rows.length === 5, `Bounded recursive CTE must return 5 rows in database-engine: ${engineBoundedRec.error}`);
+
+    const boundedVariants: Array<{ label: string; sql: string; expectedLines: string[] }> = [
+      {
+        label: 'LIMIT 5 OFFSET 2',
+        sql: `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT * FROM cnt LIMIT 5 OFFSET 2;`,
+        expectedLines: ['3', '4', '5', '6', '7'],
+      },
+      {
+        label: 'LIMIT 2, 5',
+        sql: `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT * FROM cnt LIMIT 2, 5;`,
+        expectedLines: ['3', '4', '5', '6', '7'],
+      },
+      {
+        label: 'SELECT (x + 1) arithmetic grouping',
+        sql: `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT (x + 1) FROM cnt LIMIT 5;`,
+        expectedLines: ['2', '3', '4', '5', '6'],
+      },
+      {
+        label: 'CTE body LIMIT 5 with outer COUNT(*)',
+        sql: `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt LIMIT 5) SELECT COUNT(*) FROM cnt;`,
+        expectedLines: ['5'],
+      },
+    ];
+    for (const variant of boundedVariants) {
+      const localVarRes = await executeInLocalSandbox({
+        language: 'sql',
+        files: [{ id: 'sql-rec-var', name: 'rec-var.sql', path: '/rec-var.sql', content: variant.sql }],
+        entrypoint: 'rec-var.sql',
+        stdin: '',
+      });
+      assert.strictEqual(localVarRes.status, 'success', `local-sandbox must accept ${variant.label}: ${localVarRes.stderr}`);
+      assert.deepStrictEqual(localVarRes.stdout.trim().split('\n'), variant.expectedLines, `local-sandbox output mismatch for ${variant.label}`);
+
+      const engineVarRes = await executeSqlQuery(`${advSqlProjectId}_rec_var`, variant.sql, 'sqlite');
+      assert.ok(!engineVarRes.error, `database-engine must accept ${variant.label}: ${engineVarRes.error}`);
+      assert.deepStrictEqual(
+        engineVarRes.rows.map((r) => String(r[0])),
+        variant.expectedLines,
+        `database-engine output mismatch for ${variant.label}`
+      );
+    }
+
+    const mssqlBoundedRes = await executeSqlQuery(
+      `${advSqlProjectId}_rec_mssql`,
+      `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT TOP 5 * FROM cnt;`,
+      'mssql'
+    );
+    assert.ok(!mssqlBoundedRes.error && mssqlBoundedRes.rows.length === 5, `mssql bounded recursive CTE must return 5 rows: ${mssqlBoundedRes.error}`);
+
+    const oracleBoundedRes = await executeSqlQuery(
+      `${advSqlProjectId}_rec_oracle`,
+      `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT * FROM cnt WHERE ROWNUM <= 5;`,
+      'oracle'
+    );
+    assert.ok(!oracleBoundedRes.error && oracleBoundedRes.rows.length === 5, `oracle bounded recursive CTE must return 5 rows: ${oracleBoundedRes.error}`);
 
     // 3) Unbounded recursive CTE queries must be rejected in BOTH engines without stalling
     const unboundedRecursivePayloads = [
@@ -351,6 +414,30 @@ async function runPracticeHubTests() {
       { label: 'negative LIMIT -1', sql: `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT * FROM cnt LIMIT -1;` },
       { label: 'oversized LIMIT 99999999', sql: `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT * FROM cnt LIMIT 99999999;` },
       { label: 'LIMIT offset, oversized count', sql: `WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt) SELECT * FROM cnt LIMIT 5, 99999999;` },
+      // Challenger r5 & Explorer r6 regression vectors
+      { label: 'LIMIT 5 OFFSET 1000000000', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r LIMIT 5 OFFSET 1000000000;` },
+      { label: 'LIMIT 1000000000, 5', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r LIMIT 1000000000, 5;` },
+      { label: 'CTE body LIMIT 1000000000, 5', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r LIMIT 1000000000, 5) SELECT * FROM r;` },
+      { label: 'CTE body LIMIT 5 OFFSET 1000000000', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r LIMIT 5 OFFSET 1000000000) SELECT * FROM r;` },
+      { label: 'LIMIT arithmetic expression 5 + 1000000000', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r LIMIT 5 + 1000000000;` },
+      { label: 'LIMIT parenthesized OFFSET (1000000000)', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r LIMIT 5 OFFSET (1000000000);` },
+      { label: 'LIMIT 6000 OFFSET 6000 exceeding maxRows', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r LIMIT 6000 OFFSET 6000;` },
+      { label: 'derived table ORDER BY', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM (SELECT * FROM r ORDER BY n) LIMIT 1;` },
+      { label: 'derived table WHERE impossible', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM (SELECT * FROM r WHERE n < 0) LIMIT 1;` },
+      { label: 'derived table DISTINCT', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT 1 FROM r) SELECT * FROM (SELECT DISTINCT n FROM r) LIMIT 2;` },
+      { label: 'derived table GROUP BY', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM (SELECT n FROM r GROUP BY n) LIMIT 1;` },
+      { label: 'scalar subquery ORDER BY', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT (SELECT n FROM r ORDER BY n DESC LIMIT 1) FROM r LIMIT 1;` },
+      { label: 'scalar subquery WHERE impossible', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT (SELECT 1 FROM r WHERE n < 0) FROM r LIMIT 1;` },
+      { label: 'multi-CTE chain ORDER BY', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r), s(n) AS (SELECT * FROM r ORDER BY n) SELECT * FROM s LIMIT 5;` },
+      { label: 'multi-CTE chain WHERE impossible', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r), s(n) AS (SELECT * FROM r WHERE n < 0) SELECT * FROM s LIMIT 5;` },
+      { label: 'unlisted aggregate JSON_GROUP_ARRAY', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT JSON_GROUP_ARRAY(n) FROM r LIMIT 1;` },
+      { label: 'unlisted aggregate JSONB_GROUP_ARRAY', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT JSONB_GROUP_ARRAY(n) FROM r LIMIT 1;` },
+      { label: 'unlisted aggregate STRING_AGG', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT STRING_AGG(n, ',') FROM r LIMIT 1;` },
+      { label: 'quoted aggregate "count"(n)', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT "count"(n) FROM r LIMIT 1;` },
+      { label: 'bracketed aggregate [count](n)', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT [count](n) FROM r LIMIT 1;` },
+      { label: 'AS MATERIALIZED CTE', sql: `WITH RECURSIVE r(n) AS MATERIALIZED (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r LIMIT 5;` },
+      { label: 'comma-join outer', sql: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r, (SELECT 1) LIMIT 1;` },
+      { label: 'DELETE with unbounded recursive CTE', sql: `CREATE TABLE IF NOT EXISTS t_upd_del(x INT); WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) DELETE FROM t_upd_del WHERE x IN (SELECT n FROM r);` },
     ];
     for (const payload of unboundedRecursivePayloads) {
       const localUnbounded = await executeInLocalSandbox({
@@ -371,6 +458,41 @@ async function runPracticeHubTests() {
         `database-engine error for ${payload.label} must mention explicit LIMIT clause, got: ${engineUnbounded.error}`
       );
     }
+
+    const mssqlDerivedOrderBy = await executeSqlQuery(
+      `${advSqlProjectId}_rec_bad_mssql`,
+      `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT TOP 5 * FROM (SELECT * FROM r ORDER BY n);`,
+      'mssql'
+    );
+    assert.ok(
+      Boolean(mssqlDerivedOrderBy.error) && mssqlDerivedOrderBy.error!.includes('explicit LIMIT clause'),
+      `mssql TOP + derived ORDER BY must reject with explicit LIMIT clause, got: ${mssqlDerivedOrderBy.error}`
+    );
+
+    const oracleDerivedOrderBy = await executeSqlQuery(
+      `${advSqlProjectId}_rec_bad_oracle`,
+      `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM (SELECT * FROM r ORDER BY n) WHERE ROWNUM <= 5;`,
+      'oracle'
+    );
+    assert.ok(
+      Boolean(oracleDerivedOrderBy.error) && oracleDerivedOrderBy.error!.includes('explicit LIMIT clause'),
+      `oracle ROWNUM + derived ORDER BY must reject with explicit LIMIT clause, got: ${oracleDerivedOrderBy.error}`
+    );
+
+    // 4) Layer 2 child-process timeout isolation check (non-recursive slow cross-join must be killed cleanly at timeoutMs)
+    const slowSql = `CREATE TABLE t_big(x INT); INSERT INTO t_big VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10); SELECT SUM(a.x + b.x + c.x + d.x + e.x + f.x + g.x + h.x) FROM t_big a, t_big b, t_big c, t_big d, t_big e, t_big f, t_big g, t_big h WHERE (a.x + b.x + c.x + d.x + e.x + f.x + g.x + h.x) > 0;`;
+    const timeoutCheckStart = Date.now();
+    const localTimeoutRes = await executeInLocalSandbox({
+      language: 'sql',
+      files: [{ id: 'sql-timeout', name: 'timeout.sql', path: '/timeout.sql', content: slowSql }],
+      entrypoint: 'timeout.sql',
+      stdin: '',
+      runTimeoutMs: 1000,
+    });
+    const timeoutElapsed = Date.now() - timeoutCheckStart;
+    assert.strictEqual(localTimeoutRes.status, 'timeout', `Slow SQL query must time out via child-process isolation, got status=${localTimeoutRes.status}`);
+    assert.strictEqual(localTimeoutRes.exitCode, 124, 'Timed-out SQL query must return exitCode 124');
+    assert.ok(timeoutElapsed < 3500, `Timeout isolation must kill hung SQLite child promptly (<3500ms), took ${timeoutElapsed}ms`);
 
     // Valid multi-statement PRAGMA introspection must succeed in both engines
     const validPragmaSql = `CREATE TABLE t_ok(a INT); PRAGMA table_info('t_ok');`;
@@ -625,6 +747,66 @@ async function runPracticeHubTests() {
 
   const challengesPageContent = fs.readFileSync(path.join(projectRoot, 'src/app/challenges/page.tsx'), 'utf8');
   assert.ok(challengesPageContent.includes('href="/ide"'), '/challenges page Launch Cloud IDE link must route to /ide');
+
+  const globalSidebarContent = fs.readFileSync(path.join(projectRoot, 'src/components/layout/GlobalSidebar.tsx'), 'utf8');
+  assert.ok(globalSidebarContent.includes('handleLogoClick'), 'GlobalSidebar must wire handleLogoClick on Cortex logo Link');
+  assert.ok(
+    globalSidebarContent.includes('onClick={handleLogoClick}'),
+    'GlobalSidebar Cortex logo Link must invoke handleLogoClick'
+  );
+
+  // Verify PATCH /api/v1/projects/[id]/files/[fileId] rejects name: "." with HTTP 400
+  const origAuth = ClassroomAuth.authenticateRequest;
+  const origGetProject = projectDb.getProject.bind(projectDb);
+  const origGetFile = projectDb.getFile.bind(projectDb);
+  try {
+    ClassroomAuth.authenticateRequest = async () => ({
+      id: 'user-test',
+      name: 'Test User',
+      email: 'test@cortex.edu',
+      passwordHash: '',
+      role: 'student',
+      status: 'active',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    projectDb.getProject = async (id: string) => ({
+      id,
+      ownerId: 'user-test',
+      name: 'Test Project',
+      description: '',
+      language: 'python',
+      status: 'active',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    projectDb.getFile = async (fileId: string) => ({
+      id: fileId,
+      projectId: 'proj-test',
+      name: 'main.py',
+      path: '/main.py',
+      content: 'print(1)',
+      isFolder: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const dotReq = new NextRequest('http://localhost/api/v1/projects/proj-test/files/file-test', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '.' }),
+    });
+    const dotRes = await patchProjectFile(dotReq, {
+      params: Promise.resolve({ id: 'proj-test', fileId: 'file-test' }),
+    });
+    assert.strictEqual(dotRes.status, 400, 'PATCH file rename with "." must return HTTP 400');
+    const dotJson = (await dotRes.json()) as { error?: string };
+    assert.strictEqual(dotJson.error, 'Invalid file name', 'PATCH file rename with "." must return Invalid file name');
+  } finally {
+    ClassroomAuth.authenticateRequest = origAuth;
+    projectDb.getProject = origGetProject;
+    projectDb.getFile = origGetFile;
+  }
 
   console.log('[PASS] /ide Practice Hub integration and theme support contracts verified');
   console.log('\n======================================================');

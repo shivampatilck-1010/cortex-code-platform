@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { spawn } from 'child_process';
 import { createRequire } from 'module';
 
 export type SqlDialect = 'sqlite' | 'postgresql' | 'mysql' | 'mssql' | 'oracle';
@@ -81,6 +82,17 @@ export async function getProjectPracticeDb(projectId: string): Promise<any> {
         const dir = path.dirname(candidate);
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
+        }
+        // Verify directory and existing DB file are actually writable (SQLite opens existing read-only DBs lazily)
+        const rwProbe = path.join(
+          dir,
+          `.rw_probe_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        );
+        fs.writeFileSync(rwProbe, '');
+        fs.unlinkSync(rwProbe);
+        if (fs.existsSync(candidate)) {
+          const fd = fs.openSync(candidate, 'r+');
+          fs.closeSync(fd);
         }
       }
       db = new DatabaseSync(candidate);
@@ -792,46 +804,283 @@ function stripNestedParens(sqlCleanNoIds: string): string {
 
 const MAX_RECURSIVE_CTE_LIMIT = 10000;
 
-function hasTopLevelLimit(sqlFragment: string, maxRows: number = MAX_RECURSIVE_CTE_LIMIT): boolean {
-  const cleanNoIds = sanitizeSqlForSecurityCheck(sqlFragment);
-  const topLevel = stripNestedParens(cleanNoIds);
-  const limitMatch = topLevel.match(/\bLIMIT\s+([^\s,;]+)(?:\s*,\s*([^\s,;]+))?/i);
-  if (!limitMatch) return false;
-
-  const firstExpr = limitMatch[1];
-  const secondExpr = limitMatch[2];
-  // In SQLite, "LIMIT a, b" treats b as row count; "LIMIT a" treats a as row count
-  const countExpr = secondExpr !== undefined ? secondExpr : firstExpr;
-
-  // Reject scientific notation (e.g. 1e9), negatives (e.g. -1), expressions, or overly large integers
-  if (!/^\d+$/.test(countExpr)) return false;
-  const count = Number(countExpr);
-  return Number.isSafeInteger(count) && count >= 0 && count <= maxRows;
+interface ParsedTopLevelLimit {
+  matchIndex: number;
+  count: number;
+  offset: number;
 }
 
-function canOuterLimitBoundCte(mainQuery: string): boolean {
-  if (!hasTopLevelLimit(mainQuery)) return false;
-  const cleanNoIds = sanitizeSqlForSecurityCheck(mainQuery);
-  const topLevel = stripNestedParens(cleanNoIds);
+function parseTopLevelLimit(
+  sqlFragment: string,
+  maxRows: number = MAX_RECURSIVE_CTE_LIMIT
+): ParsedTopLevelLimit | null {
+  const cleanNoIds = sanitizeSqlForSecurityCheck(sqlFragment);
 
-  // Outer LIMIT only short-circuits recursion when the outer query streams directly
-  // without sorting, grouping, filtering, deduplication, joins, windowing, set ops, or aggregates.
-  if (!/^\s*SELECT\b/i.test(cleanNoIds)) return false;
+  let match: RegExpMatchArray | null = null;
+  let countStr = '';
+  let offsetStr = '0';
+  let hasOffsetForm = false;
+
+  const limitOffsetMatch = cleanNoIds.match(/\bLIMIT\s+(\d+)\s+OFFSET\s+(\d+)\s*;?\s*$/i);
+  if (limitOffsetMatch && limitOffsetMatch.index !== undefined) {
+    match = limitOffsetMatch;
+    countStr = limitOffsetMatch[1];
+    offsetStr = limitOffsetMatch[2];
+    hasOffsetForm = true;
+  } else {
+    const commaMatch = cleanNoIds.match(/\bLIMIT\s+(\d+)\s*,\s*(\d+)\s*;?\s*$/i);
+    if (commaMatch && commaMatch.index !== undefined) {
+      match = commaMatch;
+      offsetStr = commaMatch[1];
+      countStr = commaMatch[2];
+      hasOffsetForm = true;
+    } else {
+      const simpleMatch = cleanNoIds.match(/\bLIMIT\s+(\d+)\s*;?\s*$/i);
+      if (simpleMatch && simpleMatch.index !== undefined) {
+        match = simpleMatch;
+        countStr = simpleMatch[1];
+      }
+    }
+  }
+
+  if (!match || match.index === undefined) return null;
+
+  // Reject dangling OFFSET (e.g., OFFSET N LIMIT M) or multiple top-level LIMIT/OFFSET clauses
+  if (!hasOffsetForm && /\bOFFSET\b/i.test(cleanNoIds)) return null;
+  const topLevel = stripNestedParens(cleanNoIds);
+  if ((topLevel.match(/\bLIMIT\b/gi) || []).length !== 1) return null;
+  if ((topLevel.match(/\bOFFSET\b/gi) || []).length > (hasOffsetForm ? 1 : 0)) return null;
+
+  // Verify paren depth at match.index is strictly 0
+  let parenDepth = 0;
+  for (let i = 0; i < match.index; i++) {
+    if (cleanNoIds[i] === '(') parenDepth++;
+    else if (cleanNoIds[i] === ')') {
+      parenDepth--;
+      if (parenDepth < 0) return null;
+    }
+  }
+  if (parenDepth !== 0) return null;
+
+  const count = Number(countStr);
+  const offset = Number(offsetStr);
   if (
-    /\b(?:DISTINCT|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|UNION|INTERSECT|EXCEPT|OVER|JOIN)\b/i.test(
-      topLevel
+    !Number.isSafeInteger(count) ||
+    !Number.isSafeInteger(offset) ||
+    count < 0 ||
+    offset < 0 ||
+    count > maxRows ||
+    offset > maxRows ||
+    offset + count > maxRows
+  ) {
+    return null;
+  }
+
+  return {
+    matchIndex: match.index,
+    count,
+    offset,
+  };
+}
+
+function hasTopLevelLimit(sqlFragment: string, maxRows: number = MAX_RECURSIVE_CTE_LIMIT): boolean {
+  return parseTopLevelLimit(sqlFragment, maxRows) !== null;
+}
+
+const ALLOWED_OUTER_CTE_PRE_PAREN_KEYWORDS = new Set([
+  'select',
+  'all',
+  'and',
+  'or',
+  'not',
+  'case',
+  'when',
+  'then',
+  'else',
+]);
+
+function hasDisallowedParenOrFunctionCall(cleanWithIds: string): boolean {
+  const len = cleanWithIds.length;
+  for (let i = 0; i < len; i++) {
+    const ch = cleanWithIds[i];
+    if (ch === "'") {
+      i++;
+      while (i < len) {
+        if (cleanWithIds[i] === "'" && cleanWithIds[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === "'") break;
+        i++;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      i++;
+      while (i < len) {
+        if (cleanWithIds[i] === '"' && cleanWithIds[i + 1] === '"') {
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === '"') break;
+        i++;
+      }
+      continue;
+    }
+    if (ch === '`') {
+      i++;
+      while (i < len) {
+        if (cleanWithIds[i] === '`' && cleanWithIds[i + 1] === '`') {
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === '`') break;
+        i++;
+      }
+      continue;
+    }
+    if (ch === '[') {
+      i++;
+      while (i < len && cleanWithIds[i] !== ']') {
+        i++;
+      }
+      continue;
+    }
+
+    if (ch === '(') {
+      let j = i - 1;
+      while (j >= 0 && /\s/.test(cleanWithIds[j])) j--;
+      if (j < 0) return true;
+      const prev = cleanWithIds[j];
+      if (prev === '"' || prev === ']' || prev === '`' || prev === "'" || prev === '.') {
+        return true;
+      }
+      if (/[a-zA-Z0-9_$]/.test(prev)) {
+        let start = j;
+        while (start > 0 && /[a-zA-Z0-9_$]/.test(cleanWithIds[start - 1])) start--;
+        const word = cleanWithIds.slice(start, j + 1).toLowerCase();
+        if (!/^[a-z_]/.test(word) || !ALLOWED_OUTER_CTE_PRE_PAREN_KEYWORDS.has(word)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function findUnquotedFromEndIndex(cleanWithIds: string): number {
+  const len = cleanWithIds.length;
+  for (let i = 0; i < len; i++) {
+    const ch = cleanWithIds[i];
+    if (ch === "'") {
+      i++;
+      while (i < len) {
+        if (cleanWithIds[i] === "'" && cleanWithIds[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === "'") break;
+        i++;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      i++;
+      while (i < len) {
+        if (cleanWithIds[i] === '"' && cleanWithIds[i + 1] === '"') {
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === '"') break;
+        i++;
+      }
+      continue;
+    }
+    if (ch === '`') {
+      i++;
+      while (i < len) {
+        if (cleanWithIds[i] === '`' && cleanWithIds[i + 1] === '`') {
+          i += 2;
+          continue;
+        }
+        if (cleanWithIds[i] === '`') break;
+        i++;
+      }
+      continue;
+    }
+    if (ch === '[') {
+      i++;
+      while (i < len && cleanWithIds[i] !== ']') {
+        i++;
+      }
+      continue;
+    }
+    if (
+      (i === 0 || !/[a-zA-Z0-9_]/.test(cleanWithIds[i - 1])) &&
+      /^FROM\b/i.test(cleanWithIds.slice(i))
+    ) {
+      return i + 4;
+    }
+  }
+  return -1;
+}
+
+function canOuterLimitBoundCteStrict(
+  mainQuery: string,
+  ctes: Array<{ name: string; body: string; isMaterialized: boolean }>
+): boolean {
+  if (ctes.length !== 1 || ctes[0].isMaterialized) return false;
+  const limitInfo = parseTopLevelLimit(mainQuery);
+  if (!limitInfo) return false;
+
+  const cleanNoIds = sanitizeSqlForSecurityCheck(mainQuery);
+  const cleanWithIds = stripSqlCommentsAndStringLiterals(mainQuery);
+
+  const coreNoIds = cleanNoIds.slice(0, limitInfo.matchIndex).trim();
+  const coreWithIds = cleanWithIds
+    .replace(/\bLIMIT\s+\d+(?:\s*,\s*\d+|\s+OFFSET\s+\d+)?\s*;?\s*$/i, '')
+    .trim();
+
+  // Outer LIMIT only short-circuits recursion when the outer query is a single flat SELECT
+  // directly reading the single non-materialized CTE without filtering, sorting, grouping,
+  // deduplication, subqueries, joins, windowing, set ops, or function calls.
+  if (!/^\s*SELECT\b/i.test(coreNoIds)) return false;
+  if (/^\s*SELECT\s+DISTINCT\b/i.test(coreNoIds)) return false;
+  if ((coreNoIds.match(/\bSELECT\b/gi) || []).length !== 1) return false;
+  if (
+    /\b(?:WITH|VALUES|UNION|INTERSECT|EXCEPT|OVER|DISTINCT|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|WINDOW|JOIN|FILTER)\b/i.test(
+      coreNoIds
     )
   ) {
     return false;
   }
-  if (/\b(?:COUNT|SUM|AVG|MIN|MAX|TOTAL|GROUP_CONCAT)\s*\(/i.test(cleanNoIds)) {
+
+  if (/\(\s*(?:SELECT|WITH|VALUES)\b/i.test(cleanWithIds)) return false;
+  if (hasDisallowedParenOrFunctionCall(cleanWithIds)) return false;
+
+  if ((coreNoIds.match(/\bFROM\b/gi) || []).length !== 1) return false;
+  const fromPartsNoIds = coreNoIds.split(/\bFROM\b/i);
+  if (fromPartsNoIds.length !== 2) return false;
+  const projectionNoIds = fromPartsNoIds[0].replace(/^\s*SELECT(?:\s+ALL)?\b/i, '').trim();
+  if (!projectionNoIds) return false;
+
+  const fromPartNoIds = fromPartsNoIds[1];
+  if (
+    !/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*|""|``|\[\])(?:\s+(?:AS\s+)?(?:[a-zA-Z_][a-zA-Z0-9_]*|""|``|\[\]))?\s*$/i.test(
+      fromPartNoIds
+    )
+  ) {
     return false;
   }
-  const beforeLimit = topLevel.split(/\bLIMIT\b/i)[0] || '';
-  const fromPart = beforeLimit.split(/\bFROM\b/i).slice(1).join(' ');
-  if (fromPart.includes(',')) {
+
+  const fromEndIdx = findUnquotedFromEndIndex(coreWithIds);
+  if (fromEndIdx === -1) return false;
+  const fromSliceWithIds = coreWithIds.slice(fromEndIdx);
+  const fromTableTokens = extractSqlIdentifierTokens(fromSliceWithIds);
+  if (fromTableTokens.length === 0 || fromTableTokens[0] !== ctes[0].name) {
     return false;
   }
+
   return true;
 }
 
@@ -1009,7 +1258,7 @@ export function validateRecursiveCteSafety(sql: string): void {
           skipWs();
         }
 
-        const ctes: Array<{ name: string; body: string }> = [];
+        const ctes: Array<{ name: string; body: string; isMaterialized: boolean }> = [];
         let validWithList = true;
         while (pos < len) {
           skipWs();
@@ -1051,6 +1300,7 @@ export function validateRecursiveCteSafety(sql: string): void {
             validWithList = false;
             break;
           }
+          const isMaterialized = /\bAS\s+MATERIALIZED\b/i.test(asMatch[0]);
           pos += asMatch[0].length;
           skipWs();
 
@@ -1064,7 +1314,7 @@ export function validateRecursiveCteSafety(sql: string): void {
             break;
           }
           const cteBody = clean.slice(pos + 1, bodyEnd);
-          ctes.push({ name: cteName, body: cteBody });
+          ctes.push({ name: cteName, body: cteBody, isMaterialized });
           pos = bodyEnd + 1;
 
           skipWs();
@@ -1101,7 +1351,7 @@ export function validateRecursiveCteSafety(sql: string): void {
           }
         }
         const mainQuery = clean.slice(pos, scopeEnd);
-        const mainBoundsCte = canOuterLimitBoundCte(mainQuery);
+        const mainBoundsCte = canOuterLimitBoundCteStrict(mainQuery, ctes);
 
         for (const cte of ctes) {
           const bodyTopLevel = stripNestedParens(sanitizeSqlForSecurityCheck(cte.body));
@@ -1359,6 +1609,180 @@ function validateAndTranspileDialect(sql: string, dialect: SqlDialect): { transS
   return { transSql, warning };
 }
 
+function terminateSqlChildProcess(proc: any): void {
+  if (!proc || !proc.pid) return;
+  try {
+    proc.kill('SIGKILL');
+  } catch {}
+  if (process.platform === 'win32') {
+    if (proc.exitCode === null && !proc.killed) {
+      try {
+        const tk = spawn('taskkill.exe', ['/pid', String(proc.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+        });
+        tk.on('error', () => {});
+        tk.unref();
+      } catch {}
+    }
+  } else {
+    try {
+      process.kill(-proc.pid, 'SIGKILL');
+    } catch {
+      try {
+        process.kill(proc.pid, 'SIGKILL');
+      } catch {}
+    }
+  }
+}
+
+function runSqlEngineInChildProcess(
+  payload: {
+    dbPath: string;
+    trimmed: string;
+    statements: string[];
+    lastStmt: string;
+    isLastDataQuery: boolean;
+  },
+  timeoutMs: number
+): Promise<{
+  ok: boolean;
+  columns?: string[];
+  rows?: any[][];
+  rowCount?: number;
+  error?: string;
+  timedOut?: boolean;
+}> {
+  return new Promise((resolve) => {
+    const inlineRunner = [
+      "const { DatabaseSync } = require('node:sqlite');",
+      "let raw = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (c) => { raw += c; });",
+      "process.stdin.on('end', () => {",
+      '  let db = null;',
+      '  try {',
+      '    const input = JSON.parse(raw);',
+      '    db = new DatabaseSync(input.dbPath);',
+      "    db.exec('PRAGMA foreign_keys = ON;');",
+      "    db.exec('PRAGMA busy_timeout = 1000;');",
+      '    if (input.isLastDataQuery) {',
+      '      if (input.statements.length > 1) {',
+      "        const setupSql = input.statements.slice(0, -1).join('\\n;\\n') + '\\n;';",
+      '        db.exec(setupSql);',
+      '      }',
+      '      const targetQuery = input.statements.length > 1 ? input.lastStmt : input.trimmed;',
+      '      const stmt = db.prepare(targetQuery);',
+      '      const rows = stmt.all();',
+      '      let columns = [];',
+      '      let rowData = [];',
+      '      if (rows && rows.length > 0) {',
+      '        columns = Object.keys(rows[0]);',
+      '        rowData = rows.map((r) => columns.map((c) => r[c]));',
+      '      } else {',
+      '        try {',
+      "          if (typeof stmt.columns === 'function') {",
+      '            const colDefs = stmt.columns();',
+      '            if (Array.isArray(colDefs)) columns = colDefs.map((c) => c.name || c);',
+      '          }',
+      '        } catch {}',
+      '      }',
+      "      process.stdout.write(JSON.stringify({ ok: true, columns, rows: rowData, rowCount: rowData.length }, (_k, v) => (typeof v === 'bigint' ? Number(v) : v)));",
+      '    } else {',
+      '      db.exec(input.trimmed);',
+      '      let changes = 0;',
+      '      try {',
+      "        const changesStmt = db.prepare('SELECT changes() as c');",
+      '        changes = changesStmt.get()?.c || 0;',
+      '      } catch {}',
+      "      process.stdout.write(JSON.stringify({ ok: true, columns: ['status', 'affected_rows'], rows: [['Query executed successfully', changes]], rowCount: changes }));",
+      '    }',
+      '  } catch (err) {',
+      "    process.stdout.write(JSON.stringify({ ok: false, error: (err && err.message) || 'SQL execution failed' }));",
+      '  } finally {',
+      '    if (db) { try { db.close(); } catch {} }',
+      '  }',
+      '});',
+    ].join('\n');
+
+    const childEnv = { ...process.env };
+    delete childEnv.NODE_OPTIONS;
+
+    const proc = spawn(process.execPath, ['--no-warnings', '-e', inlineRunner], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+      env: childEnv,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timedOut = false;
+    let killFallbackTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (res: {
+      ok: boolean;
+      columns?: string[];
+      rows?: any[][];
+      rowCount?: number;
+      error?: string;
+      timedOut?: boolean;
+    }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (killFallbackTimer) clearTimeout(killFallbackTimer);
+      resolve(res);
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminateSqlChildProcess(proc);
+      killFallbackTimer = setTimeout(() => {
+        proc.stdin?.destroy();
+        proc.stdout?.destroy();
+        proc.stderr?.destroy();
+        if (typeof proc.unref === 'function') proc.unref();
+        finish({ ok: false, timedOut: true, error: 'SQL query execution exceeded 5-second timeout limit' });
+      }, 300);
+      if (typeof killFallbackTimer.unref === 'function') killFallbackTimer.unref();
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+
+    proc.stdout?.setEncoding('utf8');
+    proc.stderr?.setEncoding('utf8');
+    proc.stdout?.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    proc.stderr?.on('data', (chunk) => {
+      stderr += chunk;
+    });
+
+    proc.on('error', (err) => {
+      finish({ ok: false, error: err?.message || 'Failed to spawn SQL execution worker' });
+    });
+
+    proc.on('close', () => {
+      if (timedOut) {
+        finish({ ok: false, timedOut: true, error: 'SQL query execution exceeded 5-second timeout limit' });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout.trim());
+        finish(parsed);
+      } catch {
+        finish({ ok: false, error: stderr.trim() || 'SQL execution failed' });
+      }
+    });
+
+    if (proc.stdin) {
+      proc.stdin.on('error', () => {});
+      proc.stdin.end(JSON.stringify(payload));
+    }
+  });
+}
+
 /**
  * Execute SQL query inside the isolated project practice DB
  */
@@ -1443,6 +1867,72 @@ export async function executeSqlQuery(
   }
 
   const TIMEOUT_MS = 5000;
+  let transSql: string;
+  let warning: string | undefined;
+  try {
+    const validated = validateAndTranspileDialect(query, dialect);
+    transSql = validated.transSql;
+    warning = validated.warning;
+  } catch (err: any) {
+    return {
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      executionTimeMs: Date.now() - startTime,
+      dialect,
+      error: err?.message || 'SQL execution failed',
+    };
+  }
+
+  const trimmed = transSql.trim();
+  const statements = splitSqlStatements(trimmed);
+  const lastStmt = statements.length > 0 ? statements[statements.length - 1] : trimmed;
+  const isLastDataQuery = isSqlDataQuery(lastStmt);
+  const dbPath: string | null = typeof db.location === 'function' ? db.location() : null;
+
+  if (dbPath !== null) {
+    const childResult = await runSqlEngineInChildProcess(
+      {
+        dbPath,
+        trimmed,
+        statements,
+        lastStmt,
+        isLastDataQuery,
+      },
+      TIMEOUT_MS
+    );
+    const executionTimeMs = Date.now() - startTime;
+    if (childResult.timedOut || executionTimeMs > TIMEOUT_MS) {
+      return {
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        executionTimeMs,
+        dialect,
+        error: 'SQL query execution exceeded 5-second timeout limit',
+      };
+    }
+    if (!childResult.ok) {
+      return {
+        columns: [],
+        rows: [],
+        rowCount: 0,
+        executionTimeMs,
+        dialect,
+        error: childResult.error || 'SQL execution failed',
+      };
+    }
+    return {
+      columns: childResult.columns || [],
+      rows: childResult.rows || [],
+      rowCount: childResult.rowCount ?? 0,
+      executionTimeMs,
+      dialect,
+      warning,
+    };
+  }
+
+  // Fallback for persistent :memory: DB when disk paths are unavailable
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -1452,13 +1942,6 @@ export async function executeSqlQuery(
   });
 
   const queryExecutionPromise = (async (): Promise<SqlQueryResult> => {
-    const { transSql, warning } = validateAndTranspileDialect(query, dialect);
-    const trimmed = transSql.trim();
-
-    const statements = splitSqlStatements(trimmed);
-    const lastStmt = statements.length > 0 ? statements[statements.length - 1] : trimmed;
-    const isLastDataQuery = isSqlDataQuery(lastStmt);
-
     if (isLastDataQuery) {
       if (statements.length > 1) {
         const setupSql = statements.slice(0, -1).join('\n;\n') + '\n;';
