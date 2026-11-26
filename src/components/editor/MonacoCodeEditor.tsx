@@ -50,6 +50,9 @@ export interface MonacoCodeEditorProps {
   onDebug?: () => void;
   isDebugging?: boolean;
   isExecutable?: boolean;
+  practiceMode?: boolean;
+  tabSize?: number;
+  onFormatReady?: (formatFn: () => void) => void;
 }
 
 export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
@@ -93,6 +96,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   onDebug,
   isDebugging = false,
   isExecutable = true,
+  practiceMode = false,
+  tabSize = 4,
+  onFormatReady,
 }) => {
   const [isRunDropdownOpen, setIsRunDropdownOpen] = useState(false);
   const runDropdownRef = useRef<HTMLDivElement>(null);
@@ -197,12 +203,22 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     }
   }, [activeFileId, activeFile?.content]);
 
+  const effectiveTheme = practiceMode
+    ? (isDarkMode ? 'practice-dark' : 'practice-light')
+    : theme;
+
   const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     
     if (onEditorMount) {
         onEditorMount(editor, monaco);
+    }
+
+    if (onFormatReady) {
+      onFormatReady(() => {
+        editor.getAction('editor.action.formatDocument')?.run();
+      });
     }
 
     // Define Cortex deep dark theme with #0b0c0e background
@@ -229,6 +245,30 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       },
     });
 
+    // Define Practice dark theme matched to #1C1C1E floating card
+    monaco.editor.defineTheme('practice-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '71717a', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'f59e0b' },
+        { token: 'string', foreground: 'ce9178' },
+        { token: 'number', foreground: 'b5cea8' },
+        { token: 'type', foreground: '4ec9b0' },
+      ],
+      colors: {
+        'editor.background': '#1C1C1E',
+        'editor.foreground': '#f4f4f5',
+        'editorLineNumber.foreground': '#52525b',
+        'editorLineNumber.activeForeground': '#a1a1aa',
+        'editor.lineHighlightBackground': '#262629',
+        'editorCursor.foreground': '#f59e0b',
+        'editorWhitespace.foreground': '#27272a',
+        'editorIndentGuide.background': '#27272a',
+        'editorIndentGuide.activeBackground': '#3f3f46',
+      },
+    });
+
     // Define Cortex light theme for the editor
     monaco.editor.defineTheme('cortex-light', {
       base: 'vs',
@@ -250,7 +290,28 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       },
     });
 
-    monaco.editor.setTheme(theme);
+    // Define Practice light theme matched to #FFFFFF floating card
+    monaco.editor.defineTheme('practice-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '71717a', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'd97706' },
+        { token: 'string', foreground: 'b45309' },
+        { token: 'number', foreground: '047857' },
+        { token: 'type', foreground: '0284c7' },
+      ],
+      colors: {
+        'editor.background': '#FFFFFF',
+        'editor.foreground': '#18181b',
+        'editorLineNumber.foreground': '#a1a1aa',
+        'editorLineNumber.activeForeground': '#52525b',
+        'editor.lineHighlightBackground': '#f7f7f8',
+        'editorCursor.foreground': '#d97706',
+      },
+    });
+
+    monaco.editor.setTheme(effectiveTheme);
 
     // Register standard VS Code Snippets & IntelliSense across all languages once
     if (!snippetsRegisteredRef.current) {
@@ -391,9 +452,23 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   // Sync theme changes with Monaco
   useEffect(() => {
     if (monacoRef.current) {
-      monacoRef.current.editor.setTheme(theme);
+      monacoRef.current.editor.setTheme(effectiveTheme);
     }
-  }, [theme]);
+  }, [effectiveTheme]);
+
+  // Sync practice/editor typography & layout options
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.updateOptions({
+        fontSize,
+        tabSize,
+        lineHeight: practiceMode ? 20 : undefined,
+        minimap: { enabled: !practiceMode },
+        scrollBeyondLastLine: false,
+        padding: practiceMode ? { top: 10, bottom: 10 } : { top: 0, bottom: 0 },
+      });
+    }
+  }, [fontSize, tabSize, practiceMode]);
 
   // Recalculate layout on fullscreen or resize
   useEffect(() => {
@@ -463,10 +538,15 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   }, [breakpoints, activeLine, diagnostics]);
 
   return (
-    <div className={`flex flex-col h-full ${isDarkMode ? 'bg-[#0b0c0e] border-[#1f2024]' : 'bg-white border-slate-200'} border-r ${
+    <div className={`flex flex-col h-full ${
+      practiceMode
+        ? (isDarkMode ? 'bg-[#1C1C1E]' : 'bg-white')
+        : `${isDarkMode ? 'bg-[#0b0c0e] border-[#1f2024]' : 'bg-white border-slate-200'} border-r`
+    } ${
       isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : ''
     }`}>
-      {/* File Tabs Bar */}
+      {/* File Tabs Bar (hidden in Practice Mode) */}
+      {!practiceMode && (
       <div className={`h-9 ${isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-[#f1f3f7] border-slate-200'} flex items-center justify-between border-b text-xs select-none`}>
         <div className="flex items-center overflow-x-auto h-full">
           {tabFiles.map((file) => {
@@ -742,9 +822,14 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* Editor Body */}
-      <div className={`flex-1 relative select-text transition-colors ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#ffffff]'}`}>
+      <div className={`flex-1 relative select-text transition-colors ${
+        practiceMode
+          ? (isDarkMode ? 'bg-[#1C1C1E]' : 'bg-white')
+          : (isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#ffffff]')
+      }`}>
         {/* Copilot-Style Inline Quick-Fix Widget */}
         {isQuickFixOpen && (
           <InlineQuickFixWidget
@@ -790,7 +875,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             language={language}
             path={activeFile.id}
             defaultValue={activeFile.content || ''}
-            theme={theme}
+            theme={effectiveTheme}
             onChange={(value) => {
               const nextVal = value || '';
               lastReportedValueRef.current = nextVal;
@@ -803,18 +888,20 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             }}
             onMount={handleEditorMount}
             options={{
-              fontFamily: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
+              fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
               fontSize,
+              lineHeight: practiceMode ? 20 : undefined,
               fontLigatures: true,
               wordWrap,
-              minimap: { enabled: true },
-              glyphMargin: true,
+              minimap: { enabled: !practiceMode },
+              glyphMargin: !practiceMode,
               scrollBeyondLastLine: false,
+              padding: practiceMode ? { top: 10, bottom: 10 } : undefined,
               smoothScrolling: true,
               automaticLayout: true,
               formatOnPaste: false,
               formatOnType: false,
-              tabSize: 4,
+              tabSize,
               cursorBlinking: 'smooth',
               lineNumbersMinChars: 3,
               renderLineHighlight: 'all',

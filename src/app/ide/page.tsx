@@ -12,8 +12,7 @@ import {
   ChevronUp,
   ChevronDown,
   Maximize2,
-  Minimize2,
-  PanelLeftOpen
+  Minimize2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AppShell } from '@/components/layout/AppShell';
@@ -25,7 +24,15 @@ import { FileExplorer } from '@/components/sidebar/FileExplorer';
 import { BenchmarkSidebar } from '@/components/sidebar/BenchmarkSidebar';
 import { LearnSidebar } from '@/components/sidebar/LearnSidebar';
 import { PracticeHub } from '@/components/practice/PracticeHub';
-import { ProblemDetailsPanel } from '@/components/panels/ProblemDetailsPanel';
+import {
+  PracticeBottomTab,
+  PracticeWorkspace,
+  PracticeWorkspaceResultSummary,
+} from '@/components/practice/PracticeWorkspace';
+import {
+  PracticeSubmissionRecord,
+  ProblemDetailsPanel,
+} from '@/components/panels/ProblemDetailsPanel';
 import { usePracticeProgress } from '@/components/practice/usePracticeProgress';
 import { Challenge, CHALLENGES } from '@/lib/challenges/challenges-data';
 import { OutputPanel } from '@/components/panels/OutputPanel';
@@ -296,6 +303,50 @@ function CloudIDEPageInner() {
   } = usePracticeProgress();
   const [activePracticeChallenge, setActivePracticeChallenge] = useState<Challenge | null>(null);
   const [isProblemPanelOpen, setIsProblemPanelOpen] = useState<boolean>(false);
+  const [isPracticeLeftMaximized, setIsPracticeLeftMaximized] = useState<boolean>(false);
+  const [practiceCursorPos, setPracticeCursorPos] = useState<{ line: number; col: number }>({
+    line: 1,
+    col: 1,
+  });
+  const [practiceFontSize, setPracticeFontSize] = useState<number>(13);
+  const [practiceTabSize, setPracticeTabSize] = useState<number>(4);
+  const [practiceBottomTab, setPracticeBottomTab] = useState<PracticeBottomTab>('testcase');
+  const [practiceActiveCaseIdx, setPracticeActiveCaseIdx] = useState<number>(0);
+  const [practiceLastResult, setPracticeLastResult] =
+    useState<PracticeWorkspaceResultSummary | null>(null);
+  const [practiceConsoleOutput, setPracticeConsoleOutput] = useState<string>('');
+  const [practiceRunningMode, setPracticeRunningMode] = useState<'run' | 'submit' | null>(null);
+  const [practiceSubmissionsByChallenge, setPracticeSubmissionsByChallenge] = useState<
+    Record<string, PracticeSubmissionRecord[]>
+  >({});
+  const practiceFormatFnRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedSubRaw = localStorage.getItem('cortex_practice_submissions_v1');
+      if (savedSubRaw) {
+        const parsed = JSON.parse(savedSubRaw);
+        if (parsed && typeof parsed === 'object') {
+          setPracticeSubmissionsByChallenge(parsed);
+        }
+      }
+      const savedFontRaw = localStorage.getItem('cortex_practice_font_size');
+      if (savedFontRaw) {
+        const parsedFont = parseInt(savedFontRaw, 10);
+        if ([12, 13, 14].includes(parsedFont)) {
+          setPracticeFontSize(parsedFont);
+        }
+      }
+      const savedTabRaw = localStorage.getItem('cortex_practice_tab_size');
+      if (savedTabRaw) {
+        const parsedTab = parseInt(savedTabRaw, 10);
+        if ([2, 4].includes(parsedTab)) {
+          setPracticeTabSize(parsedTab);
+        }
+      }
+    } catch {}
+  }, []);
 
   // 3. Extracted Modular State Management Hooks
   const {
@@ -1189,7 +1240,11 @@ function CloudIDEPageInner() {
   };
 
   // Automated Test Cases Runner
-  const handleRunAllTests = async (overrideFile?: ProjectFile, overrideTestCases?: TestCase[]) => {
+  const handleRunAllTests = async (
+    overrideFile?: ProjectFile,
+    overrideTestCases?: TestCase[],
+    mode: 'run' | 'submit' = 'run'
+  ) => {
     const explicitFile =
       overrideFile &&
       typeof overrideFile === 'object' &&
@@ -1202,6 +1257,7 @@ function CloudIDEPageInner() {
     if (!targetFile) return;
     const activeTestCases = Array.isArray(overrideTestCases) ? overrideTestCases : testCases;
     setIsRunningTests(true);
+    setPracticeRunningMode(mode);
     try {
       if (projectId && targetFile.id) {
         if (saveFileRef.current) clearTimeout(saveFileRef.current);
@@ -1329,7 +1385,64 @@ function CloudIDEPageInner() {
 
       setTestCases(evaluated);
 
-      if (passedCount === totalCount && totalCount > 0) {
+      const hasError = evaluated.some((tc) => Boolean(tc.error));
+      const totalRuntimeMs = evaluated.reduce((sum, tc) => sum + (tc.timeMs || 0), 0);
+      const allPassed = passedCount === totalCount && totalCount > 0;
+      const summaryStatus: 'Accepted' | 'Wrong Answer' | 'Runtime Error' = allPassed
+        ? 'Accepted'
+        : hasError
+          ? 'Runtime Error'
+          : 'Wrong Answer';
+
+      setPracticeLastResult({
+        mode,
+        passed: allPassed,
+        status: summaryStatus,
+        passedCount,
+        totalCount,
+        runtimeMs: totalRuntimeMs,
+      });
+
+      const consoleLines = evaluated
+        .map((tc, idx) => {
+          const out = tc.error
+            ? `[Error] ${tc.error}`
+            : tc.actualStdout !== undefined
+              ? tc.actualStdout || '(empty)'
+              : '(no output)';
+          return `Case ${idx + 1} (${tc.passed ? 'Passed' : 'Failed'}):\n${out}`;
+        })
+        .join('\n\n');
+      setPracticeConsoleOutput(consoleLines);
+
+      if (mode === 'submit' && activePracticeChallenge) {
+        const record: PracticeSubmissionRecord = {
+          id: `sub_${Date.now()}`,
+          challengeId: activePracticeChallenge.id,
+          status: summaryStatus,
+          runtime: `${totalRuntimeMs} ms`,
+          language: executionLang.name,
+          passedCount,
+          totalCount,
+          timestamp: Date.now(),
+          code: targetFile.content,
+        };
+        setPracticeSubmissionsByChallenge((prev) => {
+          const existingList = prev[activePracticeChallenge.id] || [];
+          const next = {
+            ...prev,
+            [activePracticeChallenge.id]: [record, ...existingList].slice(0, 25),
+          };
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('cortex_practice_submissions_v1', JSON.stringify(next));
+            } catch {}
+          }
+          return next;
+        });
+      }
+
+      if (allPassed) {
         confetti({ particleCount: 75, spread: 70, origin: { y: 0.6 } });
         if (activePracticeChallenge) {
           markProblemSolved(activePracticeChallenge.id);
@@ -1339,6 +1452,7 @@ function CloudIDEPageInner() {
       }
     } finally {
       setIsRunningTests(false);
+      setPracticeRunningMode(null);
     }
   };
 
@@ -1494,6 +1608,11 @@ function CloudIDEPageInner() {
 
       setActivePracticeChallenge(challenge);
       setIsProblemPanelOpen(true);
+      setIsPracticeLeftMaximized(false);
+      setPracticeLastResult(null);
+      setPracticeConsoleOutput('');
+      setPracticeActiveCaseIdx(0);
+      setPracticeBottomTab(challenge.testCases.length > 0 ? 'testcase' : 'console');
       markProblemAttempted(challenge.id);
       setActiveSidebarTab('files');
       setIsSidebarOpen(false);
@@ -1501,6 +1620,28 @@ function CloudIDEPageInner() {
       return resolvedFile;
     },
     [files, projectId, markProblemAttempted, setActiveBottomTab, setActiveSidebarTab, setIsBottomCollapsed, setIsSidebarOpen, syncTimestampFromPatch]
+  );
+
+  const handleNavigateChallenge = useCallback(
+    (direction: 'prev' | 'next' | 'shuffle') => {
+      if (!activePracticeChallenge || CHALLENGES.length === 0) return;
+      const currentIdx = CHALLENGES.findIndex((c) => c.id === activePracticeChallenge.id);
+      let targetIdx = 0;
+      if (direction === 'prev') {
+        targetIdx = currentIdx <= 0 ? CHALLENGES.length - 1 : currentIdx - 1;
+      } else if (direction === 'next') {
+        targetIdx = currentIdx >= CHALLENGES.length - 1 ? 0 : currentIdx + 1;
+      } else if (CHALLENGES.length > 1) {
+        do {
+          targetIdx = Math.floor(Math.random() * CHALLENGES.length);
+        } while (targetIdx === currentIdx);
+      }
+      const targetChallenge = CHALLENGES[targetIdx];
+      if (targetChallenge) {
+        void handleLaunchChallenge(targetChallenge, currentLang?.id, false);
+      }
+    },
+    [activePracticeChallenge, currentLang?.id, handleLaunchChallenge]
   );
 
   const launchedQueryChallengeRef = useRef<string | null>(null);
@@ -1543,17 +1684,26 @@ function CloudIDEPageInner() {
     return allowedNames.has(activeFile.name);
   }, [activePracticeChallenge, activeFile]);
 
+  const isPracticeProblemMode = Boolean(activePracticeChallenge) && !isPracticeHubOpen;
+
   // Keyboard Shortcuts Listener (Ctrl+Enter, Ctrl+S)
   const handleRunRef = useRef(handleRun);
   const isPracticeHubOpenRef = useRef(isPracticeHubOpen);
+  const isPracticeProblemModeRef = useRef(isPracticeProblemMode);
   useEffect(() => {
     handleRunRef.current = handleRun;
     isPracticeHubOpenRef.current = isPracticeHubOpen;
+    isPracticeProblemModeRef.current = isPracticeProblemMode;
   });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isPracticeHubOpenRef.current) {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === 'Enter' &&
+        !isPracticeHubOpenRef.current &&
+        !isPracticeProblemModeRef.current
+      ) {
         e.preventDefault();
         handleRunRef.current();
       }
@@ -1613,11 +1763,318 @@ function CloudIDEPageInner() {
     return <div className="min-h-screen bg-[#0b0c0e] flex items-center justify-center text-white">Loading workspace...</div>;
   }
     
+  const availPracticeLangs = activePracticeChallenge
+    ? Object.keys(activePracticeChallenge.starterTemplates)
+    : [];
+  const resolvedPracticeLangId = activeChallengeFile
+    ? detectLanguage(
+        activeChallengeFile.name,
+        activeChallengeFile.content,
+        fileLanguageOverrides[activeChallengeFile.id],
+        currentLang.id
+      )
+    : currentLang.id;
+  const effectivePracticeLangId = availPracticeLangs.includes(resolvedPracticeLangId)
+    ? resolvedPracticeLangId
+    : availPracticeLangs[0] || currentLang.id;
+  const effectivePracticeTestCount = activePracticeChallenge
+    ? (isChallengeFileActive
+        ? testCases.length
+        : testCases.length > 0
+          ? testCases.length
+          : activePracticeChallenge.testCases.length)
+    : 0;
+
+  const executePracticeTests = async (mode: 'run' | 'submit') => {
+    if (!activePracticeChallenge) return;
+    if (!isChallengeFileActive) {
+      const targetFile = activeChallengeFile
+        ? (handleSelectFile(activeChallengeFile.id), activeChallengeFile)
+        : await handleLaunchChallenge(activePracticeChallenge, undefined, false);
+      if (!targetFile) return;
+      const freshTests =
+        mode === 'submit' && activePracticeChallenge.testCases.length > 0
+          ? activePracticeChallenge.testCases.map((tc) => ({ ...tc }))
+          : testCases.length > 0
+            ? testCases
+            : activePracticeChallenge.testCases.map((tc) => ({ ...tc }));
+      await handleRunAllTests(targetFile, freshTests, mode);
+      return;
+    }
+
+    const suite =
+      mode === 'submit' && activePracticeChallenge.testCases.length > 0
+        ? activePracticeChallenge.testCases.map((tc) => ({ ...tc }))
+        : testCases.length > 0
+          ? testCases
+          : activePracticeChallenge.testCases.map((tc) => ({ ...tc }));
+    await handleRunAllTests(undefined, suite, mode);
+  };
+
+  const practiceProblemIdx = activePracticeChallenge
+    ? CHALLENGES.findIndex((c) => c.id === activePracticeChallenge.id) + 1
+    : 0;
+
   return (
-    <AppShell isDarkMode={isDarkMode} onOpenSettings={() => setIsSettingsOpen(true)}>
+    <AppShell
+      isDarkMode={isDarkMode}
+      onOpenSettings={() => setIsSettingsOpen(true)}
+      hideSidebar={isPracticeProblemMode}
+    >
       <div className={`flex flex-col h-full w-full ${isDarkMode ? 'bg-[#0b0c0e] text-[#e6edf3]' : 'bg-[#f8fafc] text-[#0f172a]'} overflow-hidden font-sans select-none`}>
+        {isPracticeHubOpen ? (
+          <PracticeHub
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={handleToggleDarkMode}
+            progressMap={practiceProgress}
+            activeProblemId={activePracticeChallenge?.id || null}
+            onLaunchProblem={(challenge, preferredLang) =>
+              handleLaunchChallenge(challenge, preferredLang || currentLang?.id)
+            }
+            onReturnToEditor={() => {
+              setActiveSidebarTab('files');
+              setIsSidebarOpen(!activePracticeChallenge);
+            }}
+          />
+        ) : isPracticeProblemMode && activePracticeChallenge ? (
+          <PracticeWorkspace
+            problem={activePracticeChallenge}
+            language={effectivePracticeLangId}
+            languages={availPracticeLangs}
+            onLanguageChange={(langId) =>
+              void handleLaunchChallenge(activePracticeChallenge, langId, false)
+            }
+            onFormatCode={() => practiceFormatFnRef.current?.()}
+            onResetCode={() => {
+              const targetLang = availPracticeLangs.includes(resolvedPracticeLangId)
+                ? resolvedPracticeLangId
+                : undefined;
+              void handleLaunchChallenge(activePracticeChallenge, targetLang, true);
+            }}
+            onRun={() => executePracticeTests('run')}
+            onSubmit={() => executePracticeTests('submit')}
+            isRunning={isRunningTests}
+            runningMode={practiceRunningMode}
+            aiAssistEnabled={enableInlineSuggestions}
+            onToggleAiAssist={handleToggleInlineSuggestions}
+            onBackToHub={() => {
+              setActiveSidebarTab('practice');
+              setIsSidebarOpen(true);
+            }}
+            onExitToIde={() => {
+              setActivePracticeChallenge(null);
+              setIsProblemPanelOpen(false);
+              setActiveSidebarTab('files');
+              setIsSidebarOpen(true);
+            }}
+            onPrevProblem={() => handleNavigateChallenge('prev')}
+            onNextProblem={() => handleNavigateChallenge('next')}
+            onShuffleProblem={() => handleNavigateChallenge('shuffle')}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={handleToggleDarkMode}
+            isLeftCollapsed={!isProblemPanelOpen}
+            onExpandLeftPanel={() => setIsProblemPanelOpen(true)}
+            leftMaximized={isPracticeLeftMaximized}
+            onRequestRestoreLeft={() => setIsPracticeLeftMaximized(false)}
+            leftPanel={
+              <ProblemDetailsPanel
+                key={activePracticeChallenge.id}
+                challenge={activePracticeChallenge}
+                problemNumber={practiceProblemIdx > 0 ? practiceProblemIdx : undefined}
+                isDarkMode={isDarkMode}
+                status={practiceProgress[activePracticeChallenge.id] ?? 'unsolved'}
+                submissions={practiceSubmissionsByChallenge[activePracticeChallenge.id] || []}
+                isChallengeFileActive={isChallengeFileActive}
+                activeFileName={activeFile?.name || null}
+                activeTestCasesCount={effectivePracticeTestCount}
+                onOpenChallengeFile={() => {
+                  if (activeChallengeFile) {
+                    handleSelectFile(activeChallengeFile.id);
+                  } else {
+                    void handleLaunchChallenge(activePracticeChallenge, undefined, false);
+                  }
+                }}
+                onLoadSubmissionCode={(code, langName) => {
+                  const matchedKey = availPracticeLangs.find((k) => {
+                    const cfg = getLanguageConfig(k);
+                    return (
+                      k === langName.toLowerCase() ||
+                      cfg?.name.toLowerCase() === langName.toLowerCase()
+                    );
+                  });
+                  if (matchedKey && matchedKey !== effectivePracticeLangId) {
+                    void handleLaunchChallenge(activePracticeChallenge, matchedKey, false).then(
+                      (launched) => {
+                        if (launched) {
+                          handleContentChange(code);
+                        }
+                      }
+                    );
+                  } else {
+                    handleContentChange(code);
+                  }
+                }}
+                isMaximized={isPracticeLeftMaximized}
+                onToggleMaximize={() => setIsPracticeLeftMaximized((prev) => !prev)}
+                onClosePanel={() => {
+                  setIsPracticeLeftMaximized(false);
+                  setIsProblemPanelOpen(false);
+                }}
+              />
+            }
+            editorSlot={
+              <MonacoCodeEditor
+                practiceMode
+                files={files}
+                openFileIds={openFileIds}
+                activeFileId={activeFileId}
+                onSelectFile={handleSelectFile}
+                saveStatus={saveStatus}
+                onForceSave={handleForceSave}
+                onCloseFile={handleCloseFileTab}
+                onNewFile={handleCreateNewTabFile}
+                onContentChange={handleContentChange}
+                language={getMonacoLanguage(currentLang.id || activeFile?.name || '')}
+                theme={theme}
+                fontSize={practiceFontSize}
+                tabSize={practiceTabSize}
+                breakpoints={breakpoints}
+                onToggleBreakpoint={toggleBreakpoint}
+                activeLine={activeDebugLine}
+                diagnostics={executionResult?.diagnostics}
+                onCursorChange={(l, c) => {
+                  setPracticeCursorPos({ line: l, col: c });
+                  if (collabBrokerRef.current) {
+                    collabBrokerRef.current.updateCursor(activeFileId, l, c);
+                  }
+                }}
+                onFormatReady={(fn) => {
+                  practiceFormatFnRef.current = fn;
+                }}
+                isDarkMode={isDarkMode}
+                onToggleDarkMode={handleToggleDarkMode}
+                quickFixResult={fixResult}
+                isQuickFixOpen={isQuickFixOpen}
+                onCloseQuickFix={() => setIsQuickFixOpen(false)}
+                onApplyExplanationComment={handleApplyExplanationComment}
+                onApplyLiveFix={handleApplyLiveFix}
+                aiProvider={aiSettings.provider === 'gemini' || Boolean(aiSettings.apiKey) ? 'gemini' : 'offline'}
+                apiKey={aiSettings.apiKey || ''}
+                onSaveApiKey={handleSaveApiKey}
+                isAnalyzingFix={isAnalyzingFix}
+                onReanalyzeWithKey={handleReanalyzeWithKey}
+                enableInlineSuggestions={enableInlineSuggestions}
+                onToggleInlineSuggestions={handleToggleInlineSuggestions}
+                isExecutable={currentLang.executable !== false}
+              />
+            }
+            assistantSlot={
+              <AIAssistantPanel
+                isDarkMode={isDarkMode}
+                currentCode={activeFile?.content || ''}
+                language={currentLang.id}
+                settings={aiSettings}
+                onUpdateSettings={(s) => setAiSettings((prev) => ({ ...prev, ...s }))}
+                onTriggerExplain={async () => {
+                  if (!activeFile) return;
+                  setAnalysisMode('explain');
+                  setIsAnalyzingAI(true);
+                  const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'explain');
+                  setAiAnalysis(res);
+                  setIsAnalyzingAI(false);
+                }}
+                onTriggerOptimize={async () => {
+                  if (!activeFile) return;
+                  setAnalysisMode('optimize');
+                  setIsAnalyzingAI(true);
+                  const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'optimize');
+                  setAiAnalysis(res);
+                  setIsAnalyzingAI(false);
+                }}
+                onTriggerRefactor={async () => {
+                  if (!activeFile) return;
+                  setAnalysisMode('refactor');
+                  setIsAnalyzingAI(true);
+                  const res = await analyzeCode(activeFile.content, currentLang.id, aiSettings, 'refactor');
+                  setAiAnalysis(res);
+                  setIsAnalyzingAI(false);
+                }}
+                onTriggerConvert={async (toLang) => {
+                  if (!activeFile) return;
+                  const res = await convertCode(activeFile.content, currentLang.id, toLang);
+                  const targetLangConfig = getLanguageConfig(toLang);
+                  setCurrentLang(targetLangConfig);
+                  handleContentChange(res.convertedCode);
+                }}
+                onTriggerAutoFix={() => {
+                  if (!activeFile) return;
+                  processAutoFix(
+                    activeFile.content,
+                    executionResult?.stderr || '',
+                    executionResult?.diagnostics || []
+                  );
+                }}
+                analysisResult={aiAnalysis}
+                isAnalyzing={isAnalyzingAI}
+                analysisMode={analysisMode}
+              />
+            }
+            testCases={testCases}
+            activeCaseIdx={practiceActiveCaseIdx}
+            onSelectCaseIdx={setPracticeActiveCaseIdx}
+            onAddTestCase={() => {
+              const nextIdx = testCases.length;
+              setTestCases((prev) => [
+                ...prev,
+                {
+                  id: `tc_${Date.now()}`,
+                  name: `Case ${prev.length + 1}`,
+                  stdin: '',
+                  expectedStdout: '',
+                  isHidden: false,
+                },
+              ]);
+              setPracticeActiveCaseIdx(nextIdx);
+            }}
+            onDeleteTestCase={(id) => {
+              setTestCases((prev) => prev.filter((tc) => tc.id !== id));
+              setPracticeActiveCaseIdx((idx) => Math.max(0, idx - 1));
+            }}
+            onUpdateTestCase={(idx, field, value) => {
+              setTestCases((prev) =>
+                prev.map((tc, i) => (i === idx ? { ...tc, [field]: value } : tc))
+              );
+            }}
+            lastResult={practiceLastResult}
+            consoleOutput={practiceConsoleOutput}
+            cursorPos={practiceCursorPos}
+            saveStatus={saveStatus}
+            onForceSave={handleForceSave}
+            fontSize={practiceFontSize}
+            onChangeFontSize={(sz) => {
+              setPracticeFontSize(sz);
+              if (typeof window !== 'undefined') {
+                try {
+                  localStorage.setItem('cortex_practice_font_size', String(sz));
+                } catch {}
+              }
+            }}
+            tabSize={practiceTabSize}
+            onChangeTabSize={(ts) => {
+              setPracticeTabSize(ts);
+              if (typeof window !== 'undefined') {
+                try {
+                  localStorage.setItem('cortex_practice_tab_size', String(ts));
+                } catch {}
+              }
+            }}
+            bottomTab={practiceBottomTab}
+            onBottomTabChange={setPracticeBottomTab}
+          />
+        ) : (
+          <>
         {/* 1. Header Navigation */}
-        <div className={isPracticeHubOpen ? 'hidden' : ''}>
+        <div>
           <Navbar
             isDarkMode={isDarkMode}
             currentLanguage={currentLang}
@@ -1639,23 +2096,8 @@ function CloudIDEPageInner() {
           />
         </div>
 
-        {/* 2. Main Work Area: Dedicated Full-Page Practice Hub + Mounted-but-Hidden 3-Pane IDE Workspace */}
-        {isPracticeHubOpen && (
-          <PracticeHub
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={handleToggleDarkMode}
-            progressMap={practiceProgress}
-            activeProblemId={activePracticeChallenge?.id || null}
-            onLaunchProblem={(challenge, preferredLang) =>
-              handleLaunchChallenge(challenge, preferredLang || currentLang?.id)
-            }
-            onReturnToEditor={() => {
-              setActiveSidebarTab('files');
-              setIsSidebarOpen(!activePracticeChallenge);
-            }}
-          />
-        )}
-        <div className={isPracticeHubOpen ? 'hidden' : `flex-1 flex overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#f1f5f9]'}`}>
+        {/* 2. Main Work Area: Standard 3-Pane IDE Workspace */}
+        <div className={`flex-1 flex overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-[#f1f5f9]'}`}>
               {/* Left Contextual Sidebar (Resizable width & Collapsible with smooth sliding animation) */}
               <div 
                 ref={fileExplorerRef}
@@ -1925,110 +2367,6 @@ function CloudIDEPageInner() {
             } ${isResizingSidebar ? '' : 'transition-all duration-300 ease-in-out'}`}
             title="Drag to adjust sidebar size"
           />
-
-          {/* Active Practice Problem Details Panel */}
-          {activePracticeChallenge && isProblemPanelOpen && (() => {
-            const availChallengeLangs = Object.keys(activePracticeChallenge.starterTemplates);
-            const resolvedChallengeLangId = activeChallengeFile
-              ? detectLanguage(
-                  activeChallengeFile.name,
-                  activeChallengeFile.content,
-                  fileLanguageOverrides[activeChallengeFile.id],
-                  currentLang.id
-                )
-              : currentLang.id;
-            const effectiveChallengeLangId = availChallengeLangs.includes(resolvedChallengeLangId)
-              ? resolvedChallengeLangId
-              : availChallengeLangs[0] || currentLang.id;
-            const effectiveTestCasesCount = isChallengeFileActive
-              ? testCases.length
-              : testCases.length > 0
-                ? testCases.length
-                : activePracticeChallenge.testCases.length;
-
-            return (
-            <ProblemDetailsPanel
-              key={activePracticeChallenge.id}
-              challenge={activePracticeChallenge}
-              isDarkMode={isDarkMode}
-              status={practiceProgress[activePracticeChallenge.id] ?? 'unsolved'}
-              currentLanguageId={effectiveChallengeLangId}
-              isRunningTests={isRunningTests}
-              isChallengeFileActive={isChallengeFileActive}
-              activeFileName={activeFile?.name || null}
-              activeTestCasesCount={effectiveTestCasesCount}
-              onOpenChallengeFile={() => {
-                if (activeChallengeFile) {
-                  handleSelectFile(activeChallengeFile.id);
-                } else {
-                  void handleLaunchChallenge(activePracticeChallenge, undefined, false);
-                }
-              }}
-              onSelectLanguage={(langId) =>
-                handleLaunchChallenge(activePracticeChallenge, langId, false)
-              }
-              onResetCode={() => {
-                const targetLang = availChallengeLangs.includes(resolvedChallengeLangId)
-                  ? resolvedChallengeLangId
-                  : undefined;
-                void handleLaunchChallenge(activePracticeChallenge, targetLang, true);
-              }}
-              onRunTests={() => {
-                if (isChallengeFileActive && testCases.length === 0) {
-                  return;
-                }
-                setActiveBottomTab('tests');
-                setIsBottomCollapsed(false);
-                if (!isChallengeFileActive) {
-                  if (activeChallengeFile) {
-                    handleSelectFile(activeChallengeFile.id);
-                    const freshTests = testCases.length > 0
-                      ? undefined
-                      : activePracticeChallenge.testCases.map((tc) => ({ ...tc }));
-                    void handleRunAllTests(activeChallengeFile, freshTests);
-                  } else {
-                    void handleLaunchChallenge(activePracticeChallenge, undefined, false).then((launched) => {
-                      if (launched) {
-                        const freshTests = activePracticeChallenge.testCases.map((tc) => ({ ...tc }));
-                        void handleRunAllTests(launched, freshTests);
-                      }
-                    });
-                  }
-                  return;
-                }
-                void handleRunAllTests();
-              }}
-              onBackToPracticeHub={() => {
-                setActiveSidebarTab('practice');
-                setIsSidebarOpen(true);
-              }}
-              onClosePanel={() => setIsProblemPanelOpen(false)}
-            />
-            );
-          })()}
-
-          {activePracticeChallenge && !isProblemPanelOpen && (
-            <div
-              className={`w-9 shrink-0 border-r flex flex-col items-center py-3 gap-3 ${
-                isDarkMode ? 'bg-[#101114] border-[#1f2024]' : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setIsProblemPanelOpen(true)}
-                title="Show Problem Details"
-                aria-label="Show Problem Details"
-                data-testid="problem-reopen-panel"
-                className={`p-1.5 rounded-lg border transition-colors ${
-                  isDarkMode
-                    ? 'bg-[#161820] border-[#262936] text-[#ff9100] hover:bg-[#1e212b]'
-                    : 'bg-white border-slate-300 text-[#d97706] hover:bg-amber-50'
-                }`}
-              >
-                <PanelLeftOpen className="w-4 h-4" />
-              </button>
-            </div>
-          )}
 
           {/* Center & Bottom Area */}
           <div className={`flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-[#0b0c0e]' : 'bg-white'}`}>
@@ -2309,6 +2647,8 @@ function CloudIDEPageInner() {
             </div>
           </div>
         </div>
+          </>
+        )}
 
         {/* 3. Global Modals */}
         <DiffModal

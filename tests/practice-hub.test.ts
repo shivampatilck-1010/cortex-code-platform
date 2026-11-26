@@ -97,6 +97,7 @@ async function runPracticeHubTests() {
     'src/components/practice/PracticeHub.tsx',
     'src/components/practice/PracticeFilters.tsx',
     'src/components/practice/PracticeProblemTable.tsx',
+    'src/components/practice/PracticeWorkspace.tsx',
     'src/components/panels/ProblemDetailsPanel.tsx',
     'src/components/panels/TestCasesPanel.tsx',
     'src/components/practice/usePracticeProgress.ts',
@@ -751,8 +752,26 @@ async function runPracticeHubTests() {
   );
 
   const detailsContent = fs.readFileSync(path.join(projectRoot, 'src/components/panels/ProblemDetailsPanel.tsx'), 'utf8');
-  assert.ok(detailsContent.includes('activeTestCasesCount'), 'ProblemDetailsPanel must reflect activeTestCasesCount');
-  assert.ok(detailsContent.includes('No Test Cases (0)'), 'ProblemDetailsPanel must disable Run Tests cleanly at 0 test cases');
+  assert.ok(detailsContent.includes('activeTestCasesCount'), 'ProblemDetailsPanel must expose activeTestCasesCount compatibility prop');
+  assert.ok(
+    detailsContent.includes('INLINE_CODE_PILL') &&
+      detailsContent.includes('problem-toggle-topics') &&
+      detailsContent.includes('problem-toggle-companies') &&
+      !detailsContent.includes('Template Language'),
+    'ProblemDetailsPanel must format inline backticks cleanly with collapsible Topics/Companies and no duplicate Template Language card'
+  );
+
+  const workspaceContent = fs.readFileSync(path.join(projectRoot, 'src/components/practice/PracticeWorkspace.tsx'), 'utf8');
+  assert.ok(
+    workspaceContent.includes('#0F0F10') &&
+      workspaceContent.includes('#1C1C1E') &&
+      workspaceContent.includes('#262629') &&
+      workspaceContent.includes('practice-run-btn') &&
+      workspaceContent.includes('practice-submit-btn') &&
+      workspaceContent.includes('practice-h-splitter') &&
+      workspaceContent.includes('practice-v-splitter'),
+    'PracticeWorkspace must implement 3-panel floating-card zinc layout with single execution cluster and resizable splitters'
+  );
 
   assert.ok(ideContent.includes('handleThemeChange'), 'ide/page.tsx must sync SettingsModal theme changes with isDarkMode');
 
