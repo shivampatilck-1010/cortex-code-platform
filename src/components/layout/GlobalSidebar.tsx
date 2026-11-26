@@ -4,10 +4,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Folder,
+  FolderOpen,
   Search,
   Swords,
-  BarChart2,
+  BarChart3,
   BookOpen,
   Settings,
   User,
@@ -25,6 +25,7 @@ interface GlobalSidebarProps {
   isDarkMode?: boolean;
   highlightTab?: SidebarTab | null;
   hideLogo?: boolean;
+  compactHeader?: boolean;
   hasPracticeSession?: boolean;
 }
 
@@ -49,6 +50,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
   isDarkMode: propDarkMode,
   highlightTab,
   hideLogo = false,
+  compactHeader = false,
   hasPracticeSession = false,
 }) => {
   const pathname = usePathname() || '/';
@@ -273,10 +275,10 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
   };
 
   const navItems: NavItem[] = [
-    { id: 'files', name: 'Explorer', href: '/ide', icon: Folder },
+    { id: 'files', name: 'Explorer', href: '/ide', icon: FolderOpen },
     { id: 'search', name: 'Search', href: '/ide?tab=search', icon: Search },
     { id: 'practice', name: 'Practice Hub', href: '/challenges', icon: Swords },
-    { id: 'benchmark', name: 'Telemetry', href: '/compare', icon: BarChart2 },
+    { id: 'benchmark', name: 'Telemetry', href: '/compare', icon: BarChart3 },
     { id: 'learn', name: 'Reference', href: '/learn', icon: BookOpen },
   ];
 
@@ -287,25 +289,29 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
       <aside
         data-testid="global-activity-rail"
         style={{
-          width: '44px',
-          minWidth: '44px',
-          maxWidth: '44px',
+          width: '58px',
+          minWidth: '58px',
+          maxWidth: '58px',
         }}
         className={`${
           isDarkMode ? 'dark bg-[#0A0A0C] border-white/[0.07] text-zinc-100' : 'bg-[#F4F4F6] border-black/[0.08] text-zinc-900'
-        } border-r flex flex-col justify-between h-full py-2 select-none z-40 shrink-0 overflow-visible`}
+        } border-r flex flex-col justify-between h-full select-none z-40 shrink-0 overflow-visible`}
       >
-        <div className="flex flex-col items-center gap-1 overflow-visible">
-          {/* Optional Logo on routes without top IDE Titlebar */}
+        <div className="flex flex-col flex-1 overflow-visible">
+          {/* Top Cortex Emblem matching aligned shell header height */}
           {!hideLogo && (
-            <div className="mb-1 pb-1.5 border-b border-black/[0.06] dark:border-white/[0.07] w-full flex justify-center">
+            <div
+              className={`${
+                compactHeader ? 'h-10' : 'h-14'
+              } flex items-center justify-center border-b border-black/[0.08] dark:border-white/[0.07] shrink-0`}
+            >
               <Link
                 href="/ide"
                 onClick={handleLogoClick}
                 onMouseDown={dismissTooltip}
                 onMouseEnter={() => scheduleTooltip('logo')}
                 onMouseLeave={dismissTooltip}
-                className="relative flex items-center justify-center w-8 h-8 rounded-md hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition-colors"
+                className="relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
                 aria-label="Cortex IDE Home"
               >
                 <CortexLogo variant="icon" size="sm" />
@@ -313,8 +319,11 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
             </div>
           )}
 
-          {/* Rail Icons */}
-          <nav className="flex flex-col items-center gap-1 overflow-visible" aria-label="Activity Rail">
+          {/* Rail Icons (58px crisp w-10 h-10 rounded-lg geometry) */}
+          <nav
+            className="flex-1 py-3 px-2 space-y-2 flex flex-col items-center overflow-visible"
+            aria-label="Activity Rail"
+          >
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = isIdeRoute
@@ -336,26 +345,30 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                     aria-label={item.name}
                     onMouseDown={dismissTooltip}
                     onClick={(e) => handleNavClick(item, e)}
-                    className={`relative w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                    className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                       isActive
-                        ? 'text-zinc-950 dark:text-zinc-100 bg-black/[0.06] dark:bg-white/[0.08]'
-                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.04]'
+                        ? 'bg-zinc-200/75 dark:bg-white/[0.06] text-[#F59E0B]'
+                        : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-[#F4F4F5] hover:bg-zinc-200/60 dark:hover:bg-white/[0.04]'
                     }`}
                   >
                     {isActive && (
-                      <span className="absolute -left-1.5 top-1.5 bottom-1.5 w-[2px] rounded-r bg-[#F59E0B]" />
+                      <span className="absolute left-0 top-2 bottom-2 w-[2px] rounded-r bg-[#F59E0B]" />
                     )}
-                    <Icon className="w-4 h-4 shrink-0" />
-                    {item.id === 'practice' && hasPracticeSession && (
+                    <Icon
+                      className={`w-5 h-5 shrink-0 transition-colors ${
+                        isActive ? 'text-[#F59E0B]' : ''
+                      }`}
+                    />
+                    {item.id === 'practice' && hasPracticeSession && !isActive && (
                       <span
                         title="Active practice session"
-                        className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#F59E0B]"
+                        className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#F59E0B]"
                       />
                     )}
                   </Link>
 
                   {hoveredId === item.id && (
-                    <div className="pointer-events-none absolute left-11 top-1/2 -translate-y-1/2 z-50 px-2 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
+                    <div className="pointer-events-none absolute left-[54px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
                       {item.name}
                     </div>
                   )}
@@ -365,8 +378,8 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
           </nav>
         </div>
 
-        {/* Bottom Section: Settings & Account */}
-        <div className="flex flex-col items-center gap-1 overflow-visible">
+        {/* Bottom Section: Hairline Divider + Settings & Elevated Account Tile */}
+        <div className="border-t border-black/[0.08] dark:border-white/[0.07] p-2 space-y-2 flex flex-col items-center overflow-visible">
           <div
             className="relative"
             onMouseEnter={() => scheduleTooltip('settings')}
@@ -378,12 +391,12 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
               aria-label="Settings"
               onMouseDown={dismissTooltip}
               onClick={handleSettingsClick}
-              className="w-8 h-8 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+              className="w-10 h-10 rounded-lg flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-[#F4F4F5] hover:bg-zinc-200/60 dark:hover:bg-white/[0.04] transition-colors"
             >
-              <Settings className="w-4 h-4 shrink-0" />
+              <Settings className="w-5 h-5 shrink-0" />
             </button>
             {hoveredId === 'settings' && (
-              <div className="pointer-events-none absolute left-11 top-1/2 -translate-y-1/2 z-50 px-2 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
+              <div className="pointer-events-none absolute left-[54px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
                 Settings
               </div>
             )}
@@ -403,14 +416,14 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                   aria-label={user.name || 'Account'}
                   onMouseDown={dismissTooltip}
                   onClick={() => setIsAccountOpen((prev) => !prev)}
-                  className={`relative w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                  className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                     isAccountOpen
-                      ? 'bg-black/[0.06] dark:bg-white/[0.08]'
-                      : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.04]'
+                      ? 'bg-zinc-200/75 dark:bg-white/[0.08]'
+                      : 'hover:bg-zinc-200/60 dark:hover:bg-white/[0.04]'
                   }`}
                 >
                   <div className="relative">
-                    <div className="w-6 h-6 rounded-full border border-black/[0.1] dark:border-white/[0.12] bg-white dark:bg-[#18181C] flex items-center justify-center text-[10px] font-semibold text-zinc-700 dark:text-zinc-200 overflow-hidden">
+                    <div className="w-8 h-8 rounded-full border border-black/[0.1] dark:border-white/[0.12] bg-white dark:bg-[#18181C] flex items-center justify-center text-xs font-bold text-[#F59E0B] overflow-hidden">
                       {user.avatar ? (
                         <img
                           src={user.avatar}
@@ -422,7 +435,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                         user.name ? user.name.charAt(0).toUpperCase() : 'U'
                       )}
                     </div>
-                    <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-[#F4F4F6] dark:border-[#0A0A0C]" />
+                    <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 border border-[#F4F4F6] dark:border-[#0A0A0C]" />
                   </div>
                 </button>
 
@@ -458,14 +471,14 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                 data-testid="rail-signin-link"
                 aria-label="Sign In"
                 onMouseDown={dismissTooltip}
-                className="w-8 h-8 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                className="w-10 h-10 rounded-lg flex items-center justify-center bg-white dark:bg-[#121215] border border-black/[0.08] dark:border-white/[0.08] hover:border-black/[0.16] dark:hover:border-white/[0.16] text-[#F59E0B] shadow-sm dark:shadow-none transition-colors"
               >
-                <User className="w-4 h-4 shrink-0" />
+                <User className="w-5 h-5 shrink-0 text-[#F59E0B]" />
               </Link>
             )}
 
             {hoveredId === 'account' && !isAccountOpen && (
-              <div className="pointer-events-none absolute left-11 top-1/2 -translate-y-1/2 z-50 px-2 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
+              <div className="pointer-events-none absolute left-[54px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
                 {user ? user.name : 'Sign In'}
               </div>
             )}

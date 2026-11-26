@@ -328,17 +328,19 @@ export const CortexIdeShell: React.FC<CortexIdeShellProps> = ({
       data-testid="cortex-ide-shell"
       className={`${
         isDarkMode ? 'dark bg-[#0A0A0C] text-zinc-100' : 'bg-[#F4F4F6] text-zinc-900'
-      } h-screen w-screen overflow-hidden flex flex-col antialiased select-none ${
+      } h-screen w-screen overflow-hidden flex antialiased select-none ${
         dragging ? 'select-none' : ''
       }`}
     >
+      {/* Full-Height 58px Activity Rail (Emblem + Nav + Settings/Account) */}
+      {renderRail()}
+
+      {/* Main IDE Column (40px Titlebar + Sidebar/Editor/Workbench + 24px Status Bar) */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
       {/* 1. Flagship 40px Top Titlebar */}
       <header className="h-10 shrink-0 px-3 flex items-center justify-between gap-3 bg-[#F4F4F6] dark:bg-[#0A0A0C] border-b border-black/[0.08] dark:border-white/[0.07]">
-        {/* Left: Brand Mark + Breadcrumb + SQL Dialect */}
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-5 h-5 rounded flex items-center justify-center bg-amber-500/15 border border-amber-500/30 text-amber-500 font-bold text-[11px] shrink-0">
-            C
-          </div>
+        {/* Left: Workspace Breadcrumb + SQL Dialect */}
+        <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 text-[12px] min-w-0 truncate">
             <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-100 shrink-0">
               Cortex
@@ -544,9 +546,6 @@ export const CortexIdeShell: React.FC<CortexIdeShellProps> = ({
 
       {/* 2. Main IDE Body */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Fixed 44px Activity Rail */}
-        {renderRail()}
-
         {/* Single Mutually Exclusive Animated Left Sidebar */}
         <div
           ref={sidebarRef}
@@ -907,6 +906,7 @@ export const CortexIdeShell: React.FC<CortexIdeShellProps> = ({
           </button>
         </div>
       </footer>
+      </div>
 
       {/* 4. Frosted Command Palette Modal (Ctrl/Cmd + K) */}
       {cmdOpen && (

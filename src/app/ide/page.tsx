@@ -2444,7 +2444,7 @@ function CloudIDEPageInner() {
               commandPaletteItems={commandPaletteItems}
               renderRail={() => (
                 <GlobalSidebar
-                  hideLogo
+                  compactHeader
                   isDarkMode={isDarkMode}
                   onOpenSettings={() => setIsSettingsOpen(true)}
                   hasPracticeSession={Boolean(activePracticeChallenge)}
