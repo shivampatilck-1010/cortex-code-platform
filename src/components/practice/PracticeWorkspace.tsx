@@ -97,7 +97,7 @@ function formatTimerClock(totalSeconds: number): string {
 
 /**
  * Edge-to-edge 3-panel floating-card Cortex Practice Workspace.
- * Locks root to `h-screen w-screen overflow-hidden`, enforces the 3-tier neutral zinc palette,
+ * Fits `flex-1 h-full w-full overflow-hidden` inside AppShell alongside GlobalSidebar, enforces the 3-tier neutral zinc palette,
  * provides pointer-drag horizontal/vertical splitters, single centered Run/Submit pill,
  * compact Code sub-bar & micro-footer, and single-row Testcase/Result/Console/Assistant drawer.
  */
@@ -303,7 +303,7 @@ export const PracticeWorkspace: React.FC<PracticeWorkspaceProps> = ({
       data-testid="practice-workspace"
       className={`${
         isDarkMode ? 'dark' : ''
-      } h-screen w-screen overflow-hidden flex flex-col bg-[#F0F0F2] dark:bg-[#0F0F10] text-zinc-900 dark:text-zinc-100 antialiased ${
+      } flex-1 min-h-0 min-w-0 h-full w-full overflow-hidden flex flex-col bg-[#F0F0F2] dark:bg-[#0F0F10] text-zinc-900 dark:text-zinc-100 antialiased ${
         isDragging ? 'select-none' : ''
       }`}
     >

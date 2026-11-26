@@ -769,8 +769,17 @@ async function runPracticeHubTests() {
       workspaceContent.includes('practice-run-btn') &&
       workspaceContent.includes('practice-submit-btn') &&
       workspaceContent.includes('practice-h-splitter') &&
-      workspaceContent.includes('practice-v-splitter'),
-    'PracticeWorkspace must implement 3-panel floating-card zinc layout with single execution cluster and resizable splitters'
+      workspaceContent.includes('practice-v-splitter') &&
+      workspaceContent.includes('w-full') &&
+      !workspaceContent.includes('w-screen'),
+    'PracticeWorkspace must implement 3-panel floating-card zinc layout filling AppShell main container alongside GlobalSidebar'
+  );
+
+  assert.ok(
+    ideContent.includes('cortex:sidebar-tab-toggle') &&
+      ideContent.includes('highlightTab={isPracticeProblemMode') &&
+      !ideContent.includes('hideSidebar={isPracticeProblemMode}'),
+    'ide/page.tsx must keep GlobalSidebar accessible and exit Practice Problem Mode when switching sidebar tabs'
   );
 
   assert.ok(ideContent.includes('handleThemeChange'), 'ide/page.tsx must sync SettingsModal theme changes with isDarkMode');

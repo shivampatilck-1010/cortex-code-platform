@@ -22,6 +22,7 @@ export type SidebarTab = 'files' | 'benchmark' | 'practice' | 'learn';
 interface GlobalSidebarProps {
   onOpenSettings?: () => void;
   isDarkMode?: boolean;
+  highlightTab?: SidebarTab | null;
 }
 
 interface UserProfile {
@@ -41,7 +42,11 @@ interface NavItem {
   functionality?: string;
 }
 
-export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, isDarkMode: propDarkMode }) => {
+export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
+  onOpenSettings,
+  isDarkMode: propDarkMode,
+  highlightTab,
+}) => {
   const pathname = usePathname() || '/';
 
   const [internalDarkMode, setInternalDarkMode] = useState<boolean>(true);
@@ -240,6 +245,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
 
     if (isFilesRoute) {
       e.preventDefault();
+      window.dispatchEvent(new CustomEvent('cortex:exit-practice-mode'));
       if (!isSidebarOpen || activeSidebarTab !== 'files') {
         window.dispatchEvent(
           new CustomEvent('cortex:sidebar-tab-toggle', {
@@ -355,9 +361,11 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
             {navItems.map((item) => {
               const Icon = item.icon;
 
-              // Active icon highlight: amber accent and left indicator bar appear ONLY when isSidebarOpen is true on /ide
+              // Active icon highlight: follows explicit highlightTab (Practice Problem mode) or open IDE drawer tab
               const isActive = isIdeRoute
-                ? isSidebarOpen && activeSidebarTab === item.id
+                ? highlightTab
+                  ? highlightTab === item.id
+                  : isSidebarOpen && activeSidebarTab === item.id
                 : pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
 
               return (

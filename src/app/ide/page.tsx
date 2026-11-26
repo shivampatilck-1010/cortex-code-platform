@@ -1712,6 +1712,28 @@ function CloudIDEPageInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Exit Practice Problem Mode whenever user switches to Files, Benchmark, Learn, or clicks Logo in GlobalSidebar
+  useEffect(() => {
+    const handleSidebarSwitch = (e: Event) => {
+      const customEvent = e as CustomEvent<{ tab?: string }>;
+      const targetTab = customEvent.detail?.tab;
+      if (targetTab && targetTab !== 'practice') {
+        setActivePracticeChallenge(null);
+        setIsProblemPanelOpen(false);
+      }
+    };
+    const handleExitPractice = () => {
+      setActivePracticeChallenge(null);
+      setIsProblemPanelOpen(false);
+    };
+    window.addEventListener('cortex:sidebar-tab-toggle', handleSidebarSwitch);
+    window.addEventListener('cortex:exit-practice-mode', handleExitPractice);
+    return () => {
+      window.removeEventListener('cortex:sidebar-tab-toggle', handleSidebarSwitch);
+      window.removeEventListener('cortex:exit-practice-mode', handleExitPractice);
+    };
+  }, []);
+
   // Live Code Visualization Handler
   const handleRunTrace = async () => {
     if (isTracing) return;
@@ -1819,7 +1841,7 @@ function CloudIDEPageInner() {
     <AppShell
       isDarkMode={isDarkMode}
       onOpenSettings={() => setIsSettingsOpen(true)}
-      hideSidebar={isPracticeProblemMode}
+      highlightTab={isPracticeProblemMode ? 'practice' : undefined}
     >
       <div className={`flex flex-col h-full w-full ${isDarkMode ? 'bg-[#0b0c0e] text-[#e6edf3]' : 'bg-[#f8fafc] text-[#0f172a]'} overflow-hidden font-sans select-none`}>
         {isPracticeHubOpen ? (
