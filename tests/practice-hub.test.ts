@@ -95,7 +95,6 @@ async function runPracticeHubTests() {
     'src/lib/challenges/programming-challenges.ts',
     'src/lib/challenges/sql-challenges.ts',
     'src/components/practice/PracticeHub.tsx',
-    'src/components/practice/PracticeTrackCards.tsx',
     'src/components/practice/PracticeFilters.tsx',
     'src/components/practice/PracticeProblemTable.tsx',
     'src/components/panels/ProblemDetailsPanel.tsx',
@@ -729,11 +728,26 @@ async function runPracticeHubTests() {
     hubContent.includes('c.track.toLowerCase()') && hubContent.includes('c.difficulty.toLowerCase()'),
     'PracticeHub search must match track and difficulty'
   );
-
-  const trackCardsContent = fs.readFileSync(path.join(projectRoot, 'src/components/practice/PracticeTrackCards.tsx'), 'utf8');
   assert.ok(
-    trackCardsContent.includes('shrink-0 whitespace-nowrap'),
-    'PracticeTrackCards footer count must use shrink-0 whitespace-nowrap to avoid wrapping'
+    !hubContent.includes('PracticeTrackCards') && hubContent.includes('#09090B') && hubContent.includes('#F59E0B'),
+    'PracticeHub must use high-density zinc/amber Linear layout without stacked PracticeTrackCards'
+  );
+
+  const filtersContent = fs.readFileSync(path.join(projectRoot, 'src/components/practice/PracticeFilters.tsx'), 'utf8');
+  assert.ok(
+    filtersContent.includes('practice-filter-topic') &&
+      filtersContent.includes('practice-filter-difficulty') &&
+      filtersContent.includes('practice-filter-status') &&
+      filtersContent.includes('practice-filter-company'),
+    'PracticeFilters must expose single-row Topic, Difficulty, Status, and Company dropdowns'
+  );
+
+  const tableContent = fs.readFileSync(path.join(projectRoot, 'src/components/practice/PracticeProblemTable.tsx'), 'utf8');
+  assert.ok(
+    tableContent.includes('practice-sort-title') &&
+      tableContent.includes('practice-sort-acceptance') &&
+      tableContent.includes('practice-sort-difficulty'),
+    'PracticeProblemTable must support sortable Title, Acceptance, and Difficulty column headers'
   );
 
   const detailsContent = fs.readFileSync(path.join(projectRoot, 'src/components/panels/ProblemDetailsPanel.tsx'), 'utf8');

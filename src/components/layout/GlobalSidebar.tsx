@@ -368,28 +368,28 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({ onOpenSettings, is
                   onMouseEnter={(e) => showFloatingTooltip(item.name, item.functionality, e)}
                   onMouseMove={moveFloatingTooltip}
                   onMouseLeave={hideFloatingTooltip}
-                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium border ${
+                  className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-xs font-medium border border-transparent ${
                     isActive
                       ? isDarkMode
-                        ? 'bg-[#1e1f26] text-[#ff9100] border-transparent'
-                        : 'bg-white text-[#ff9100] shadow-sm border-slate-200'
+                        ? 'bg-white/[0.06] text-[#F59E0B]'
+                        : 'bg-zinc-200/75 text-[#F59E0B]'
                       : isDarkMode
-                        ? 'text-gray-400 hover:text-[#e6edf3] hover:bg-[#14151a] border-transparent'
-                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 hover:border-slate-300 border-transparent'
+                        ? 'text-zinc-400 hover:text-[#F4F4F5] hover:bg-white/[0.04]'
+                        : 'text-zinc-500 hover:text-[#09090B] hover:bg-zinc-200/60'
                   }`}
                 >
-                  {/* Left accent bar on active item */}
+                  {/* Subtle 2px amber left accent bar on active item */}
                   {isActive && (
-                    <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#ff9100] rounded-r" />
+                    <span className="absolute left-0 top-2 bottom-2 w-[2px] bg-[#F59E0B] rounded-r" />
                   )}
 
                   <Icon
                     className={`w-5 h-5 shrink-0 transition-colors ${
                       isActive
-                        ? 'text-[#ff9100]'
+                        ? 'text-[#F59E0B]'
                         : isDarkMode
-                          ? 'text-gray-400 hover:text-gray-200'
-                          : 'text-slate-500 hover:text-slate-800'
+                          ? 'text-zinc-400 hover:text-zinc-200'
+                          : 'text-zinc-500 hover:text-zinc-800'
                     }`}
                   />
                 </Link>
