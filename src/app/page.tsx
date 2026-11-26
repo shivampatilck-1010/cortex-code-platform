@@ -142,10 +142,10 @@ function LandingHeaderNav({
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full border-b backdrop-blur-xl transition-colors ${
+      className={`sticky top-0 z-50 w-full border-b backdrop-blur-md transition-colors ${
         isDark
-          ? 'border-white/[0.08] bg-[#08090A]/80'
-          : 'border-zinc-200/80 bg-white/80'
+          ? 'border-white/[0.08] bg-[#08090A]/85'
+          : 'border-zinc-200/80 bg-white/88'
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -256,9 +256,9 @@ function LandingHero({ isDark }: { isDark: boolean }) {
           mouseForce={24}
           cursorSize={115}
           autoDemo={true}
-          autoSpeed={0.55}
-          autoIntensity={2.3}
-          resolution={0.5}
+          autoSpeed={0.5}
+          autoIntensity={2.0}
+          resolution={0.3}
           BFECC={true}
         />
       </div>
@@ -266,10 +266,10 @@ function LandingHero({ isDark }: { isDark: boolean }) {
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
           <div
-            className={`mb-7 inline-flex items-center gap-2.5 rounded-full border px-4 py-1.5 backdrop-blur-md ${
+            className={`mb-7 inline-flex items-center gap-2.5 rounded-full border px-4 py-1.5 ${
               isDark
-                ? 'border-white/15 bg-black/50 text-zinc-200'
-                : 'border-zinc-300 bg-white/80 text-black font-semibold'
+                ? 'border-white/15 bg-black/75 text-zinc-200'
+                : 'border-zinc-300 bg-white/95 text-black font-semibold shadow-sm'
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-[#FF9100] shadow-[0_0_10px_#FF9100]" />
@@ -313,7 +313,7 @@ function LandingHero({ isDark }: { isDark: boolean }) {
           {HERO_CARDS.map((card) => (
             <div
               key={card.index}
-              className={`group relative rounded-2xl border overflow-hidden transition-all duration-300 ${
+              className={`group relative rounded-2xl border overflow-hidden transition-colors duration-200 ${
                 isDark
                   ? 'border-white/[0.12] bg-[#0B0D11]/90 hover:border-[#FF9100]/60'
                   : 'border-zinc-300 bg-white/95 shadow-lg hover:border-zinc-400'
@@ -321,8 +321,8 @@ function LandingHero({ isDark }: { isDark: boolean }) {
             >
               <TubesBackground enableClickInteraction={true} className="min-h-[270px]">
                 <div
-                  className={`flex h-full min-h-[270px] flex-col justify-between p-6 backdrop-blur-[2px] ${
-                    isDark ? 'bg-black/55' : 'bg-white/80'
+                  className={`flex h-full min-h-[270px] flex-col justify-between p-6 ${
+                    isDark ? 'bg-black/60' : 'bg-white/85'
                   }`}
                 >
                   <div>
@@ -487,7 +487,10 @@ function LandingFooter({ isDark }: { isDark?: boolean }) {
       `}</style>
 
       {/* Decorative ambient background glow */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-gradient-to-b from-[#FF9100]/15 via-[#FF3D00]/5 to-transparent blur-3xl opacity-60 dark:opacity-30" />
+      <div
+        className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[300px] opacity-75 dark:opacity-45"
+        style={{ background: 'radial-gradient(ellipse at 50% 45%, rgba(255,145,0,0.18), rgba(255,61,0,0.06) 50%, transparent 72%)' }}
+      />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* ================= MINIMALIST SINGLE-FRAME VIDEO SHOWCASE (BEFORE EXPERIENCE LIMITLESS CODE) ================= */}
@@ -778,47 +781,39 @@ function CortexLandingPageInner() {
     }
   }, [theme]);
 
-  // High-performance rAF-throttled scroll-spy tracking for sticky pill navigation
+  // Zero-reflow IntersectionObserver scroll-spy tracking for sticky navigation
   useEffect(() => {
-    let ticking = false;
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const sections = ['ide', 'classroom', 'browser'];
-          const scrollPos = window.scrollY + 280;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const sections = ['ide', 'classroom', 'browser'] as const;
+    const visibleRatios = new Map<string, number>();
 
-          // Bottom detection: if scrolled near the bottom of document, prioritize 'browser'
-          if (
-            window.innerHeight + window.scrollY >=
-            document.documentElement.scrollHeight - 380
-          ) {
-            setActiveSection((prev) => (prev !== 'browser' ? 'browser' : prev));
-            ticking = false;
-            return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          visibleRatios.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
+        }
+        let bestId = '';
+        let bestRatio = 0;
+        for (const id of sections) {
+          const r = visibleRatios.get(id) || 0;
+          if (r > bestRatio) {
+            bestRatio = r;
+            bestId = id;
           }
+        }
+        if (bestId) {
+          setActiveSection((prev) => (prev !== bestId ? bestId : prev));
+        }
+      },
+      { rootMargin: '-25% 0px -45% 0px', threshold: [0, 0.15, 0.4, 0.7] }
+    );
 
-          for (let i = sections.length - 1; i >= 0; i--) {
-            const el = document.getElementById(sections[i]);
-            if (el) {
-              const top = el.offsetTop;
-              if (scrollPos >= top) {
-                const target = sections[i];
-                setActiveSection((prev) => (prev !== target ? target : prev));
-                ticking = false;
-                return;
-              }
-            }
-          }
-          setActiveSection((prev) => (prev !== 'ide' ? 'ide' : prev));
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
+    for (const id of sections) {
+      const el = document.getElementById(id);
+      if (el) io.observe(el);
+    }
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => io.disconnect();
   }, []);
 
   return (
@@ -889,8 +884,8 @@ function CortexLandingPageInner() {
                     lineColor={
                       isDark ? 'rgba(255, 145, 0, 0.24)' : 'rgba(0, 0, 0, 0.12)'
                     }
-                    xGap={12}
-                    yGap={26}
+                    xGap={20}
+                    yGap={32}
                   />
                   <div className="relative z-10">
                     <div className="flex items-center justify-between font-mono text-xs font-bold tracking-widest text-black dark:text-[#FF9100]">
@@ -968,8 +963,8 @@ function CortexLandingPageInner() {
                         lineColor={
                           isDark ? 'rgba(255, 145, 0, 0.25)' : 'rgba(0, 0, 0, 0.12)'
                         }
-                        xGap={10}
-                        yGap={24}
+                        xGap={20}
+                        yGap={30}
                       />
                       <div className="relative z-10">
                         <div className="flex items-center justify-between">
@@ -1038,9 +1033,9 @@ function CortexLandingPageInner() {
 
               <div className="lg:col-span-6">
                 <div
-                  className={`rounded-2xl border p-6 backdrop-blur-xl ${
+                  className={`rounded-2xl border p-6 ${
                     isDark
-                      ? 'border-white/10 bg-black/55'
+                      ? 'border-white/10 bg-[#0c0e13]/90'
                       : 'border-zinc-300 bg-white/95 shadow-xl text-black'
                   }`}
                 >
@@ -1144,24 +1139,18 @@ function CortexLandingPageInner() {
                         top: `${96 + idx * 28}px`,
                         zIndex: 10 + idx * 10,
                       }}
-                      className="sticky rounded-2xl border border-white/15 bg-[#070708] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.6)] text-white transition-all duration-300 overflow-hidden"
+                      className="sticky rounded-2xl border border-white/15 bg-[#070708] shadow-2xl text-white transition-colors duration-200 overflow-hidden will-change-transform"
                     >
-                      {/* Aurora WebGL + Gradient Overlay + Glowing Blurs inside #070708 Card */}
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 z-10 pointer-events-none" />
-
-                      {/* Aurora WebGL Component */}
-                      <div className="absolute inset-0 z-0">
-                        <Aurora
-                          colorStops={['#3A29FF', '#FF94B4', '#FF3232']}
-                          blend={0.5}
-                          amplitude={1.0}
-                          speed={0.5}
-                        />
-                      </div>
-
-                      {/* Decorative ambient blurs */}
-                      <div className="absolute -top-12 -left-12 w-64 h-64 bg-blue-500/15 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
-                      <div className="absolute -bottom-12 -right-12 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none mix-blend-screen" />
+                      {/* Lightweight GPU-free Aurora Mesh Gradient */}
+                      <div
+                        className="absolute inset-0 z-0 pointer-events-none"
+                        style={{
+                          background:
+                            idx % 2 === 0
+                              ? 'radial-gradient(ellipse 80% 70% at 15% 10%, rgba(58,41,255,0.28), transparent 60%), radial-gradient(ellipse 70% 60% at 85% 85%, rgba(255,148,180,0.2), transparent 60%), linear-gradient(180deg, rgba(10,11,16,0.92), rgba(7,7,8,0.98))'
+                              : 'radial-gradient(ellipse 80% 70% at 85% 15%, rgba(255,50,50,0.2), transparent 60%), radial-gradient(ellipse 70% 60% at 15% 85%, rgba(58,41,255,0.24), transparent 60%), linear-gradient(180deg, rgba(10,11,16,0.92), rgba(7,7,8,0.98))',
+                        }}
+                      />
 
                       {/* Foreground Content */}
                       <div className="relative z-20 p-6 sm:p-8 flex flex-col justify-between min-h-[290px]">
@@ -1188,7 +1177,7 @@ function CortexLandingPageInner() {
                             {card.badges.map((badge) => (
                               <span
                                 key={badge}
-                                className="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-white/10 text-white/90 border border-white/10 backdrop-blur-sm"
+                                className="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-white/10 text-white/90 border border-white/10"
                               >
                                 {badge}
                               </span>
@@ -1197,7 +1186,7 @@ function CortexLandingPageInner() {
                         </div>
 
                         {/* API Banner */}
-                        <div className="my-5 rounded-xl border border-white/10 bg-black/50 backdrop-blur-md p-3.5 text-amber-300">
+                        <div className="my-5 rounded-xl border border-white/10 bg-black/65 p-3.5 text-amber-300">
                           <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
                             <div className="flex items-center gap-2 font-bold text-amber-300">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />

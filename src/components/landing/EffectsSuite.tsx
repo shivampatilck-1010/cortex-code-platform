@@ -195,22 +195,22 @@ export interface LiquidEtherProps {
 }
 
 export function LiquidEther({
-  mouseForce = 22,
-  cursorSize = 110,
+  mouseForce = 20,
+  cursorSize = 100,
   isViscous = false,
   viscous = 30,
-  iterationsViscous = 32,
-  iterationsPoisson = 32,
+  iterationsViscous = 12,
+  iterationsPoisson = 10,
   dt = 0.014,
   BFECC = true,
-  resolution = 0.5,
+  resolution = 0.3,
   isBounce = false,
   colors = ['#FF9100', '#FF3D00', '#6366F1'],
   style = {},
   className = '',
   autoDemo = true,
   autoSpeed = 0.5,
-  autoIntensity = 2.2,
+  autoIntensity = 2.0,
   takeoverDuration = 0.25,
   autoResumeDelay = 1000,
   autoRampDuration = 0.6,
@@ -222,6 +222,10 @@ export function LiquidEther({
 
   useEffect(() => {
     if (!mountRef.current) return;
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) return;
 
     function makePaletteTexture(stops: string[]): THREE.DataTexture {
       const arr = Array.isArray(stops) && stops.length > 0 ? (stops.length === 1 ? [stops[0], stops[0]] : stops) : ['#ffffff', '#ffffff'];
@@ -254,16 +258,22 @@ export function LiquidEther({
       pixelRatio = 1;
       time = 0;
       delta = 0;
+      lastFrameMs = 0;
       container: HTMLElement | null = null;
       renderer: THREE.WebGLRenderer | null = null;
-      clock: THREE.Clock | null = null;
 
       init(container: HTMLElement) {
         this.container = container;
-        this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        // Cap fluid canvas DPR cleanly to prevent 4K FBO/fillrate overload during scroll
+        this.pixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
         this.resize();
         try {
-          this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, failIfMajorPerformanceCaveat: false });
+          this.renderer = new THREE.WebGLRenderer({
+            antialias: false,
+            alpha: true,
+            powerPreference: 'high-performance',
+            failIfMajorPerformanceCaveat: false,
+          });
           this.renderer.autoClear = false;
           this.renderer.setClearColor(new THREE.Color(0x000000), 0);
           this.renderer.setPixelRatio(this.pixelRatio);
@@ -272,8 +282,7 @@ export function LiquidEther({
           el.style.width = '100%';
           el.style.height = '100%';
           el.style.display = 'block';
-          this.clock = new THREE.Clock();
-          this.clock.start();
+          this.lastFrameMs = performance.now();
         } catch (e) {
           console.warn('[LiquidEther] WebGLRenderer init failed, falling back:', e);
           this.renderer = null;
@@ -290,8 +299,9 @@ export function LiquidEther({
       }
 
       update() {
-        if (!this.clock) return;
-        this.delta = this.clock.getDelta();
+        const now = performance.now();
+        this.delta = Math.min(0.05, Math.max(0.001, (now - this.lastFrameMs) / 1000));
+        this.lastFrameMs = now;
         this.time += this.delta;
       }
     }
@@ -307,6 +317,8 @@ export function LiquidEther({
       container: HTMLElement | null = null;
       docTarget: Document | null = null;
       listenerTarget: Window | null = null;
+      cachedRect: DOMRect | null = null;
+      isVisible = true;
       isHoverInside = false;
       hasUserControl = false;
       isAutoActive = false;
@@ -323,6 +335,7 @@ export function LiquidEther({
       private _onTouchMove = this.onDocumentTouchMove.bind(this);
       private _onTouchEnd = this.onTouchEnd.bind(this);
       private _onDocumentLeave = this.onDocumentLeave.bind(this);
+      private _onInvalidateRect = () => { this.cachedRect = null; };
 
       init(container: HTMLElement) {
         this.container = container;
@@ -330,35 +343,51 @@ export function LiquidEther({
         const defaultView = this.docTarget?.defaultView || (typeof window !== 'undefined' ? window : null);
         if (!defaultView) return;
         this.listenerTarget = defaultView;
-        this.listenerTarget.addEventListener('mousemove', this._onMouseMove);
+        this.listenerTarget.addEventListener('mousemove', this._onMouseMove, { passive: true });
         this.listenerTarget.addEventListener('touchstart', this._onTouchStart, { passive: true });
         this.listenerTarget.addEventListener('touchmove', this._onTouchMove, { passive: true });
-        this.listenerTarget.addEventListener('touchend', this._onTouchEnd);
+        this.listenerTarget.addEventListener('touchend', this._onTouchEnd, { passive: true });
+        this.listenerTarget.addEventListener('scroll', this._onInvalidateRect, { passive: true });
+        this.listenerTarget.addEventListener('resize', this._onInvalidateRect, { passive: true });
         this.docTarget?.addEventListener('mouseleave', this._onDocumentLeave);
       }
 
       dispose() {
+        if (this.timer) window.clearTimeout(this.timer);
         if (this.listenerTarget) {
           this.listenerTarget.removeEventListener('mousemove', this._onMouseMove);
           this.listenerTarget.removeEventListener('touchstart', this._onTouchStart);
           this.listenerTarget.removeEventListener('touchmove', this._onTouchMove);
           this.listenerTarget.removeEventListener('touchend', this._onTouchEnd);
+          this.listenerTarget.removeEventListener('scroll', this._onInvalidateRect);
+          this.listenerTarget.removeEventListener('resize', this._onInvalidateRect);
         }
         if (this.docTarget) this.docTarget.removeEventListener('mouseleave', this._onDocumentLeave);
       }
 
+      private getRect(): DOMRect | null {
+        if (!this.container) return null;
+        if (!this.cachedRect) {
+          this.cachedRect = this.container.getBoundingClientRect();
+        }
+        return this.cachedRect;
+      }
+
       private updateHoverState(clientX: number, clientY: number) {
-        if (!this.container) return false;
-        const rect = this.container.getBoundingClientRect();
+        if (!this.isVisible) {
+          this.isHoverInside = false;
+          return false;
+        }
+        const rect = this.getRect();
+        if (!rect) return false;
         this.isHoverInside = clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
         return this.isHoverInside;
       }
 
       setCoords(x: number, y: number) {
-        if (!this.container) return;
+        const rect = this.getRect();
+        if (!rect || rect.width === 0 || rect.height === 0) return;
         if (this.timer) window.clearTimeout(this.timer);
-        const rect = this.container.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
         const nx = (x - rect.left) / rect.width;
         const ny = (y - rect.top) / rect.height;
         this.coords.set(nx * 2 - 1, -(ny * 2 - 1));
@@ -375,8 +404,8 @@ export function LiquidEther({
         if (!this.updateHoverState(event.clientX, event.clientY)) return;
         if (this.onInteract) this.onInteract();
         if (this.isAutoActive && !this.hasUserControl && !this.takeoverActive) {
-          if (!this.container) return;
-          const rect = this.container.getBoundingClientRect();
+          const rect = this.getRect();
+          if (!rect || rect.width === 0 || rect.height === 0) return;
           const nx = (event.clientX - rect.left) / rect.width;
           const ny = (event.clientY - rect.top) / rect.height;
           this.takeoverFrom.copy(this.coords);
@@ -719,19 +748,18 @@ export function LiquidEther({
         Common.renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
       }
 
-      io = new IntersectionObserver(([entry]) => {
-        isVisible = entry.isIntersecting;
-        if (isVisible && !rafRef.current && manager.running) {
-          loop();
-        }
-      }, { threshold: 0.05 });
-      io.observe(wrapper);
-
-      const loop = () => {
+      let lastRenderTime = 0;
+      const loop = (now = performance.now()) => {
         if (!manager.running || !isVisible) {
           rafRef.current = null;
           return;
         }
+        rafRef.current = requestAnimationFrame(loop);
+        // Pace fluid simulation at ~30fps so scroll/input events stay responsive
+        if (now - lastRenderTime < 30) {
+          return;
+        }
+        lastRenderTime = now;
         try {
           autoDriver.update();
           Mouse.update();
@@ -741,19 +769,28 @@ export function LiquidEther({
             Common.renderer.setRenderTarget(null);
             Common.renderer.render(outScene, outCam);
           }
-          rafRef.current = requestAnimationFrame(loop);
         } catch (err) {
           console.warn('[LiquidEther] Render loop halted safely:', err);
           manager.running = false;
+          if (rafRef.current) cancelAnimationFrame(rafRef.current);
           rafRef.current = null;
         }
       };
-      loop();
+
+      io = new IntersectionObserver(([entry]) => {
+        isVisible = entry.isIntersecting;
+        Mouse.isVisible = isVisible;
+        if (isVisible && !rafRef.current && manager.running) {
+          loop();
+        }
+      }, { threshold: 0.05 });
+      io.observe(wrapper);
 
       ro = new ResizeObserver(() => {
         if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
         resizeRafRef.current = requestAnimationFrame(() => {
           try {
+            Mouse.cachedRect = null;
             Common.resize();
             sim.resize();
           } catch (_) {}
@@ -769,9 +806,11 @@ export function LiquidEther({
     return () => {
       manager.running = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
       if (io) io.disconnect();
       if (ro) ro.disconnect();
       Mouse.dispose();
+      paletteTex.dispose();
       if (Common.renderer) {
         const c = Common.renderer.domElement;
         if (c.parentNode) c.parentNode.removeChild(c);
@@ -814,77 +853,97 @@ export function TubesBackground({
 }: TubesBackgroundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const tubesRef = useRef<any>(null);
+  const paletteRef = useRef<string[]>(['#FF9100', '#FF3D00', '#6958d5']);
 
   useEffect(() => {
-    let mounted = true;
-    let io: IntersectionObserver | null = null;
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
 
-    if (typeof IntersectionObserver !== 'undefined') {
-      const target = containerRef.current || canvasRef.current;
-      if (target) {
-        io = new IntersectionObserver(
-          ([entry]) => {
-            const isVisible = entry.isIntersecting;
-            if (tubesRef.current) {
-              if (!isVisible && typeof tubesRef.current.pause === 'function') {
-                tubesRef.current.pause();
-              } else if (isVisible && typeof tubesRef.current.play === 'function') {
-                tubesRef.current.play();
-              }
-            }
-          },
-          { threshold: 0.05 }
-        );
-        io.observe(target);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animId: number | null = null;
+    let isVisible = false;
+    let lastDrawTime = 0;
+    let width = 360;
+    let height = 270;
+
+    const drawFrame = (now: number) => {
+      if (!isVisible) {
+        animId = null;
+        return;
       }
-    }
+      animId = requestAnimationFrame(drawFrame);
+      if (now - lastDrawTime < 33) return;
+      lastDrawTime = now;
 
-    const initTubes = async () => {
-      if (!canvasRef.current) return;
-      try {
-        canvasRef.current.addEventListener('webglcontextlost', (e) => {
-          e.preventDefault();
-          console.warn('[TubesBackground] WebGL context lost.');
-        }, false);
+      const t = now * 0.001;
+      ctx.clearRect(0, 0, width, height);
+      const colors = paletteRef.current;
 
-        // Verify WebGL is actually usable before attempting CDN module load
-        const gl = canvasRef.current.getContext('webgl') || canvasRef.current.getContext('experimental-webgl');
-        if (!gl) return;
-
-        // @ts-expect-error -- Dynamic CDN import of untyped ES module; bundler cannot resolve external URL at build time.
-        const module = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/npm/threejs-components@0.0.19/build/cursors/tubes1.min.js');
-        const TubesCursor = module.default;
-        if (!mounted || !canvasRef.current) return;
-
-        const app = TubesCursor(canvasRef.current, {
-          tubes: {
-            colors: ['#FF9100', '#FF3D00', '#6958d5'],
-            lights: {
-              intensity: 180,
-              colors: ['#FF9100', '#fe8a2e', '#ff008a', '#60aed5'],
-            },
-          },
-        });
-        tubesRef.current = app;
-      } catch (err) {
-        console.warn('TubesCursor CDN fallback active:', err);
+      for (let i = 0; i < colors.length; i++) {
+        ctx.beginPath();
+        ctx.strokeStyle = colors[i];
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 2.2;
+        const yBase = height * (0.28 + i * 0.22);
+        ctx.moveTo(0, yBase);
+        for (let x = 0; x <= width; x += 24) {
+          const y =
+            yBase +
+            Math.sin(x * 0.014 + t * (0.9 + i * 0.25) + i * 1.7) * 26 +
+            Math.cos(x * 0.008 - t * 0.6) * 12;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
       }
+      ctx.globalAlpha = 1;
     };
 
-    initTubes();
+    const resize = () => {
+      const rect = container.getBoundingClientRect();
+      width = Math.max(1, Math.floor(rect.width));
+      height = Math.max(1, Math.floor(rect.height));
+      canvas.width = width;
+      canvas.height = height;
+    };
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(container);
+
+    let io: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== 'undefined') {
+      io = new IntersectionObserver(
+        ([entry]) => {
+          isVisible = entry.isIntersecting;
+          if (isVisible && !animId) {
+            animId = requestAnimationFrame(drawFrame);
+          } else if (!isVisible && animId) {
+            cancelAnimationFrame(animId);
+            animId = null;
+          }
+        },
+        { threshold: 0.05 }
+      );
+      io.observe(container);
+    } else {
+      isVisible = true;
+      animId = requestAnimationFrame(drawFrame);
+    }
+
     return () => {
-      mounted = false;
+      isVisible = false;
+      if (animId) cancelAnimationFrame(animId);
       if (io) io.disconnect();
+      ro.disconnect();
     };
   }, []);
 
   const handleClick = () => {
-    if (!enableClickInteraction || !tubesRef.current?.tubes) return;
-    try {
-      tubesRef.current.tubes.setColors(randomColors(3));
-      tubesRef.current.tubes.setLightsColors(randomColors(4));
-    } catch (_) {}
+    if (!enableClickInteraction) return;
+    paletteRef.current = randomColors(3);
   };
 
   return (
@@ -1038,12 +1097,16 @@ export const InteractiveWavesBackground: React.FC<WavesProps> = ({
       }
     };
 
-    let isVisible = true;
+    let isVisible = false;
+    let lastTick = 0;
     const tick = (t: number) => {
       if (!isVisible) {
         frameIdRef.current = null;
         return;
       }
+      frameIdRef.current = requestAnimationFrame(tick);
+      if (t - lastTick < 32) return;
+      lastTick = t;
       try {
         mouse.sx += (mouse.x - mouse.sx) * 0.1;
         mouse.sy += (mouse.y - mouse.sy) * 0.1;
@@ -1092,17 +1155,17 @@ export const InteractiveWavesBackground: React.FC<WavesProps> = ({
           });
         });
         ctx.stroke();
-        frameIdRef.current = requestAnimationFrame(tick);
       } catch (err) {
         console.warn('[GhostCursor] Canvas tick error suppressed:', err);
+        if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
         frameIdRef.current = null;
       }
     };
 
     const onMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
+      if (!isVisible) return;
+      mouse.x = e.clientX - bounds.left;
+      mouse.y = e.clientY - bounds.top;
       if (!mouse.set) {
         mouse.sx = mouse.lx = mouse.x;
         mouse.sy = mouse.ly = mouse.y;
@@ -1110,6 +1173,11 @@ export const InteractiveWavesBackground: React.FC<WavesProps> = ({
       }
     };
 
+    const onInvalidateBounds = () => {
+      const rect = container.getBoundingClientRect();
+      bounds.left = rect.left;
+      bounds.top = rect.top;
+    };
     const onResize = () => { setSize(); setLines(); };
     setSize();
     setLines();
@@ -1118,22 +1186,30 @@ export const InteractiveWavesBackground: React.FC<WavesProps> = ({
     if (typeof IntersectionObserver !== 'undefined' && container) {
       io = new IntersectionObserver(([entry]) => {
         isVisible = entry.isIntersecting;
+        onInvalidateBounds();
         if (isVisible && !frameIdRef.current) {
           frameIdRef.current = requestAnimationFrame(tick);
+        } else if (!isVisible && frameIdRef.current) {
+          cancelAnimationFrame(frameIdRef.current);
+          frameIdRef.current = null;
         }
       }, { threshold: 0.05 });
       io.observe(container);
     } else {
+      isVisible = true;
       frameIdRef.current = requestAnimationFrame(tick);
     }
 
     window.addEventListener('resize', onResize);
-    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('scroll', onInvalidateBounds, { passive: true });
+    container.addEventListener('mousemove', onMouseMove, { passive: true });
 
     return () => {
+      isVisible = false;
       if (io) io.disconnect();
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('scroll', onInvalidateBounds);
+      container.removeEventListener('mousemove', onMouseMove);
       if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
     };
   }, []);
@@ -1186,11 +1262,24 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
     const parent = host?.parentElement;
     if (!host || !parent) return;
 
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) return;
+
     let renderer: THREE.WebGLRenderer | null = null;
     let animId: number | null = null;
+    let io: IntersectionObserver | null = null;
+    let ro: ResizeObserver | null = null;
 
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, depth: false, stencil: false });
+      renderer = new THREE.WebGLRenderer({
+        antialias: false,
+        alpha: true,
+        depth: false,
+        stencil: false,
+        powerPreference: 'high-performance',
+      });
       renderer.setClearColor(0x000000, 0);
       renderer.domElement.style.pointerEvents = 'none';
       renderer.domElement.style.width = '100%';
@@ -1203,7 +1292,7 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
       const scene = new THREE.Scene();
       const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       const geom = new THREE.PlaneGeometry(2, 2);
-      const maxTrail = Math.max(1, Math.floor(trailLength));
+      const maxTrail = Math.max(1, Math.min(12, Math.floor(trailLength)));
       const trailBuf = Array.from({ length: maxTrail }, () => new THREE.Vector2(0.5, 0.5));
       const currentMouse = new THREE.Vector2(0.5, 0.5);
       const targetMouse = new THREE.Vector2(0.5, 0.5);
@@ -1232,24 +1321,18 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
             vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
             return mix(mix(hash(i), hash(i + vec2(1.,0.)), f.x), mix(hash(i + vec2(0.,1.)), hash(i + vec2(1.,1.)), f.x), f.y);
           }
-          float fbm(vec2 p){
-            float v = 0.0, a = 0.5; mat2 m = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-            for(int i=0;i<4;i++){ v += a * noise(p); p = m * p * 2.0; a *= 0.5; }
-            return v;
-          }
           vec4 blob(vec2 p, vec2 mousePos, float intensity, float activity) {
-            float smoke = fbm(p * iScale + iTime * 0.15);
-            float radius = 0.38;
+            float smoke = noise(p * (iScale * 2.2) + iTime * 0.25) * 0.6 + 0.4;
+            float radius = 0.36;
             float distFactor = 1.0 - smoothstep(0.0, radius * activity, length(p - mousePos));
-            float alpha = pow(smoke, 2.2) * distFactor;
+            float alpha = smoke * distFactor * distFactor;
             return vec4(iBaseColor * alpha * intensity, alpha * intensity);
           }
           void main() {
-            vec2 uv = (gl_FragCoord.xy / iResolution.xy * 2.0 - 1.0) * vec2(iResolution.x / iResolution.y, 1.0);
-            vec2 mouse = (iMouse * 2.0 - 1.0) * vec2(iResolution.x / iResolution.y, 1.0);
+            vec2 uv = (gl_FragCoord.xy / iResolution.xy * 2.0 - 1.0) * vec2(iResolution.x / max(1.0, iResolution.y), 1.0);
             vec3 colorAcc = vec3(0.0); float alphaAcc = 0.0;
             for (int i = 0; i < MAX_TRAIL_LENGTH; i++) {
-              vec2 pm = (iPrevMouse[i] * 2.0 - 1.0) * vec2(iResolution.x / iResolution.y, 1.0);
+              vec2 pm = (iPrevMouse[i] * 2.0 - 1.0) * vec2(iResolution.x / max(1.0, iResolution.y), 1.0);
               float progress = float(i) / float(MAX_TRAIL_LENGTH);
               float intensity = pow(1.0 - progress, 1.5) * iBrightness;
               vec4 b = blob(uv, pm, intensity, 1.0 - progress * 0.4);
@@ -1266,17 +1349,22 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
       const mesh = new THREE.Mesh(geom, material);
       scene.add(mesh);
 
+      let cachedRect: DOMRect | null = null;
       const updateSize = () => {
         if (!renderer || !parent) return;
         const rect = parent.getBoundingClientRect();
-        const w = Math.max(1, Math.floor(rect.width));
-        const h = Math.max(1, Math.floor(rect.height));
+        cachedRect = rect;
+        // Render smoky bloom at half resolution cleanly to minimize fragment fillrate
+        const w = Math.max(1, Math.floor(rect.width * 0.5));
+        const h = Math.max(1, Math.floor(rect.height * 0.5));
         renderer.setSize(w, h, false);
         material.uniforms.iResolution.value.set(w, h, 1);
       };
 
+      const invalidateRect = () => { cachedRect = null; };
       const handlePointerMove = (e: MouseEvent) => {
-        const rect = parent.getBoundingClientRect();
+        if (!cachedRect) cachedRect = parent.getBoundingClientRect();
+        const rect = cachedRect;
         if (rect.width > 0 && rect.height > 0) {
           const nx = (e.clientX - rect.left) / rect.width;
           const ny = 1.0 - (e.clientY - rect.top) / rect.height;
@@ -1285,20 +1373,27 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
       };
 
       updateSize();
-      window.addEventListener('resize', updateSize);
-      parent.addEventListener('mousemove', handlePointerMove);
+      ro = new ResizeObserver(updateSize);
+      ro.observe(parent);
+      window.addEventListener('scroll', invalidateRect, { passive: true });
+      parent.addEventListener('mousemove', handlePointerMove, { passive: true });
 
-      let startTime = performance.now();
+      const startTime = performance.now();
+      let isVisible = false;
+      let lastDraw = 0;
       const animate = (now: number) => {
+        if (!isVisible) {
+          animId = null;
+          return;
+        }
+        animId = requestAnimationFrame(animate);
+        if (now - lastDraw < 30) return;
+        lastDraw = now;
         try {
-          animId = requestAnimationFrame(animate);
           const elapsed = (now - startTime) / 1000;
-
-          // Smooth follow
           currentMouse.lerp(targetMouse, 1.0 - inertia);
           material.uniforms.iMouse.value.copy(currentMouse);
 
-          // Update trail buffer
           for (let i = maxTrail - 1; i > 0; i--) {
             trailBuf[i].copy(trailBuf[i - 1]);
           }
@@ -1313,14 +1408,39 @@ export const GhostCursor: React.FC<GhostCursorProps> = ({
         } catch (err) {
           console.warn('[GhostCursor] Render frame halted:', err);
           if (animId) cancelAnimationFrame(animId);
+          animId = null;
         }
       };
-      animId = requestAnimationFrame(animate);
+
+      if (typeof IntersectionObserver !== 'undefined') {
+        io = new IntersectionObserver(
+          ([entry]) => {
+            isVisible = entry.isIntersecting;
+            cachedRect = null;
+            if (isVisible && !animId) {
+              animId = requestAnimationFrame(animate);
+            } else if (!isVisible && animId) {
+              cancelAnimationFrame(animId);
+              animId = null;
+            }
+          },
+          { threshold: 0.05 }
+        );
+        io.observe(parent);
+      } else {
+        isVisible = true;
+        animId = requestAnimationFrame(animate);
+      }
 
       return () => {
+        isVisible = false;
         if (animId) cancelAnimationFrame(animId);
-        window.removeEventListener('resize', updateSize);
+        if (io) io.disconnect();
+        if (ro) ro.disconnect();
+        window.removeEventListener('scroll', invalidateRect);
         parent.removeEventListener('mousemove', handlePointerMove);
+        geom.dispose();
+        material.dispose();
         if (renderer) {
           if (renderer.domElement.parentNode) {
             renderer.domElement.parentNode.removeChild(renderer.domElement);
@@ -1379,15 +1499,24 @@ export const Squares: React.FC<SquaresProps> = ({
     if (!ctx) return;
 
     let animId: number | null = null;
-    let isVisible = true;
+    let isVisible = false;
     let offset = { x: 0, y: 0 };
+    let dims = { width: 0, height: 0, left: 0, top: 0 };
+    let lastDraw = 0;
 
     const handleResize = () => {
       const rect = container.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+      dims = { width: rect.width, height: rect.height, left: rect.left, top: rect.top };
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    const invalidateBounds = () => {
+      const rect = container.getBoundingClientRect();
+      dims.left = rect.left;
+      dims.top = rect.top;
     };
 
     handleResize();
@@ -1395,10 +1524,9 @@ export const Squares: React.FC<SquaresProps> = ({
     ro.observe(container);
 
     const handleMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
       mouseRef.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: e.clientX - dims.left,
+        y: e.clientY - dims.top,
       };
     };
 
@@ -1406,25 +1534,25 @@ export const Squares: React.FC<SquaresProps> = ({
       mouseRef.current = null;
     };
 
-    container.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('scroll', invalidateBounds, { passive: true });
+    container.addEventListener('mousemove', handleMouseMove, { passive: true });
     container.addEventListener('mouseleave', handleMouseLeave);
 
-    const render = () => {
+    const render = (now = performance.now()) => {
       if (!isVisible) {
         animId = null;
         return;
       }
+      animId = requestAnimationFrame(render);
+      if (now - lastDraw < 32) return;
+      lastDraw = now;
       try {
         const safeSquareSize = Math.max(16, squareSize || 48);
-        const rect = container.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) {
-          animId = requestAnimationFrame(render);
-          return;
-        }
-        ctx.clearRect(0, 0, rect.width, rect.height);
+        const { width, height } = dims;
+        if (width <= 0 || height <= 0) return;
+        ctx.clearRect(0, 0, width, height);
 
-        // Move offset according to direction and speed
-        const step = speed * 0.6;
+        const step = speed * 0.9;
         switch (direction) {
           case 'up':
             offset.y = (offset.y - step) % safeSquareSize;
@@ -1448,7 +1576,6 @@ export const Squares: React.FC<SquaresProps> = ({
         const startX = Math.floor(offset.x % safeSquareSize) - safeSquareSize;
         const startY = Math.floor(offset.y % safeSquareSize) - safeSquareSize;
 
-        // Draw hovered cell fill if mouse is inside
         if (mouseRef.current) {
           const mouseX = mouseRef.current.x;
           const mouseY = mouseRef.current.y;
@@ -1461,24 +1588,22 @@ export const Squares: React.FC<SquaresProps> = ({
           ctx.fillRect(cellX, cellY, safeSquareSize, safeSquareSize);
         }
 
-        // Draw grid lines
         ctx.beginPath();
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1;
 
-        for (let x = startX; x <= rect.width + safeSquareSize; x += safeSquareSize) {
+        for (let x = startX; x <= width + safeSquareSize; x += safeSquareSize) {
           ctx.moveTo(x, 0);
-          ctx.lineTo(x, rect.height);
+          ctx.lineTo(x, height);
         }
-        for (let y = startY; y <= rect.height + safeSquareSize; y += safeSquareSize) {
+        for (let y = startY; y <= height + safeSquareSize; y += safeSquareSize) {
           ctx.moveTo(0, y);
-          ctx.lineTo(rect.width, y);
+          ctx.lineTo(width, y);
         }
         ctx.stroke();
-
-        animId = requestAnimationFrame(render);
       } catch (err) {
         console.warn('[Squares] Render loop suppressed:', err);
+        if (animId) cancelAnimationFrame(animId);
         animId = null;
       }
     };
@@ -1487,19 +1612,26 @@ export const Squares: React.FC<SquaresProps> = ({
     if (typeof IntersectionObserver !== 'undefined') {
       io = new IntersectionObserver(([entry]) => {
         isVisible = entry.isIntersecting;
-        if (isVisible && !animId) {
-          animId = requestAnimationFrame(render);
+        if (isVisible) {
+          invalidateBounds();
+          if (!animId) animId = requestAnimationFrame(render);
+        } else if (animId) {
+          cancelAnimationFrame(animId);
+          animId = null;
         }
       }, { threshold: 0.05 });
       io.observe(container);
     } else {
+      isVisible = true;
       animId = requestAnimationFrame(render);
     }
 
     return () => {
+      isVisible = false;
       if (animId) cancelAnimationFrame(animId);
       if (io) io.disconnect();
       ro.disconnect();
+      window.removeEventListener('scroll', invalidateBounds);
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseleave', handleMouseLeave);
     };
@@ -1542,14 +1674,22 @@ export const Aurora: React.FC<AuroraProps> = ({
     const container = containerRef.current;
     if (!container) return;
 
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) return;
+
     let renderer: Renderer | null = null;
     let animId: number | null = null;
+    let io: IntersectionObserver | null = null;
+    let ro: ResizeObserver | null = null;
 
     try {
       renderer = new Renderer({
+        dpr: 0.5,
         alpha: true,
         premultipliedAlpha: false,
-        antialias: true,
+        antialias: false,
       });
       const gl = renderer.gl;
       gl.clearColor(0, 0, 0, 0);
@@ -1662,17 +1802,21 @@ export const Aurora: React.FC<AuroraProps> = ({
       };
 
       handleResize();
-      window.addEventListener('resize', handleResize);
+      ro = new ResizeObserver(handleResize);
+      ro.observe(container);
 
-      let startTime = performance.now();
-      let isVisible = true;
+      const startTime = performance.now();
+      let isVisible = false;
+      let lastRender = 0;
       const loop = (now: number) => {
         if (!isVisible) {
           animId = null;
           return;
         }
+        animId = requestAnimationFrame(loop);
+        if (now - lastRender < 32) return;
+        lastRender = now;
         try {
-          animId = requestAnimationFrame(loop);
           const elapsed = (now - startTime) / 1000;
           program.uniforms.uTime.value = elapsed * speed;
           renderer?.render({ scene: mesh });
@@ -1683,23 +1827,27 @@ export const Aurora: React.FC<AuroraProps> = ({
         }
       };
 
-      let io: IntersectionObserver | null = null;
       if (typeof IntersectionObserver !== 'undefined' && container) {
         io = new IntersectionObserver(([entry]) => {
           isVisible = entry.isIntersecting;
           if (isVisible && !animId) {
             animId = requestAnimationFrame(loop);
+          } else if (!isVisible && animId) {
+            cancelAnimationFrame(animId);
+            animId = null;
           }
         }, { threshold: 0.05 });
         io.observe(container);
       } else {
+        isVisible = true;
         animId = requestAnimationFrame(loop);
       }
 
       return () => {
+        isVisible = false;
         if (animId) cancelAnimationFrame(animId);
         if (io) io.disconnect();
-        window.removeEventListener('resize', handleResize);
+        if (ro) ro.disconnect();
         if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
         gl.getExtension('WEBGL_lose_context')?.loseContext();
       };

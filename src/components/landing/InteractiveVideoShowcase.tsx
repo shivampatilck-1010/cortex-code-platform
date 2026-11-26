@@ -78,10 +78,13 @@ export const InteractiveVideoShowcase: React.FC<{ isDark?: boolean }> = () => {
   return (
     <div className="relative w-full">
       {/* Subtle ambient lighting behind the frame without heavy blur filters */}
-      <div className="pointer-events-none absolute -inset-4 rounded-3xl bg-gradient-to-b from-[#FF9100]/10 via-[#FF3D00]/5 to-transparent opacity-60 dark:opacity-30 blur-2xl -z-10" />
+      <div
+        className="pointer-events-none absolute -inset-4 rounded-3xl opacity-70 dark:opacity-40 -z-10"
+        style={{ background: 'radial-gradient(ellipse at 50% 30%, rgba(255,145,0,0.16), rgba(255,61,0,0.06) 45%, transparent 75%)' }}
+      />
 
       {/* Single clean video frame with zero text */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-2xl sm:rounded-3xl border border-zinc-200/90 dark:border-white/[0.12] bg-black shadow-2xl ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300 transform-gpu">
+      <div className="relative aspect-video w-full overflow-hidden rounded-2xl sm:rounded-3xl border border-zinc-200/90 dark:border-white/[0.12] bg-black shadow-2xl ring-1 ring-black/5 dark:ring-white/5 transition-colors duration-200">
         <video
           ref={videoRef}
           src="/videos/finalcortex.mp4"
