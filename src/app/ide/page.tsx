@@ -25,7 +25,12 @@ import { TraceSession } from '@/lib/visualization/types';
 import { FileExplorer } from '@/components/sidebar/FileExplorer';
 import { SearchSidebar } from '@/components/sidebar/SearchSidebar';
 import { BenchmarkSidebar } from '@/components/sidebar/BenchmarkSidebar';
-import { LearnSidebar } from '@/components/sidebar/LearnSidebar';
+import {
+  LearnSidebar,
+  type ActiveLearnSnippetContext,
+} from '@/components/sidebar/LearnSidebar';
+import type { Course, LabLesson } from '@/types/learn';
+import { getCourseByIdOrSlug, findLessonInCourse } from '@/data/courses';
 import { PracticeHub } from '@/components/practice/PracticeHub';
 import {
   PracticeBottomTab,
@@ -52,6 +57,7 @@ import { FeedbackModal } from '@/components/modals/FeedbackModal';
 import { SUPPORTED_LANGUAGES, LanguageConfig, getLanguageConfig } from '@/config/languages';
 import { ProjectFile, ExecutionResult, TestCase, BenchmarkMetrics } from '@/lib/execution/types';
 import { executeInCloudSandbox, runTestCases, benchmarkExecution, parseDiagnostics } from '@/lib/execution/engine';
+import { resolveLabTestCases } from '@/lib/execution/lab-runner';
 import { 
   AISettings, 
   DEFAULT_AI_SETTINGS, 
@@ -66,11 +72,15 @@ import { CollaborationBroker, Collaborator } from '@/lib/collaboration/broker';
 import { detectLanguage, detectLanguageFromFilename, getMonacoLanguage } from '@/lib/editor/language-detector';
 import { zipSync, strToU8 } from 'fflate';
 import { formatSqlResultsToAsciiTable } from '@/lib/sql/formatter';
-import { useIdeLayout, useIdeDebugger } from '@/hooks';
+import {
+  useIdeLayout,
+  useIdeDebugger,
+  useCortexTheme,
+  useLearnProgress,
+} from '@/hooks';
 import { getStarterContentForFile, isUntouchedStarterCode } from '@/hooks/useIdeFiles';
 import { getGuestSqlProjectId } from '@/lib/sql/guest-session';
 import { Badge } from '@/components/ui/Badge';
-import { triggerThemeRippleTransition } from '@/lib/theme/ripple-transition';
 
 const getMonacoLangForFile = (filename: string, defaultMonacoLang: string): string => {
   const detected = getMonacoLanguage(filename);
@@ -143,11 +153,21 @@ function CloudIDEPageInner() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const id = urlParams.get('projectId');
-        const challengeParam = urlParams.get('challenge');
-        const tabParam = urlParams.get('tab');
-        const challengeQuerySuffix = challengeParam ? `&challenge=${encodeURIComponent(challengeParam)}` : '';
-        const tabQuerySuffix = tabParam ? `&tab=${encodeURIComponent(tabParam)}` : '';
-        const preservedQuerySuffix = `${challengeQuerySuffix}${tabQuerySuffix}`;
+        const PRESERVED_QUERY_KEYS = [
+          'challenge',
+          'tab',
+          'course',
+          'lesson',
+          'snippet',
+          'lang',
+          'filename',
+        ] as const;
+        const preservedQuerySuffix = PRESERVED_QUERY_KEYS.map((key) => {
+          const value = urlParams.get(key);
+          return value !== null && value !== ''
+            ? `&${key}=${encodeURIComponent(value)}`
+            : '';
+        }).join('');
 
         const loadAndHydrateProject = async (targetId: string): Promise<'ok' | 'unauth' | 'missing'> => {
           const res = await fetch(`/api/v1/projects/${targetId}`);
@@ -313,6 +333,18 @@ function CloudIDEPageInner() {
     markAttempted: markProblemAttempted,
     markSolved: markProblemSolved,
   } = usePracticeProgress();
+  const { markItemCompleted } = useLearnProgress();
+  const [activeLabContext, setActiveLabContext] = useState<{
+    course: Course;
+    lesson: LabLesson;
+    fileId?: string;
+  } | null>(null);
+  const [activeLearnSnippet, setActiveLearnSnippet] =
+    useState<ActiveLearnSnippetContext | null>(null);
+  const filesRef = useRef<ProjectFile[]>(files);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
   const [activePracticeChallenge, setActivePracticeChallenge] = useState<Challenge | null>(null);
   const [isProblemPanelOpen, setIsProblemPanelOpen] = useState<boolean>(false);
   const [isPracticeLeftMaximized, setIsPracticeLeftMaximized] = useState<boolean>(false);
@@ -469,8 +501,14 @@ function CloudIDEPageInner() {
   const [selectedSqlDialect, setSelectedSqlDialect] = useState<
     'sqlite' | 'postgresql' | 'mysql' | 'mssql' | 'oracle'
   >('sqlite');
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [theme, setTheme] = useState('cortex-dark');
+  const {
+    isDarkMode,
+    theme: cortexTheme,
+    setThemeMode,
+    toggleTheme,
+  } = useCortexTheme();
+  const [useHcBlack, setUseHcBlack] = useState(false);
+  const theme = useHcBlack && isDarkMode ? 'hc-black' : cortexTheme;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -516,20 +554,6 @@ function CloudIDEPageInner() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  // Synchronize document dark class with active theme on initial load
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('cortex_ide_theme');
-      if (savedTheme === 'light') {
-        setIsDarkMode(false);
-        setTheme('cortex-light');
-        document.documentElement.classList.remove('dark');
-      } else {
-        document.documentElement.classList.add('dark');
-      }
-    }
-  }, []);
-
   const handleThemeChange = (newTheme: string) => {
     const normalizedTheme =
       newTheme === 'light'
@@ -538,42 +562,19 @@ function CloudIDEPageInner() {
           ? 'cortex-dark'
           : newTheme;
     const nextDark = normalizedTheme !== 'cortex-light';
-    setTheme(normalizedTheme);
-    setIsDarkMode(nextDark);
-    if (typeof document !== 'undefined') {
-      if (nextDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('cortex_ide_theme', nextDark ? 'dark' : 'light');
-    }
+    setUseHcBlack(normalizedTheme === 'hc-black');
+    setThemeMode(nextDark ? 'dark' : 'light');
   };
 
   const handleToggleDarkMode = (coords?: { x: number; y: number }) => {
-    const originX = coords?.x ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
-    const originY = coords?.y ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
-    const targetTheme = isDarkMode ? 'light' : 'dark';
-
-    triggerThemeRippleTransition(originX, originY, targetTheme, () => {
-      setIsDarkMode((prev) => {
-        const next = !prev;
-        setTheme(next ? 'cortex-dark' : 'cortex-light');
-        if (typeof document !== 'undefined') {
-          if (next) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-        }
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('cortex_ide_theme', next ? 'dark' : 'light');
-        }
-        return next;
-      });
-    });
+    setUseHcBlack(false);
+    if (coords) {
+      toggleTheme(coords);
+    } else if (typeof window !== 'undefined') {
+      toggleTheme({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    } else {
+      toggleTheme();
+    }
   };
 
   // 8. Collaboration Broker
@@ -1550,6 +1551,13 @@ function CloudIDEPageInner() {
         if (activePracticeChallenge) {
           markProblemSolved(activePracticeChallenge.id);
         }
+        if (activeLabContext && targetFile.id === activeLabContext.fileId) {
+          markItemCompleted(
+            activeLabContext.course.id,
+            activeLabContext.lesson.id,
+            true
+          );
+        }
       } else if (activePracticeChallenge) {
         markProblemAttempted(activePracticeChallenge.id);
       }
@@ -1597,6 +1605,207 @@ function CloudIDEPageInner() {
     });
     setBenchmarkResult(res);
   };
+
+  const upsertWorkspaceFile = useCallback(
+    async ({
+      fileName,
+      content,
+      targetLang,
+      forceOverwrite = false,
+      idPrefix = 'learn',
+    }: {
+      fileName: string;
+      content: string;
+      targetLang: LanguageConfig;
+      forceOverwrite?: boolean;
+      idPrefix?: string;
+    }): Promise<ProjectFile | null> => {
+      const filePath = fileName.startsWith('/') ? fileName : `/${fileName}`;
+      const cleanName = fileName.replace(/^\/+/, '');
+      const existing = filesRef.current.find(
+        (f) => !f.isFolder && f.name.toLowerCase() === cleanName.toLowerCase()
+      );
+
+      let resolvedFile: ProjectFile | null = null;
+      let resolvedFileId = '';
+
+      if (existing) {
+        if (forceOverwrite || !existing.content.trim()) {
+          resolvedFile = { ...existing, content };
+          filesRef.current = filesRef.current.map((f) =>
+            f.id === existing.id ? { ...f, content } : f
+          );
+          setFiles((prev) =>
+            prev.map((f) => (f.id === existing.id ? { ...f, content } : f))
+          );
+          if (projectId) {
+            if (saveFileRef.current) {
+              clearTimeout(saveFileRef.current);
+              saveFileRef.current = null;
+            }
+            try {
+              const saveRes = await fetch(
+                `/api/v1/projects/${projectId}/files/${existing.id}`,
+                {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ content }),
+                }
+              );
+              await syncTimestampFromPatch(existing.id, saveRes);
+            } catch {}
+          }
+        } else {
+          resolvedFile = existing;
+        }
+        resolvedFileId = existing.id;
+        setOpenFileIds((prev) =>
+          prev.includes(existing.id) ? prev : [...prev, existing.id]
+        );
+        setActiveFileId(existing.id);
+      } else {
+        let createdFile: ProjectFile | null = null;
+        if (projectId) {
+          try {
+            const res = await fetch(`/api/v1/projects/${projectId}/files`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: cleanName,
+                path: filePath,
+                content,
+                isFolder: false,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.file) {
+                createdFile = data.file;
+                if (data.file.updatedAt) {
+                  lastFetchTimestampRef.current[data.file.id] =
+                    data.file.updatedAt;
+                }
+              }
+            }
+          } catch {}
+        }
+
+        if (!createdFile) {
+          createdFile = {
+            id: `${idPrefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            name: cleanName,
+            path: filePath,
+            content,
+            isFolder: false,
+          };
+        }
+
+        resolvedFileId = createdFile.id;
+        resolvedFile = createdFile;
+        filesRef.current = [...filesRef.current, createdFile];
+        setFiles((prev) => [...prev, createdFile!]);
+        setOpenFileIds((prev) =>
+          prev.includes(createdFile!.id) ? prev : [...prev, createdFile!.id]
+        );
+        setActiveFileId(createdFile.id);
+      }
+
+      if (resolvedFileId) {
+        setFileLanguageOverrides((prev) => {
+          const updated = { ...prev, [resolvedFileId]: targetLang.id };
+          try {
+            localStorage.setItem(
+              'cortex_file_language_overrides',
+              JSON.stringify(updated)
+            );
+          } catch {}
+          return updated;
+        });
+      }
+
+      setCurrentLang(targetLang);
+      setExecutionResult(null);
+      setTraceSession(null);
+
+      return resolvedFile;
+    },
+    [projectId, syncTimestampFromPatch]
+  );
+
+  const getLabFileName = useCallback(
+    (lab: LabLesson, langCfg: LanguageConfig): string => {
+      if (lab.language === 'sql' && lab.id === 'sql-m1-lab') return 'query.sql';
+      const base = lab.ideProblemId || lab.id;
+      return `${base}-lab${langCfg.fileExtension}`;
+    },
+    []
+  );
+
+  const hydrateLabLesson = useCallback(
+    async (course: Course, lab: LabLesson, forceResetStarter = false) => {
+      const targetLang = getLanguageConfig(lab.language || 'python');
+      const fileName = getLabFileName(lab, targetLang);
+      const resolvedFile = await upsertWorkspaceFile({
+        fileName,
+        content: lab.starterCode,
+        targetLang,
+        forceOverwrite: forceResetStarter,
+        idPrefix: `lab_${lab.id}`,
+      });
+
+      setActivePracticeChallenge(null);
+      setIsProblemPanelOpen(false);
+      setActiveLearnSnippet(null);
+      setActiveSidebarTab('learn');
+      setIsSidebarOpen(true);
+      setActiveLabContext({
+        course,
+        lesson: lab,
+        fileId: resolvedFile?.id,
+      });
+
+      const labTests = resolveLabTestCases(lab);
+      setTestCases(labTests);
+      if (labTests.length > 0) {
+        setActiveBottomTab('tests');
+        setIsBottomCollapsed(false);
+      }
+    },
+    [
+      getLabFileName,
+      setActiveBottomTab,
+      setActiveSidebarTab,
+      setIsBottomCollapsed,
+      setIsSidebarOpen,
+      upsertWorkspaceFile,
+    ]
+  );
+
+  const hydrateSnippetContext = useCallback(
+    async (snippet: ActiveLearnSnippetContext) => {
+      const targetLang = getLanguageConfig(snippet.language || 'python');
+      const cleanName = snippet.filename?.trim() || `snippet${targetLang.fileExtension}`;
+      await upsertWorkspaceFile({
+        fileName: cleanName,
+        content: snippet.code,
+        targetLang,
+        forceOverwrite: true,
+        idPrefix: 'snippet',
+      });
+
+      setActivePracticeChallenge(null);
+      setIsProblemPanelOpen(false);
+      setActiveLabContext(null);
+      setActiveLearnSnippet({
+        ...snippet,
+        language: targetLang.id,
+        filename: cleanName,
+      });
+      setActiveSidebarTab('learn');
+      setIsSidebarOpen(true);
+    },
+    [setActiveSidebarTab, setIsSidebarOpen, upsertWorkspaceFile]
+  );
 
   const isPracticeHubOpen = activeSidebarTab === 'practice' && isSidebarOpen;
 
@@ -1710,6 +1919,8 @@ function CloudIDEPageInner() {
         setIsBottomCollapsed(false);
       }
 
+      setActiveLabContext(null);
+      setActiveLearnSnippet(null);
       setActivePracticeChallenge(challenge);
       setIsProblemPanelOpen(true);
       setIsPracticeLeftMaximized(false);
@@ -1759,6 +1970,99 @@ function CloudIDEPageInner() {
       void handleLaunchChallenge(matched);
     }
   }, [isProjectLoading, handleLaunchChallenge]);
+
+  const hydratedQueryLearnRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isProjectLoading || typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const snippetParam = urlParams.get('snippet');
+    const courseParam = urlParams.get('course');
+    const lessonParam = urlParams.get('lesson');
+    const langParam = urlParams.get('lang');
+    const filenameParam = urlParams.get('filename');
+
+    const learnKey = `${snippetParam || ''}|${courseParam || ''}|${lessonParam || ''}|${langParam || ''}|${filenameParam || ''}`;
+    if ((!snippetParam && !(courseParam && lessonParam)) || hydratedQueryLearnRef.current === learnKey) {
+      return;
+    }
+
+    if (snippetParam === '1') {
+      hydratedQueryLearnRef.current = learnKey;
+      try {
+        const raw = window.sessionStorage.getItem('cortex_ide_pending_snippet');
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<ActiveLearnSnippetContext>;
+          if (typeof parsed.code === 'string' && parsed.code.trim().length > 0) {
+            void hydrateSnippetContext({
+              code: parsed.code,
+              language: parsed.language || langParam || 'python',
+              filename: parsed.filename || filenameParam || 'snippet.py',
+              courseId: parsed.courseId || courseParam || undefined,
+              lessonId: parsed.lessonId || lessonParam || undefined,
+            });
+            return;
+          }
+        }
+      } catch {
+        // Fallback below if storage is unavailable
+      }
+
+      const fallbackLang = getLanguageConfig(langParam || 'python');
+      const fallbackName = filenameParam?.trim() || `snippet${fallbackLang.fileExtension}`;
+      let fallbackCode = fallbackLang.starterCode || '';
+      if (courseParam && lessonParam && filenameParam) {
+        const matchedCourse = getCourseByIdOrSlug(courseParam);
+        const matchedLesson = matchedCourse
+          ? findLessonInCourse(matchedCourse, lessonParam)
+          : undefined;
+        if (matchedLesson?.item.type === 'notes') {
+          const targetName = filenameParam.trim().toLowerCase();
+          const secWithCode = matchedLesson.item.sections.find(
+            (s) => s.codeBlock && s.codeBlock.filename.trim().toLowerCase() === targetName
+          );
+          if (secWithCode?.codeBlock) {
+            fallbackCode = secWithCode.codeBlock.code;
+          }
+        }
+      }
+      void hydrateSnippetContext({
+        code: fallbackCode,
+        language: fallbackLang.id,
+        filename: fallbackName,
+        courseId: courseParam || undefined,
+        lessonId: lessonParam || undefined,
+      });
+      return;
+    }
+
+    if (courseParam && lessonParam) {
+      const course = getCourseByIdOrSlug(courseParam);
+      const found = course ? findLessonInCourse(course, lessonParam) : undefined;
+      if (course && found) {
+        hydratedQueryLearnRef.current = learnKey;
+        if (found.item.type === 'lab') {
+          void hydrateLabLesson(course, found.item, false);
+        } else {
+          setActiveLabContext(null);
+          setActiveLearnSnippet({
+            code: '',
+            language: langParam || 'python',
+            filename: filenameParam || '',
+            courseId: course.id,
+            lessonId: found.item.id,
+          });
+          setActiveSidebarTab('learn');
+          setIsSidebarOpen(true);
+        }
+      }
+    }
+  }, [
+    isProjectLoading,
+    hydrateLabLesson,
+    hydrateSnippetContext,
+    setActiveSidebarTab,
+    setIsSidebarOpen,
+  ]);
 
   const appliedQueryTabRef = useRef<string | null>(null);
   useEffect(() => {
@@ -2760,14 +3064,56 @@ function CloudIDEPageInner() {
                       width={sidebarWidth}
                       isDarkMode={isDarkMode}
                       currentLanguage={currentLang?.id}
-                      onLoadLesson={(code, lang) => {
-                        const foundLang = SUPPORTED_LANGUAGES.find(
-                          (l) => l.id === lang || l.monacoLang === lang
-                        );
-                        if (foundLang) handleLanguageChange(foundLang);
+                      activeCourseId={
+                        activeLabContext?.course.id || activeLearnSnippet?.courseId || null
+                      }
+                      activeLessonId={
+                        activeLabContext?.lesson.id || activeLearnSnippet?.lessonId || null
+                      }
+                      activeLabFileName={
+                        (activeLabContext?.fileId
+                          ? files.find((f) => f.id === activeLabContext.fileId)?.name
+                          : undefined) ||
+                        activeLearnSnippet?.filename ||
+                        null
+                      }
+                      activeSnippet={activeLearnSnippet}
+                      labTestCases={testCases}
+                      isRunningTests={isRunningTests}
+                      onRunLabTests={() => {
+                        const labFile = activeLabContext?.fileId
+                          ? files.find((f) => f.id === activeLabContext.fileId)
+                          : undefined;
+                        void handleRunAllTests(labFile, undefined, 'run');
+                      }}
+                      onLoadStarterCode={(lab, course) => {
+                        void hydrateLabLesson(course, lab, true);
+                      }}
+                      onClearLearnContext={() => {
+                        setActiveLabContext(null);
+                        setActiveLearnSnippet(null);
+                      }}
+                      onLoadLesson={(code, lang, _title, filename) => {
+                        const targetLang =
+                          SUPPORTED_LANGUAGES.find(
+                            (l) => l.id === lang || l.monacoLang === lang
+                          ) || getLanguageConfig(lang);
+                        if (filename) {
+                          void upsertWorkspaceFile({
+                            fileName: filename,
+                            content: code,
+                            targetLang,
+                            forceOverwrite: true,
+                            idPrefix: 'snippet',
+                          });
+                          return;
+                        }
+                        if (targetLang) handleLanguageChange(targetLang);
                         if (activeFile) {
                           setFiles((prev) =>
-                            prev.map((f) => (f.id === activeFileId ? { ...f, content: code } : f))
+                            prev.map((f) =>
+                              f.id === activeFileId ? { ...f, content: code } : f
+                            )
                           );
                         }
                       }}

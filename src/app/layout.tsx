@@ -204,6 +204,14 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+
+        {/* Prevent pre-hydration light flash when dark theme is active */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('cortex_ide_theme');if(t!=='light'){document.documentElement.classList.add('dark');}}catch(e){document.documentElement.classList.add('dark');}})();",
+          }}
+        />
       </head>
       <body className="bg-[#FFFFFF] text-zinc-950 dark:bg-[#0b0c0e] dark:text-[#e6edf3] font-sans antialiased selection:bg-[#ff9100]/30 selection:text-[#ff9100] transition-colors duration-200">
         {children}

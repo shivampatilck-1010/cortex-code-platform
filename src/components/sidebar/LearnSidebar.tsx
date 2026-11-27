@@ -1,243 +1,686 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { 
-  BookOpen, 
-  ExternalLink, 
-  CheckCircle2, 
-  ChevronRight, 
-  ChevronDown, 
-  Award,
-  Clock, 
-  Code2
+import {
+  ArrowUpRight,
+  BookOpen,
+  CheckCircle2,
+  CheckSquare,
+  Circle,
+  Code2,
+  Play,
+  RotateCcw,
+  Square,
+  X,
+  XCircle,
 } from 'lucide-react';
-import { COURSES, Course, Lesson } from '@/lib/learning/courses-data';
+import type { Course, LabLesson, NotesLesson } from '@/types/learn';
+import {
+  COURSES,
+  findLessonInCourse,
+  getCourseByIdOrSlug,
+} from '@/data/courses';
+import { useLearnProgress } from '@/hooks/useLearnProgress';
+import { resolveLabTestCases } from '@/lib/execution/lab-runner';
+import type { TestCase } from '@/lib/execution/types';
 
-interface LearnSidebarProps {
+export interface ActiveLearnSnippetContext {
+  code: string;
+  language: string;
+  filename: string;
+  courseId?: string;
+  lessonId?: string;
+}
+
+export interface LearnSidebarProps {
   width?: number;
   currentLanguage?: string;
-  onLoadLesson?: (code: string, language: string, title: string) => void;
-  onClose?: () => void;
   isDarkMode?: boolean;
+  onLoadLesson?: (code: string, language: string, title: string, filename?: string) => void;
+  onClose?: () => void;
+  activeCourseId?: string | null;
+  activeLessonId?: string | null;
+  activeLabFileName?: string | null;
+  activeSnippet?: ActiveLearnSnippetContext | null;
+  labTestCases?: TestCase[];
+  isRunningTests?: boolean;
+  onRunLabTests?: () => void;
+  onLoadStarterCode?: (lab: LabLesson, course: Course) => void;
+  onClearLearnContext?: () => void;
+}
+
+function findMatchingNotesSnippet(
+  notes: NotesLesson,
+  filename?: string | null
+): { code: string; language: string; filename: string } | null {
+  if (!filename) return null;
+  const target = filename.trim().toLowerCase();
+  for (const sec of notes.sections) {
+    if (sec.codeBlock && sec.codeBlock.filename.trim().toLowerCase() === target) {
+      return {
+        code: sec.codeBlock.code,
+        language: sec.codeBlock.language,
+        filename: sec.codeBlock.filename,
+      };
+    }
+  }
+  return null;
 }
 
 export const LearnSidebar: React.FC<LearnSidebarProps> = ({
-  width = 240,
+  width = 250,
   currentLanguage = 'python',
+  isDarkMode = true,
   onLoadLesson,
   onClose,
-  isDarkMode = true,
+  activeCourseId = null,
+  activeLessonId = null,
+  activeLabFileName = null,
+  activeSnippet = null,
+  labTestCases,
+  isRunningTests = false,
+  onRunLabTests,
+  onLoadStarterCode,
+  onClearLearnContext,
 }) => {
-  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(COURSES[0]?.id || null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const {
+    hydrated,
+    isItemCompleted,
+    markItemCompleted,
+    toggleLabStep,
+    getLabCheckedSteps,
+    getInProgressCourses,
+  } = useLearnProgress();
 
-  const toggleCourse = (courseId: string) => {
-    setExpandedCourseId((prev) => (prev === courseId ? null : courseId));
-  };
+  const [starterFeedback, setStarterFeedback] = useState<string | null>(null);
 
-  const handleSelectLesson = (lesson: Lesson, course: Course) => {
-    if (onLoadLesson) {
-      onLoadLesson(lesson.starterCode, lesson.language, lesson.title);
-      setStatusMessage(`Loaded "${lesson.title}"`);
-      setTimeout(() => setStatusMessage(null), 2500);
+  const effectiveCourseId = activeCourseId || activeSnippet?.courseId || null;
+  const effectiveLessonId = activeLessonId || activeSnippet?.lessonId || null;
+
+  const resolvedCourse = useMemo(
+    () => (effectiveCourseId ? getCourseByIdOrSlug(effectiveCourseId) : undefined),
+    [effectiveCourseId]
+  );
+
+  const resolvedLesson = useMemo(
+    () =>
+      resolvedCourse && effectiveLessonId
+        ? findLessonInCourse(resolvedCourse, effectiveLessonId)
+        : undefined,
+    [resolvedCourse, effectiveLessonId]
+  );
+
+  const activeLab: LabLesson | null =
+    !activeSnippet && resolvedLesson?.item.type === 'lab'
+      ? resolvedLesson.item
+      : null;
+
+  const activeNotes: NotesLesson | null =
+    resolvedLesson?.item.type === 'notes' ? resolvedLesson.item : null;
+
+  const isSnippetMode = Boolean(activeSnippet) || (!activeLab && Boolean(activeNotes));
+
+  const resolvedTestCases = useMemo<TestCase[]>(() => {
+    if (!activeLab) return [];
+    if (Array.isArray(labTestCases) && labTestCases.length > 0) {
+      return labTestCases;
     }
+    return resolveLabTestCases(activeLab);
+  }, [activeLab, labTestCases]);
+
+  const inProgressCourses = useMemo(
+    () => (hydrated ? getInProgressCourses(COURSES) : []),
+    [hydrated, getInProgressCourses]
+  );
+
+  const rootStyle = width
+    ? { width: `${width}px`, minWidth: `${width}px` }
+    : undefined;
+
+  const rootThemeClass = isDarkMode
+    ? 'dark bg-[#0F0F12] text-zinc-200'
+    : 'bg-[#F8F8FA] text-zinc-800';
+
+  const triggerFeedback = (msg: string) => {
+    setStarterFeedback(msg);
+    window.setTimeout(() => {
+      setStarterFeedback((cur) => (cur === msg ? null : cur));
+    }, 1800);
   };
 
-  const getLevelColor = (level: string) => {
-    switch (level) {
-      case 'Beginner':
-        return isDarkMode
-          ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40'
-          : 'text-emerald-700 bg-emerald-50 border-emerald-200';
-      case 'Intermediate':
-        return isDarkMode
-          ? 'text-amber-400 bg-amber-950/60 border-amber-800/40'
-          : 'text-amber-700 bg-amber-50 border-amber-200';
-      case 'Advanced':
-        return isDarkMode
-          ? 'text-rose-400 bg-rose-950/60 border-rose-800/40'
-          : 'text-rose-700 bg-rose-50 border-rose-200';
-      default:
-        return isDarkMode
-          ? 'text-gray-400 bg-gray-800 border-gray-700'
-          : 'text-slate-600 bg-slate-100 border-slate-200';
-    }
-  };
+  // Mode 1: Active Lab Companion
+  if (activeLab && resolvedCourse) {
+    const isCompleted = hydrated && isItemCompleted(activeLab.id);
+    const checkedSteps = hydrated ? getLabCheckedSteps(activeLab.id) : [];
+    const passedCount = resolvedTestCases.filter((tc) => tc.passed === true).length;
+    const allTestsPassed =
+      resolvedTestCases.length > 0 && passedCount === resolvedTestCases.length;
+    const returnCourseHref = `/learn/${resolvedCourse.slug}?lesson=${encodeURIComponent(activeLab.id)}`;
 
-  return (
-    <div
-      style={{ width: `${width}px` }}
-      className={`h-full flex flex-col select-none text-xs transition-colors duration-200 ${
-        isDarkMode ? 'bg-[#0F0F12] text-zinc-200' : 'bg-[#F8F8FA] text-zinc-800'
-      }`}
-    >
-      {/* Header */}
-      <div className={`h-[34px] px-3 border-b flex items-center justify-between shrink-0 transition-colors ${
-        isDarkMode ? 'border-white/[0.07] bg-[#0F0F12]' : 'border-black/[0.08] bg-[#F8F8FA]'
-      }`}>
-        <div className="flex items-center space-x-2">
-          <BookOpen className="w-3.5 h-3.5 text-amber-500" />
-          <span className={`font-semibold uppercase tracking-wider text-[11px] ${
-            isDarkMode ? 'text-zinc-300' : 'text-zinc-700'
-          }`}>
-            Reference
-          </span>
-        </div>
-        <Link
-          href="/learn"
-          className="flex items-center space-x-1 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition"
-          title="Open Learning Catalog"
+    return (
+      <div
+        data-testid="learn-sidebar"
+        style={rootStyle}
+        className={`${rootThemeClass} h-full w-full flex flex-col select-none text-xs overflow-hidden`}
+      >
+        <div
+          data-testid="learn-companion-lab"
+          className="h-full flex flex-col overflow-hidden"
         >
-          <span>Catalog</span>
-          <ExternalLink className="w-3 h-3" />
-        </Link>
-      </div>
-
-      {/* Course Banner */}
-      <div className={`p-2.5 border-b shrink-0 transition-colors ${
-        isDarkMode ? 'bg-[#0c0d10] border-[#1f2024]' : 'bg-slate-50 border-slate-200'
-      }`}>
-        <div className={`flex items-center space-x-1.5 mb-1 font-medium ${
-          isDarkMode ? 'text-gray-200' : 'text-slate-800'
-        }`}>
-          <Award className="w-3.5 h-3.5 text-[#ff9100]" />
-          <span>Interactive Curricula</span>
-        </div>
-        <p className={`text-[10px] leading-relaxed ${
-          isDarkMode ? 'text-gray-400' : 'text-slate-500'
-        }`}>
-          Step-by-step programming tracks with live editor verification and instant terminal feedback.
-        </p>
-      </div>
-
-      {/* Status notification */}
-      {statusMessage && (
-        <div className="mx-2.5 mt-2 px-2.5 py-1.5 bg-emerald-950/60 border border-emerald-700/50 rounded text-[11px] text-emerald-300 flex items-center space-x-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="truncate">{statusMessage}</span>
-        </div>
-      )}
-
-      {/* Courses Accordion List */}
-      <div className="flex-1 overflow-y-auto p-2.5 space-y-2 custom-scrollbar">
-        {COURSES.map((course) => {
-          const isExpanded = expandedCourseId === course.id;
-
-          return (
-            <div
-              key={course.id}
-              className={`border rounded-lg overflow-hidden transition-colors ${
-                isDarkMode ? 'border-[#1e2026] bg-[#121318]' : 'border-slate-200 bg-slate-50 shadow-sm'
-              }`}
-            >
-              {/* Course Title Header */}
-              <button
-                onClick={() => toggleCourse(course.id)}
-                className={`w-full p-2.5 flex items-center justify-between text-left transition ${
-                  isDarkMode ? 'hover:bg-[#15161e]' : 'hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex-1 pr-2">
-                  <div className="flex items-center space-x-1.5 mb-1">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-medium border ${getLevelColor(
-                        course.level
-                      )}`}
-                    >
-                      {course.level}
-                    </span>
-                    <span className={`text-[10px] font-mono ${isDarkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                      {course.lessonsCount} lessons
-                    </span>
-                  </div>
-                  <div className={`font-semibold text-xs line-clamp-1 ${
-                    isDarkMode ? 'text-gray-200' : 'text-slate-800'
-                  }`}>
-                    {course.title}
-                  </div>
-                </div>
-
-                <div className={isDarkMode ? 'text-gray-400' : 'text-slate-500'}>
-                  {isExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-[#ff9100]" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                </div>
-              </button>
-
-              {/* Expanded Lessons */}
-              {isExpanded && (
-                <div className={`p-2 border-t space-y-1.5 ${
-                  isDarkMode ? 'border-[#1b1c24] bg-[#0d0e12]' : 'border-slate-200 bg-white'
-                }`}>
-                  <div className={`text-[10px] mb-2 leading-relaxed px-1 ${
-                    isDarkMode ? 'text-gray-400' : 'text-slate-600'
-                  }`}>
-                    {course.description}
-                  </div>
-
-                  {course.lessons.map((lesson) => (
-                    <div
-                      key={lesson.id}
-                      className={`p-2 border rounded-md transition flex items-center justify-between ${
-                        isDarkMode
-                          ? 'bg-[#14151b] hover:bg-[#181922] border-[#20222c]'
-                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-xs'
-                      }`}
-                    >
-                      <div className="flex-1 pr-2">
-                        <div className={`font-medium text-[11px] line-clamp-1 ${
-                          isDarkMode ? 'text-gray-200' : 'text-slate-800'
-                        }`}>
-                          {lesson.title}
-                        </div>
-                        <div className={`flex items-center space-x-1 text-[9px] mt-0.5 font-mono ${
-                          isDarkMode ? 'text-gray-500' : 'text-slate-500'
-                        }`}>
-                          <Clock className="w-2.5 h-2.5" />
-                          <span>{lesson.durationMinutes}m</span>
-                          <span>•</span>
-                          <span className="uppercase">{lesson.language}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-1 shrink-0">
-                        <button
-                          onClick={() => handleSelectLesson(lesson, course)}
-                          className={`px-2 py-1 rounded text-[10px] font-medium transition flex items-center space-x-1 border ${
-                            isDarkMode
-                              ? 'bg-[#222227] hover:bg-[#2a2a30] text-zinc-200 border-white/[0.08]'
-                              : 'bg-white hover:bg-zinc-100 text-zinc-700 border-black/[0.08]'
-                          }`}
-                          title="Load lesson starter code into IDE"
-                        >
-                          <Code2 className="w-3 h-3" />
-                          <span>Load</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="pt-1.5">
-                    <Link
-                      href={`/learn/${course.slug}`}
-                      className={`w-full py-1.5 px-2 rounded text-[10px] font-medium flex items-center justify-center space-x-1 border transition ${
-                        isDarkMode
-                          ? 'bg-[#191a22] hover:bg-[#222430] text-gray-300 hover:text-white border-[#252834]'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border-slate-200 shadow-sm'
-                      }`}
-                    >
-                      <span>Open Full Course</span>
-                      <ExternalLink className="w-3 h-3 text-[#ff9100]" />
-                    </Link>
-                  </div>
-                </div>
+          {/* Header */}
+          <div className="h-[34px] px-3 border-b border-black/[0.08] dark:border-white/[0.07] flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <Code2 className="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />
+              <span className="font-semibold uppercase tracking-wider text-[11px] text-zinc-700 dark:text-zinc-300 truncate">
+                Lab Companion
+              </span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {onClearLearnContext && (
+                <button
+                  type="button"
+                  onClick={onClearLearnContext}
+                  title="Exit Lab Companion"
+                  className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {onClose && !onClearLearnContext && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  title="Close Sidebar"
+                  className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
-          );
-        })}
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {/* Course & Lesson Meta */}
+            <div className="space-y-1.5">
+              <div className="text-[10.5px] font-mono text-zinc-500 truncate">
+                {resolvedCourse.title}
+              </div>
+              <h3 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-snug">
+                {activeLab.title}
+              </h3>
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {activeLabFileName && (
+                  <span
+                    data-testid="learn-lab-file-badge"
+                    className="px-1.5 py-0.5 rounded bg-black/[0.05] dark:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.08] font-mono text-[10px] text-zinc-700 dark:text-zinc-300 truncate max-w-full"
+                  >
+                    {activeLabFileName}
+                  </span>
+                )}
+                <span className="px-1.5 py-0.5 rounded bg-black/[0.04] dark:bg-white/[0.04] font-mono text-[10px] uppercase text-zinc-500">
+                  {activeLab.language} · ~{activeLab.estimatedMins}m
+                </span>
+                {isCompleted && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 font-mono text-[10px] text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="w-2.5 h-2.5" />
+                    <span>Completed</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Objective Summary */}
+            <div className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-2.5 space-y-1">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                Objective
+              </div>
+              <p className="text-[11.5px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+                {activeLab.objective}
+              </p>
+            </div>
+
+            {/* Primary Actions */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                data-testid="learn-load-starter-btn"
+                onClick={() => {
+                  if (onLoadStarterCode) {
+                    onLoadStarterCode(activeLab, resolvedCourse);
+                  } else if (onLoadLesson) {
+                    onLoadLesson(
+                      activeLab.starterCode,
+                      activeLab.language,
+                      activeLab.title,
+                      activeLabFileName || undefined
+                    );
+                  }
+                  triggerFeedback('Starter code loaded');
+                }}
+                className="flex-1 min-w-[110px] h-8 px-2.5 rounded-md border border-black/[0.1] dark:border-white/[0.1] bg-white dark:bg-[#1C1C21] hover:border-black/20 dark:hover:border-white/20 text-[11px] font-medium text-zinc-800 dark:text-zinc-200 inline-flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {starterFeedback ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span className="truncate">Loaded</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                    <span className="truncate">Load Starter Code</span>
+                  </>
+                )}
+              </button>
+
+              {resolvedTestCases.length > 0 && onRunLabTests && (
+                <button
+                  type="button"
+                  data-testid="learn-run-tests-btn"
+                  disabled={isRunningTests}
+                  onClick={onRunLabTests}
+                  className="h-8 px-3 rounded-md border border-black/15 dark:border-white/[0.12] bg-zinc-900 dark:bg-[#222227] hover:border-amber-500/50 hover:text-amber-400 disabled:opacity-50 text-[11px] font-medium text-zinc-100 inline-flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Play className="w-3 h-3 text-[#F59E0B] shrink-0" />
+                  <span>{isRunningTests ? 'Running...' : 'Run Tests'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Live Test-Case Checklist */}
+            {resolvedTestCases.length > 0 && (
+              <div
+                data-testid="learn-lab-test-cases"
+                className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-2.5 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                    Test Cases
+                  </span>
+                  <span
+                    className={`text-[10.5px] font-mono ${
+                      allTestsPassed
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-zinc-500'
+                    }`}
+                  >
+                    {passedCount}/{resolvedTestCases.length} passed
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {resolvedTestCases.map((tc, idx) => {
+                    const isPassed = tc.passed === true;
+                    const isFailed = tc.passed === false;
+                    return (
+                      <div
+                        key={tc.id || `tc-${idx}`}
+                        className={`rounded-md border px-2 py-1.5 text-[11px] space-y-0.5 ${
+                          isPassed
+                            ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+                            : isFailed
+                              ? 'border-rose-500/30 bg-rose-500/[0.06]'
+                              : 'border-black/[0.06] dark:border-white/[0.06] bg-zinc-50/70 dark:bg-[#121216]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {isPassed ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          ) : isFailed ? (
+                            <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                          ) : (
+                            <Circle className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-600 shrink-0" />
+                          )}
+                          <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                            {tc.name || `Case ${idx + 1}`}
+                          </span>
+                        </div>
+                        <div className="pl-5 text-[10px] font-mono text-zinc-500 truncate">
+                          {tc.isHidden
+                            ? 'Hidden verification case'
+                            : `Expected: ${tc.expectedStdout.replace(/\n/g, ' | ')}`}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step-by-Step Checklist */}
+            {activeLab.steps.length > 0 && (
+              <div
+                data-testid="learn-lab-steps"
+                className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-2.5 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                    Lab Checklist
+                  </span>
+                  <span className="text-[10.5px] font-mono text-zinc-500">
+                    {checkedSteps.length}/{activeLab.steps.length}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {activeLab.steps.map((step, idx) => {
+                    const checked = checkedSteps.includes(idx);
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() =>
+                          toggleLabStep(resolvedCourse.id, activeLab.id, idx)
+                        }
+                        className="w-full flex items-start gap-2 text-left rounded-md px-1.5 py-1 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                      >
+                        {checked ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0 mt-0.5" />
+                        )}
+                        <span
+                          className={`text-[11px] leading-snug ${
+                            checked
+                              ? 'line-through text-zinc-400 dark:text-zinc-500'
+                              : 'text-zinc-700 dark:text-zinc-300'
+                          }`}
+                        >
+                          {step}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Manual Completion Toggle */}
+            <button
+              type="button"
+              data-testid="learn-mark-complete-btn"
+              onClick={() =>
+                markItemCompleted(resolvedCourse.id, activeLab.id, !isCompleted)
+              }
+              className={`w-full h-8 px-3 rounded-md border text-[11px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors ${
+                isCompleted
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'border-black/[0.09] dark:border-white/[0.09] bg-transparent text-zinc-600 dark:text-zinc-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04]'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{isCompleted ? 'Completed' : 'Mark Lab Complete'}</span>
+            </button>
+          </div>
+
+          {/* Footer */}
+          <div className="p-3 border-t border-black/[0.08] dark:border-white/[0.07] shrink-0 space-y-1.5">
+            <Link
+              href={returnCourseHref}
+              data-testid="learn-return-to-course"
+              className="w-full h-8 px-3 rounded-md border border-black/[0.1] dark:border-white/[0.1] bg-zinc-900 dark:bg-[#222227] text-zinc-100 hover:border-amber-500/40 hover:text-amber-400 text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span>← Return to Course</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Mode 2: Active Notes Snippet Mode
+  if (isSnippetMode) {
+    const snippetFilename =
+      activeSnippet?.filename || activeLabFileName || 'snippet';
+    const snippetLanguage =
+      activeSnippet?.language || currentLanguage || 'python';
+    const fallbackNotesBlock =
+      !activeSnippet?.code && activeNotes
+        ? findMatchingNotesSnippet(activeNotes, snippetFilename)
+        : null;
+    const reloadableCode = activeSnippet?.code || fallbackNotesBlock?.code || '';
+    const reloadableLang =
+      activeSnippet?.language || fallbackNotesBlock?.language || snippetLanguage;
+    const reloadableFilename =
+      activeSnippet?.filename || fallbackNotesBlock?.filename || snippetFilename;
+
+    const returnHref =
+      resolvedCourse && resolvedLesson
+        ? `/learn/${resolvedCourse.slug}?lesson=${encodeURIComponent(resolvedLesson.item.id)}`
+        : resolvedCourse
+          ? `/learn/${resolvedCourse.slug}`
+          : '/learn';
+
+    return (
+      <div
+        data-testid="learn-sidebar"
+        style={rootStyle}
+        className={`${rootThemeClass} h-full w-full flex flex-col select-none text-xs overflow-hidden`}
+      >
+        <div
+          data-testid="learn-companion-snippet"
+          className="h-full flex flex-col overflow-hidden"
+        >
+          {/* Header */}
+          <div className="h-[34px] px-3 border-b border-black/[0.08] dark:border-white/[0.07] flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <BookOpen className="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />
+              <span className="font-semibold uppercase tracking-wider text-[11px] text-zinc-700 dark:text-zinc-300 truncate">
+                Notes Snippet
+              </span>
+            </div>
+            {onClearLearnContext && (
+              <button
+                type="button"
+                onClick={onClearLearnContext}
+                title="Exit Snippet View"
+                className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div className="space-y-1">
+              <div className="text-[10.5px] font-mono text-zinc-500 truncate">
+                {resolvedCourse ? resolvedCourse.title : 'Cortex Learn'}
+              </div>
+              <h3 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 leading-snug">
+                {resolvedLesson ? resolvedLesson.item.title : 'Reading Example'}
+              </h3>
+            </div>
+
+            <div className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-2.5 space-y-2">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                Active Snippet
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="px-1.5 py-0.5 rounded bg-black/[0.05] dark:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.08] font-mono text-[10.5px] text-zinc-800 dark:text-zinc-200 truncate max-w-full">
+                  {snippetFilename}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-black/[0.04] dark:bg-white/[0.04] font-mono text-[10px] uppercase text-zinc-500">
+                  {snippetLanguage}
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                Loaded from reading notes. Edit and execute this file directly in the workspace.
+              </p>
+            </div>
+
+            {reloadableCode && onLoadLesson && (
+              <button
+                type="button"
+                data-testid="learn-reload-snippet-btn"
+                onClick={() => {
+                  onLoadLesson(
+                    reloadableCode,
+                    reloadableLang,
+                    reloadableFilename,
+                    reloadableFilename
+                  );
+                  triggerFeedback('Snippet reloaded');
+                }}
+                className="w-full h-8 px-3 rounded-md border border-black/[0.1] dark:border-white/[0.1] bg-white dark:bg-[#1C1C21] hover:border-black/20 dark:hover:border-white/20 text-[11px] font-medium text-zinc-800 dark:text-zinc-200 inline-flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {starterFeedback ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Reloaded</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                    <span>Reload Snippet</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {onClearLearnContext ? (
+              <button
+                type="button"
+                data-testid="learn-clear-context-btn"
+                onClick={onClearLearnContext}
+                className="w-full h-8 px-3 rounded-md border border-black/[0.08] dark:border-white/[0.07] text-[11px] font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] inline-flex items-center justify-center transition-colors"
+              >
+                Exit Snippet View
+              </button>
+            ) : (
+              <Link
+                href="/learn"
+                className="w-full h-8 px-3 rounded-md border border-black/[0.08] dark:border-white/[0.07] text-[11px] font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] inline-flex items-center justify-center transition-colors"
+              >
+                Browse All Courses
+              </Link>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-3 border-t border-black/[0.08] dark:border-white/[0.07] shrink-0">
+            <Link
+              href={returnHref}
+              data-testid="learn-return-to-course"
+              className="w-full h-8 px-3 rounded-md border border-black/[0.1] dark:border-white/[0.1] bg-zinc-900 dark:bg-[#222227] text-zinc-100 hover:border-amber-500/40 hover:text-amber-400 text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span>← Return to Course</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Mode 3: Idle Mode (In-Progress Courses + Full Learning Hub CTA)
+  return (
+    <div
+      data-testid="learn-sidebar"
+      style={rootStyle}
+      className={`${rootThemeClass} h-full w-full flex flex-col select-none text-xs overflow-hidden`}
+    >
+      <div
+        data-testid="learn-companion-idle"
+        className="h-full flex flex-col overflow-hidden"
+      >
+        {/* Header */}
+        <div className="h-[34px] px-3 border-b border-black/[0.08] dark:border-white/[0.07] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <BookOpen className="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />
+            <span className="font-semibold uppercase tracking-wider text-[11px] text-zinc-700 dark:text-zinc-300 truncate">
+              Reference
+            </span>
+          </div>
+          <Link
+            href="/learn"
+            className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors shrink-0"
+            title="Open Learning Catalog"
+          >
+            <span>Catalog</span>
+            <ArrowUpRight className="w-3 h-3" />
+          </Link>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          {inProgressCourses.length > 0 ? (
+            <>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                In Progress
+              </div>
+              <div className="space-y-2">
+                {inProgressCourses.map((entry) => (
+                  <div
+                    key={entry.course.id}
+                    className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-2.5 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                      <span className="text-zinc-500 truncate">
+                        {entry.course.track}
+                      </span>
+                      <span className="text-[#F59E0B] shrink-0">
+                        {entry.pct}%
+                      </span>
+                    </div>
+                    <div className="text-[12.5px] font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-1">
+                      {entry.course.title}
+                    </div>
+                    <div className="text-[11px] text-zinc-500 truncate">
+                      {entry.currentModuleTitle}
+                    </div>
+                    <div className="h-1 w-full rounded-full bg-zinc-200 dark:bg-white/[0.08] overflow-hidden">
+                      <div
+                        className="h-full bg-[#F59E0B] rounded-full transition-all duration-300"
+                        style={{ width: `${entry.pct}%` }}
+                      />
+                    </div>
+                    <Link
+                      href={`/learn/${entry.course.slug}?lesson=${encodeURIComponent(entry.resumeLesson.id)}`}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:text-[#F59E0B] transition-colors"
+                    >
+                      <span>Resume →</span>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-3 space-y-2">
+              <div className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100">
+                Cortex Learn
+              </div>
+              <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                Explore {COURSES.length} structured courses with reading notes, concept quizzes, guided IDE labs, and timed exams.
+              </p>
+              <div className="pt-1 space-y-1">
+                {COURSES.map((course) => (
+                  <Link
+                    key={course.id}
+                    href={`/learn/${course.id}`}
+                    className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border border-black/[0.06] dark:border-white/[0.06] hover:border-black/15 dark:hover:border-white/15 text-[11px] text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-zinc-100 transition-colors"
+                  >
+                    <span className="truncate">{course.title}</span>
+                    <span className="text-[10px] font-mono text-zinc-500 shrink-0">
+                      {course.level}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-3 border-t border-black/[0.08] dark:border-white/[0.07] shrink-0">
+          <Link
+            href="/learn"
+            data-testid="learn-open-hub-link"
+            className="w-full h-8 px-3 rounded-md border border-black/10 dark:border-white/[0.1] bg-zinc-900 dark:bg-[#222227] text-zinc-100 hover:border-amber-500/40 hover:text-amber-400 text-[11px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span className="truncate">Open Full Learning Hub (/learn) ↗</span>
+          </Link>
+        </div>
       </div>
     </div>
   );

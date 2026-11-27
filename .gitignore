@@ -44,7 +44,7 @@ next-env.d.ts
 *.db-wal
 *.db
 *.sqlite
-data/
+/data/
 *_backup.*
 backups/
 scratch/

@@ -120,6 +120,27 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const tooltipTimerRef = useRef<number | null>(null);
+  const suppressedIdRef = useRef<string | null>(null);
+
+  const isIdeRoute = pathname === '/ide' || pathname.startsWith('/ide');
+  const isIdeRouteRef = useRef(isIdeRoute);
+  const isSidebarOpenRef = useRef(isSidebarOpen);
+  const activeSidebarTabRef = useRef(activeSidebarTab);
+
+  useEffect(() => {
+    isIdeRouteRef.current = isIdeRoute;
+    isSidebarOpenRef.current = isSidebarOpen;
+    activeSidebarTabRef.current = activeSidebarTab;
+  }, [isIdeRoute, isSidebarOpen, activeSidebarTab]);
+
+  useEffect(() => {
+    return () => {
+      if (tooltipTimerRef.current) {
+        window.clearTimeout(tooltipTimerRef.current);
+        tooltipTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Local fallback for SettingsModal if onOpenSettings not supplied
   const [localSettingsOpen, setLocalSettingsOpen] = useState(false);
@@ -145,21 +166,27 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
     } catch {}
 
     const handleSidebarState = (e: Event) => {
+      dismissTooltip();
       const customEvent = e as CustomEvent<{ activeTab: SidebarTab; isOpen: boolean }>;
       if (customEvent.detail) {
         if (typeof customEvent.detail.isOpen === 'boolean') {
+          isSidebarOpenRef.current = customEvent.detail.isOpen;
           setIsSidebarOpen(customEvent.detail.isOpen);
         }
         if (customEvent.detail.activeTab) {
+          activeSidebarTabRef.current = customEvent.detail.activeTab;
           setActiveSidebarTab(customEvent.detail.activeTab);
         }
       }
     };
 
     const handleFileExplorerState = (e: Event) => {
+      dismissTooltip();
       const customEvent = e as CustomEvent<{ isCollapsed: boolean }>;
       if (customEvent.detail && typeof customEvent.detail.isCollapsed === 'boolean') {
-        setIsSidebarOpen(!customEvent.detail.isCollapsed);
+        const nextOpen = !customEvent.detail.isCollapsed;
+        isSidebarOpenRef.current = nextOpen;
+        setIsSidebarOpen(nextOpen);
       }
     };
 
@@ -180,33 +207,62 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsAccountOpen(false);
+        dismissTooltip();
       }
+    };
+    const handleWindowBlur = () => {
+      dismissTooltip();
     };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleWindowBlur);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, []);
 
   const scheduleTooltip = (id: string) => {
-    if (tooltipTimerRef.current) window.clearTimeout(tooltipTimerRef.current);
+    if (suppressedIdRef.current === id) return;
+    if (isIdeRoute && isSidebarOpen && activeSidebarTab === id) return;
+    if (tooltipTimerRef.current) {
+      window.clearTimeout(tooltipTimerRef.current);
+    }
     tooltipTimerRef.current = window.setTimeout(() => {
+      tooltipTimerRef.current = null;
+      if (suppressedIdRef.current === id) return;
+      if (
+        isIdeRouteRef.current &&
+        isSidebarOpenRef.current &&
+        activeSidebarTabRef.current === id
+      ) {
+        return;
+      }
       setHoveredId(id);
     }, 280);
   };
 
-  const dismissTooltip = () => {
+  const dismissTooltip = (suppressId?: string) => {
     if (tooltipTimerRef.current) {
       window.clearTimeout(tooltipTimerRef.current);
       tooltipTimerRef.current = null;
     }
+    if (typeof suppressId === 'string') {
+      suppressedIdRef.current = suppressId;
+    }
     setHoveredId(null);
   };
 
-  const handleSettingsClick = () => {
+  const handleRailItemLeave = (id: string) => {
+    if (suppressedIdRef.current === id) {
+      suppressedIdRef.current = null;
+    }
     dismissTooltip();
+  };
+
+  const handleSettingsClick = () => {
+    dismissTooltip('settings');
     if (onOpenSettings) {
       onOpenSettings();
     } else {
@@ -233,7 +289,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
 
   const handleLogoClick = (e: React.MouseEvent) => {
     const isFilesRoute = pathname === '/ide' || pathname.startsWith('/ide');
-    dismissTooltip();
+    dismissTooltip('logo');
 
     if (isFilesRoute) {
       e.preventDefault();
@@ -256,7 +312,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
 
   const handleNavClick = (item: NavItem, e: React.MouseEvent) => {
     const isFilesRoute = pathname === '/ide' || pathname.startsWith('/ide');
-    dismissTooltip();
+    dismissTooltip(item.id);
 
     if (isFilesRoute) {
       e.preventDefault();
@@ -282,8 +338,6 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
     { id: 'learn', name: 'Reference', href: '/learn', icon: BookOpen },
   ];
 
-  const isIdeRoute = pathname === '/ide' || pathname.startsWith('/ide');
-
   return (
     <>
       <aside
@@ -308,9 +362,10 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
               <Link
                 href="/ide"
                 onClick={handleLogoClick}
-                onMouseDown={dismissTooltip}
+                onMouseDown={() => dismissTooltip('logo')}
                 onMouseEnter={() => scheduleTooltip('logo')}
-                onMouseLeave={dismissTooltip}
+                onMouseLeave={() => handleRailItemLeave('logo')}
+                onBlur={() => dismissTooltip()}
                 className="relative flex items-center justify-center w-10 h-10 rounded-lg hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
                 aria-label="Cortex IDE Home"
               >
@@ -337,14 +392,15 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                   key={item.id}
                   className="relative"
                   onMouseEnter={() => scheduleTooltip(item.id)}
-                  onMouseLeave={dismissTooltip}
+                  onMouseLeave={() => handleRailItemLeave(item.id)}
                 >
                   <Link
                     href={item.href}
                     data-testid={`rail-nav-${item.id}`}
                     aria-label={item.name}
-                    onMouseDown={dismissTooltip}
+                    onMouseDown={() => dismissTooltip(item.id)}
                     onClick={(e) => handleNavClick(item, e)}
+                    onBlur={() => dismissTooltip()}
                     className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                       isActive
                         ? 'bg-zinc-200/75 dark:bg-white/[0.06] text-[#F59E0B]'
@@ -367,8 +423,8 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                     )}
                   </Link>
 
-                  {hoveredId === item.id && (
-                    <div className="pointer-events-none absolute left-[54px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
+                  {hoveredId === item.id && !(isIdeRoute && isSidebarOpen && activeSidebarTab === item.id) && (
+                    <div className="pointer-events-none absolute left-[62px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
                       {item.name}
                     </div>
                   )}
@@ -383,20 +439,21 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
           <div
             className="relative"
             onMouseEnter={() => scheduleTooltip('settings')}
-            onMouseLeave={dismissTooltip}
+            onMouseLeave={() => handleRailItemLeave('settings')}
           >
             <button
               type="button"
               data-testid="rail-settings-btn"
               aria-label="Settings"
-              onMouseDown={dismissTooltip}
+              onMouseDown={() => dismissTooltip('settings')}
               onClick={handleSettingsClick}
+              onBlur={() => dismissTooltip()}
               className="w-10 h-10 rounded-lg flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-[#F4F4F5] hover:bg-zinc-200/60 dark:hover:bg-white/[0.04] transition-colors"
             >
               <Settings className="w-5 h-5 shrink-0" />
             </button>
             {hoveredId === 'settings' && (
-              <div className="pointer-events-none absolute left-[54px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
+              <div className="pointer-events-none absolute left-[62px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
                 Settings
               </div>
             )}
@@ -406,7 +463,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
             ref={accountRef}
             className="relative"
             onMouseEnter={() => scheduleTooltip('account')}
-            onMouseLeave={dismissTooltip}
+            onMouseLeave={() => handleRailItemLeave('account')}
           >
             {user ? (
               <>
@@ -414,8 +471,12 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                   type="button"
                   data-testid="rail-account-btn"
                   aria-label={user.name || 'Account'}
-                  onMouseDown={dismissTooltip}
-                  onClick={() => setIsAccountOpen((prev) => !prev)}
+                  onMouseDown={() => dismissTooltip('account')}
+                  onClick={() => {
+                    dismissTooltip('account');
+                    setIsAccountOpen((prev) => !prev);
+                  }}
+                  onBlur={() => dismissTooltip()}
                   className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                     isAccountOpen
                       ? 'bg-zinc-200/75 dark:bg-white/[0.08]'
@@ -470,7 +531,9 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                 href={loginHref}
                 data-testid="rail-signin-link"
                 aria-label="Sign In"
-                onMouseDown={dismissTooltip}
+                onMouseDown={() => dismissTooltip('account')}
+                onClick={() => dismissTooltip('account')}
+                onBlur={() => dismissTooltip()}
                 className="w-10 h-10 rounded-lg flex items-center justify-center bg-white dark:bg-[#121215] border border-black/[0.08] dark:border-white/[0.08] hover:border-black/[0.16] dark:hover:border-white/[0.16] text-[#F59E0B] shadow-sm dark:shadow-none transition-colors"
               >
                 <User className="w-5 h-5 shrink-0 text-[#F59E0B]" />
@@ -478,7 +541,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
             )}
 
             {hoveredId === 'account' && !isAccountOpen && (
-              <div className="pointer-events-none absolute left-[54px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
+              <div className="pointer-events-none absolute left-[62px] top-1/2 -translate-y-1/2 z-50 px-2.5 py-1 rounded-md bg-zinc-900 dark:bg-[#222227] border border-white/[0.1] shadow-xl text-[11px] font-medium text-zinc-100 whitespace-nowrap">
                 {user ? user.name : 'Sign In'}
               </div>
             )}
