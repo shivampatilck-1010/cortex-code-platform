@@ -279,6 +279,31 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       },
     });
 
+    // Define CortexLearn #12141A dark theme for Lab & Sandbox Drawer
+    monaco.editor.defineTheme('cs-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'C084FC' },
+        { token: 'keyword.operator', foreground: '93C5FD' },
+        { token: 'string', foreground: '86EFAC' },
+        { token: 'number', foreground: 'FDBA74' },
+        { token: 'type', foreground: '7DD3FC' },
+      ],
+      colors: {
+        'editor.background': '#12141A',
+        'editor.foreground': '#F4F4F5',
+        'editorLineNumber.foreground': '#52525B',
+        'editorLineNumber.activeForeground': '#A1A1AA',
+        'editor.lineHighlightBackground': '#1A1D25',
+        'editorCursor.foreground': '#F3912E',
+        'editorWhitespace.foreground': '#252830',
+        'editorIndentGuide.background': '#21242B',
+        'editorIndentGuide.activeBackground': '#3F3F46',
+      },
+    });
+
     // Define Cortex light theme for the editor
     monaco.editor.defineTheme('cortex-light', {
       base: 'vs',

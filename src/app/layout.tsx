@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { ThemeGlassOverlay } from '@/lib/glassyTheme';
 import { 
   PRIMARY_KEYWORDS, 
   AI_KEYWORDS, 
@@ -209,11 +210,12 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var t=localStorage.getItem('cortex_ide_theme');if(t!=='light'){document.documentElement.classList.add('dark');}}catch(e){document.documentElement.classList.add('dark');}})();",
+              "(function(){try{var t=localStorage.getItem('cortex_theme')||localStorage.getItem('cortex_ide_theme');if(t!=='light'){document.documentElement.classList.add('dark');}}catch(e){document.documentElement.classList.add('dark');}})();",
           }}
         />
       </head>
       <body className="bg-[#FFFFFF] text-zinc-950 dark:bg-[#0b0c0e] dark:text-[#e6edf3] font-sans antialiased selection:bg-[#ff9100]/30 selection:text-[#ff9100] transition-colors duration-200">
+        <ThemeGlassOverlay />
         {children}
       </body>
     </html>

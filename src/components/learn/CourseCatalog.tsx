@@ -16,6 +16,7 @@ import { COURSE_CATEGORIES, COURSES, getCourseStats } from '@/data/courses';
 import { useCortexTheme, useLearnProgress } from '@/hooks';
 import type { Course, CourseCategory } from '@/types/learn';
 import { CourseCard } from './CourseCard';
+import { SandboxDrawer } from './SandboxDrawer';
 
 type CategoryFilter = 'All Courses' | CourseCategory;
 type SortOption = 'popular' | 'latest' | 'duration' | 'lessons';
@@ -40,7 +41,7 @@ const HERO_SLIDES: HeroSlide[] = [
       'Practice hash tables, stacks, and asymptotic analysis inside structured modules with real test execution and timed exams.',
     ctaLabel: 'Start Python & DSA',
     courseSlug: 'python-dsa-mastery',
-    gradient: 'from-[#1F2430] via-[#2B2420] to-[#1A1D24]',
+    gradient: 'from-[#180705] via-[#6B1508] to-[#A62E09]',
     mockupEyebrow: 'INTERACTIVE COURSE TRACK',
     mockupTitle: 'Python & Data Structures',
     mockupMeta: '2 Modules · 2 IDE Labs · Timed Exam',
@@ -52,7 +53,7 @@ const HERO_SLIDES: HeroSlide[] = [
       'Build rock-solid engineering depth across RAII smart pointers, PostgreSQL/SQLite windowing, and join mechanics.',
     ctaLabel: 'Explore Systems & C++',
     courseSlug: 'modern-cpp-systems',
-    gradient: 'from-[#1D2230] via-[#232A3B] to-[#161922]',
+    gradient: 'from-[#0B132B] via-[#1C2541] to-[#1D4E89]',
     mockupEyebrow: 'SYSTEMS & DATABASES',
     mockupTitle: 'Modern C++ & SQL',
     mockupMeta: 'RAII Lifetimes · Window Functions · Live Sandbox',
@@ -64,7 +65,7 @@ const HERO_SLIDES: HeroSlide[] = [
       'Implement gradient descent, min-max normalization pipelines, and Promise concurrency hands-on in Cortex.',
     ctaLabel: 'Explore Machine Learning',
     courseSlug: 'applied-machine-learning-foundations',
-    gradient: 'from-[#221F2D] via-[#2C2538] to-[#181B24]',
+    gradient: 'from-[#0D1B1E] via-[#133C38] to-[#1B5E4A]',
     mockupEyebrow: 'APPLIED AI & WEB',
     mockupTitle: 'ML & Data Pipelines',
     mockupMeta: 'Gradient Descent · Statistics · Node.js Async',
@@ -113,6 +114,7 @@ export const CourseCatalog: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [heroIdx, setHeroIdx] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [sandboxOpen, setSandboxOpen] = useState(false);
 
   const catStripRef = useRef<HTMLDivElement>(null);
   const followingStripRef = useRef<HTMLDivElement>(null);
@@ -197,8 +199,8 @@ export const CourseCatalog: React.FC = () => {
         isDarkMode ? 'dark' : ''
       }`}
     >
-      {/* 1. Streamlined 62px Sticky Courses Navbar */}
-      <header className="fixed top-0 inset-x-0 z-40 h-[62px] px-4 sm:px-6 lg:px-8 bg-white/95 dark:bg-[#21242B]/95 backdrop-blur border-b border-[#E2E8F0] dark:border-white/[0.07] flex items-center justify-between gap-3">
+      {/* 1. Streamlined 62px Sticky Glass Navbar */}
+      <header className="fixed top-0 inset-x-0 z-40 h-[62px] px-4 sm:px-6 lg:px-8 bg-white/75 dark:bg-[#21242B]/75 backdrop-blur-xl border-b border-slate-200/80 dark:border-white/[0.08] flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
@@ -256,13 +258,13 @@ export const CourseCatalog: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: IDE Sandbox + Light/Dark Toggle */}
+        {/* Right: IDE Sandbox + Frosted Glass Light/Dark Toggle */}
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
-            onClick={() => router.push('/ide')}
+            onClick={() => setSandboxOpen(true)}
             data-testid="ide-sandbox-btn"
-            className="h-8 px-3 rounded-md inline-flex items-center gap-1.5 text-[12.5px] font-medium bg-[#F1F5F9] hover:bg-slate-200/80 dark:bg-[#1A1D24] dark:hover:bg-white/[0.08] border border-[#E2E8F0] dark:border-white/[0.1] text-[#0F172A] dark:text-zinc-200 transition-colors"
+            className="h-8 px-3 rounded-md inline-flex items-center gap-1.5 text-[12.5px] font-medium bg-[#F1F5F9] hover:bg-slate-200/80 dark:bg-[#1A1D24] dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.1] text-[#0F172A] dark:text-zinc-200 transition-colors"
           >
             <Terminal className="w-3.5 h-3.5 text-[#F3912E]" />
             <span className="hidden sm:inline">IDE Sandbox</span>
@@ -270,16 +272,10 @@ export const CourseCatalog: React.FC = () => {
 
           <button
             type="button"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              toggleTheme({
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2,
-              });
-            }}
+            onClick={(e) => toggleTheme(e)}
             aria-label="Toggle Light and Dark Mode"
             data-testid="learn-theme-toggle"
-            className="w-8 h-8 rounded-md inline-flex items-center justify-center bg-[#F1F5F9] hover:bg-slate-200/80 dark:bg-[#1A1D24] dark:hover:bg-white/[0.08] border border-[#E2E8F0] dark:border-white/[0.12] text-[#0F172A] dark:text-zinc-200 transition-colors"
+            className="theme-glass-btn w-8 h-8 rounded-md inline-flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/90 dark:bg-[#1A1D24]/90 dark:hover:bg-white/[0.08] border border-slate-300 dark:border-white/[0.16] text-slate-700 dark:text-zinc-200"
           >
             {isDarkMode ? <Sun className="w-4 h-4 text-[#F3912E]" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -630,6 +626,12 @@ export const CourseCatalog: React.FC = () => {
           </div>
         </div>
       )}
+
+      <SandboxDrawer
+        open={sandboxOpen}
+        isDarkMode={isDarkMode}
+        onClose={() => setSandboxOpen(false)}
+      />
     </div>
   );
 };

@@ -55,6 +55,20 @@ const config: Config = {
           active: "#4a4948",
           border: "#2b2a29",
           gutter: "#858585"
+        },
+        cs: {
+          bg: "#15181E",
+          nav: "#21242B",
+          card: "#22252C",
+          cardHover: "#282C34",
+          chip: "#252830",
+          input: "#1A1D24",
+          code: "#12141A",
+          codeHeader: "#1A1D25",
+          accent: "#F3912E",
+          accentHover: "#E07D19",
+          lightBg: "#F4F6F9",
+          lightCard: "#FFFFFF",
         }
       },
       boxShadow: {

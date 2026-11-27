@@ -32,7 +32,7 @@ export const CourseCard: React.FC<CourseCardProps> = ({
       tabIndex={0}
       role="button"
       data-testid={`course-card-${course.id}`}
-      className={`group rounded-xl overflow-hidden bg-white dark:bg-[#22252C] dark:hover:bg-[#282C34] border transition-all duration-200 hover:-translate-y-0.5 hover:border-[rgba(243,145,46,0.65)] dark:hover:border-[rgba(243,145,46,0.65)] cursor-pointer flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F3912E] ${
+      className={`group rounded-xl overflow-hidden bg-white dark:bg-[#22252C] dark:hover:bg-[#282C34] border transition-all duration-200 hover:-translate-y-[3px] hover:border-[#F3912E]/65 dark:hover:border-[#F3912E]/65 hover:shadow-[0_12px_26px_-10px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_14px_30px_-10px_rgba(0,0,0,0.6)] cursor-pointer flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F3912E] ${
         course.featured
           ? 'border-[#F3912E]/55'
           : 'border-[#E2E8F0] dark:border-white/[0.07]'

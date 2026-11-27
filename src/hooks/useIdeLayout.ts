@@ -98,8 +98,11 @@ export function useIdeLayout(): UseIdeLayoutReturn {
       }
 
       const savedTab = localStorage.getItem('cortex_active_sidebar_tab') as SidebarTab;
-      if (savedTab && ['files', 'search', 'benchmark', 'practice', 'learn'].includes(savedTab)) {
+      if (savedTab && ['files', 'search', 'benchmark', 'practice'].includes(savedTab)) {
         setActiveSidebarTab(savedTab);
+      } else if (savedTab === 'learn') {
+        setActiveSidebarTab('files');
+        localStorage.setItem('cortex_active_sidebar_tab', 'files');
       }
 
       const savedSidebarOpen = localStorage.getItem('cortex_sidebar_open');

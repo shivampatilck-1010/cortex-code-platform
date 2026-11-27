@@ -148,8 +148,8 @@ export const NotesLessonView: React.FC<NotesLessonViewProps> = ({
           )}
 
           {sec.codeBlock && (
-            <div className="rounded-xl overflow-hidden border border-[#E2E8F0] dark:border-white/[0.08] bg-[#1A1D24] text-zinc-100">
-              <div className="h-10 px-3.5 bg-[#21242B] border-b border-white/[0.07] flex items-center justify-between text-[12px] font-mono text-zinc-300">
+            <div className="rounded-xl overflow-hidden border border-[#E2E8F0] dark:border-white/[0.08] bg-[#12141A] text-zinc-100">
+              <div className="h-10 px-3.5 bg-[#1A1D25] border-b border-white/[0.07] flex items-center justify-between text-[12px] font-mono text-zinc-300">
                 <span>{sec.codeBlock.filename}</span>
                 <div className="flex items-center gap-2.5">
                   <button

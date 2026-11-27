@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowUpRight,
   BookOpen,
   CheckCircle2,
   CheckSquare,
@@ -16,11 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { Course, LabLesson, NotesLesson } from '@/types/learn';
-import {
-  COURSES,
-  findLessonInCourse,
-  getCourseByIdOrSlug,
-} from '@/data/courses';
+import { findLessonInCourse, getCourseByIdOrSlug } from '@/data/courses';
 import { useLearnProgress } from '@/hooks/useLearnProgress';
 import { resolveLabTestCases } from '@/lib/execution/lab-runner';
 import type { TestCase } from '@/lib/execution/types';
@@ -90,7 +85,6 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
     markItemCompleted,
     toggleLabStep,
     getLabCheckedSteps,
-    getInProgressCourses,
   } = useLearnProgress();
 
   const [starterFeedback, setStarterFeedback] = useState<string | null>(null);
@@ -128,11 +122,6 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
     }
     return resolveLabTestCases(activeLab);
   }, [activeLab, labTestCases]);
-
-  const inProgressCourses = useMemo(
-    () => (hydrated ? getInProgressCourses(COURSES) : []),
-    [hydrated, getInProgressCourses]
-  );
 
   const rootStyle = width
     ? { width: `${width}px`, minWidth: `${width}px` }
@@ -573,115 +562,6 @@ export const LearnSidebar: React.FC<LearnSidebarProps> = ({
     );
   }
 
-  // Mode 3: Idle Mode (In-Progress Courses + Full Learning Hub CTA)
-  return (
-    <div
-      data-testid="learn-sidebar"
-      style={rootStyle}
-      className={`${rootThemeClass} h-full w-full flex flex-col select-none text-xs overflow-hidden`}
-    >
-      <div
-        data-testid="learn-companion-idle"
-        className="h-full flex flex-col overflow-hidden"
-      >
-        {/* Header */}
-        <div className="h-[34px] px-3 border-b border-black/[0.08] dark:border-white/[0.07] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <BookOpen className="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />
-            <span className="font-semibold uppercase tracking-wider text-[11px] text-zinc-700 dark:text-zinc-300 truncate">
-              Reference
-            </span>
-          </div>
-          <Link
-            href="/learn"
-            className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors shrink-0"
-            title="Open Learning Catalog"
-          >
-            <span>Catalog</span>
-            <ArrowUpRight className="w-3 h-3" />
-          </Link>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {inProgressCourses.length > 0 ? (
-            <>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-                In Progress
-              </div>
-              <div className="space-y-2">
-                {inProgressCourses.map((entry) => (
-                  <div
-                    key={entry.course.id}
-                    className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-2.5 space-y-2"
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
-                      <span className="text-zinc-500 truncate">
-                        {entry.course.track}
-                      </span>
-                      <span className="text-[#F59E0B] shrink-0">
-                        {entry.pct}%
-                      </span>
-                    </div>
-                    <div className="text-[12.5px] font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-1">
-                      {entry.course.title}
-                    </div>
-                    <div className="text-[11px] text-zinc-500 truncate">
-                      {entry.currentModuleTitle}
-                    </div>
-                    <div className="h-1 w-full rounded-full bg-zinc-200 dark:bg-white/[0.08] overflow-hidden">
-                      <div
-                        className="h-full bg-[#F59E0B] rounded-full transition-all duration-300"
-                        style={{ width: `${entry.pct}%` }}
-                      />
-                    </div>
-                    <Link
-                      href={`/learn/${entry.course.slug}?lesson=${encodeURIComponent(entry.resumeLesson.id)}`}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:text-[#F59E0B] transition-colors"
-                    >
-                      <span>Resume →</span>
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="rounded-lg border border-black/[0.08] dark:border-white/[0.07] bg-white dark:bg-[#16161A] p-3 space-y-2">
-              <div className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100">
-                Cortex Learn
-              </div>
-              <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                Explore {COURSES.length} structured courses with reading notes, concept quizzes, guided IDE labs, and timed exams.
-              </p>
-              <div className="pt-1 space-y-1">
-                {COURSES.map((course) => (
-                  <Link
-                    key={course.id}
-                    href={`/learn/${course.id}`}
-                    className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border border-black/[0.06] dark:border-white/[0.06] hover:border-black/15 dark:hover:border-white/15 text-[11px] text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-zinc-100 transition-colors"
-                  >
-                    <span className="truncate">{course.title}</span>
-                    <span className="text-[10px] font-mono text-zinc-500 shrink-0">
-                      {course.level}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 border-t border-black/[0.08] dark:border-white/[0.07] shrink-0">
-          <Link
-            href="/learn"
-            data-testid="learn-open-hub-link"
-            className="w-full h-8 px-3 rounded-md border border-black/10 dark:border-white/[0.1] bg-zinc-900 dark:bg-[#222227] text-zinc-100 hover:border-amber-500/40 hover:text-amber-400 text-[11px] font-medium inline-flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <span className="truncate">Open Full Learning Hub (/learn) ↗</span>
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+  // No active lab or snippet: never show the legacy Reference card list
+  return null;
 };

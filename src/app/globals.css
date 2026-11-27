@@ -7,6 +7,7 @@
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
     --border: 240 6% 90%;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   html.dark {
@@ -533,5 +534,95 @@ body.cortex-classroom-immersive {
   overflow: hidden !important;
   z-index: 30;
 }
+
+/* Native View Transitions API: frosted translucent radial reveal */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+  will-change: clip-path, filter, opacity;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+/* Smooth fallback surface crossfade for browsers without View Transitions */
+html.theme-glass-switching,
+html.theme-glass-switching body,
+html.theme-glass-switching header,
+html.theme-glass-switching aside,
+html.theme-glass-switching section,
+html.theme-glass-switching article,
+html.theme-glass-switching button,
+html.theme-glass-switching input,
+html.theme-glass-switching select {
+  transition:
+    background-color 520ms var(--ease-out),
+    border-color 520ms var(--ease-out),
+    color 420ms var(--ease-out),
+    box-shadow 520ms var(--ease-out) !important;
+}
+
+/* Frosted Glass Theme Toggle Button */
+.theme-glass-btn {
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition:
+    transform 220ms var(--ease-out),
+    border-color 220ms ease,
+    background-color 220ms ease,
+    box-shadow 220ms ease;
+}
+.theme-glass-btn:hover {
+  border-color: rgba(243, 145, 46, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 16px rgba(243, 145, 46, 0.16);
+}
+.theme-glass-btn:active {
+  transform: scale(0.92);
+}
+.theme-glass-btn.is-morphing svg {
+  animation: themeIconMorph 460ms var(--ease-out);
+}
+@keyframes themeIconMorph {
+  0% {
+    transform: rotate(-75deg) scale(0.55);
+    opacity: 0.25;
+  }
+  65% {
+    transform: rotate(12deg) scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Translucent Frosted Glass Wave Overlay */
+#themeGlassVeil {
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  opacity: 0;
+  will-change: opacity;
+}
+#themeGlassRing {
+  position: fixed;
+  border-radius: 9999px;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  will-change: transform, opacity;
+}
+
 
 

@@ -243,8 +243,8 @@ export const ExamLessonView: React.FC<ExamLessonViewProps> = ({
   const unansweredCount = lesson.questions.filter((q) => answers[q.id] === undefined).length;
   const timerColorClass =
     secondsLeft < 120
-      ? 'border-rose-500/40 bg-rose-500/15 text-rose-500'
-      : 'border-[#E2E8F0] dark:border-white/[0.1] bg-[#F1F5F9] dark:bg-[#1A1D24] text-[#0F172A] dark:text-zinc-100';
+      ? 'border-rose-500/50 bg-rose-500/15 text-rose-500'
+      : 'border-[#F3912E]/40 bg-[#F3912E]/10 text-[#F3912E]';
 
   return (
     <div className="space-y-5">
@@ -260,12 +260,10 @@ export const ExamLessonView: React.FC<ExamLessonViewProps> = ({
               'border-[#E2E8F0] dark:border-white/[0.08] bg-[#F1F5F9] dark:bg-[#1A1D24] text-[#64748B] dark:text-zinc-400';
             if (isCurrent) {
               pillCls =
-                'border-[#F3912E] bg-[#F3912E]/15 text-[#F3912E] font-semibold';
-            } else if (isFlagged) {
-              pillCls = 'border-[#F3912E]/50 text-[#F3912E]';
+                'border-[#F3912E] ring-2 ring-[#F3912E]/30 bg-[#F3912E]/15 text-[#F3912E] font-semibold';
             } else if (isAnswered) {
               pillCls =
-                'border-emerald-500/40 bg-emerald-500/15 text-emerald-500';
+                'border-[#F3912E] bg-[#F3912E] text-white font-semibold';
             }
 
             return (
@@ -273,10 +271,16 @@ export const ExamLessonView: React.FC<ExamLessonViewProps> = ({
                 key={q.id}
                 type="button"
                 onClick={() => setActiveQIndex(idx)}
-                className={`h-7 min-w-[28px] px-2 rounded-md text-[12px] font-mono border transition-colors ${pillCls}`}
+                className={`relative h-7 min-w-[28px] px-2 rounded-md text-[12px] font-mono border transition-colors ${pillCls}`}
                 aria-label={`Question ${idx + 1}`}
               >
                 {idx + 1}
+                {isFlagged && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 ring-1 ring-white dark:ring-[#21242B]"
+                  />
+                )}
               </button>
             );
           })}

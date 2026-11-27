@@ -566,10 +566,12 @@ function CloudIDEPageInner() {
     setThemeMode(nextDark ? 'dark' : 'light');
   };
 
-  const handleToggleDarkMode = (coords?: { x: number; y: number }) => {
+  const handleToggleDarkMode = (
+    origin?: { x: number; y: number } | React.MouseEvent<HTMLElement>
+  ) => {
     setUseHcBlack(false);
-    if (coords) {
-      toggleTheme(coords);
+    if (origin) {
+      toggleTheme(origin);
     } else if (typeof window !== 'undefined') {
       toggleTheme({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
     } else {
@@ -2067,14 +2069,21 @@ function CloudIDEPageInner() {
   const appliedQueryTabRef = useRef<string | null>(null);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const tabParam = new URLSearchParams(window.location.search).get('tab');
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    const hasLearnSession = Boolean(
+      params.get('snippet') || (params.get('course') && params.get('lesson'))
+    );
+    if (tabParam === 'learn' && !hasLearnSession) {
+      router.replace('/learn');
+      return;
+    }
     if (
       tabParam &&
       (tabParam === 'files' ||
         tabParam === 'search' ||
         tabParam === 'practice' ||
-        tabParam === 'benchmark' ||
-        tabParam === 'learn') &&
+        tabParam === 'benchmark') &&
       appliedQueryTabRef.current !== tabParam
     ) {
       appliedQueryTabRef.current = tabParam;
@@ -2084,7 +2093,7 @@ function CloudIDEPageInner() {
       setActiveSidebarTab(tabParam);
       setIsSidebarOpen(true);
     }
-  }, [setActiveSidebarTab, setIsSidebarOpen]);
+  }, [router, setActiveSidebarTab, setIsSidebarOpen]);
 
   const activeChallengeFile = useMemo(() => {
     if (!activePracticeChallenge) return null;
@@ -2393,12 +2402,10 @@ function CloudIDEPageInner() {
       },
       {
         id: 'cmd-open-learn',
-        label: 'Show Reference & Courses',
+        label: 'Open CortexLearn Courses',
         category: 'Navigation',
         action: () => {
-          setActivePracticeChallenge(null);
-          setActiveSidebarTab('learn');
-          setIsSidebarOpen(true);
+          router.push('/learn');
         },
       },
       {
@@ -3059,7 +3066,7 @@ function CloudIDEPageInner() {
                     />
                   )}
 
-                  {panel === 'learn' && (
+                  {panel === 'learn' && (activeLabContext || activeLearnSnippet) && (
                     <LearnSidebar
                       width={sidebarWidth}
                       isDarkMode={isDarkMode}

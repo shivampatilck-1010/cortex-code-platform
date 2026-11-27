@@ -23,6 +23,7 @@ import { ExamLessonView } from './ExamLessonView';
 import { LabLessonView } from './LabLessonView';
 import { NotesLessonView } from './NotesLessonView';
 import { QuizLessonView } from './QuizLessonView';
+import { SandboxDrawer } from './SandboxDrawer';
 
 export const LEARN_PENDING_SNIPPET_KEY = 'cortex_ide_pending_snippet';
 
@@ -88,6 +89,11 @@ export const CoursePlayerShell: React.FC<CoursePlayerShellProps> = ({
   const [examStarted, setExamStarted] = useState(false);
   const [examSubmitted, setExamSubmitted] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [sandboxSnippet, setSandboxSnippet] = useState<{
+    code: string;
+    language: string;
+    filename: string;
+  } | null>(null);
 
   useEffect(() => {
     if (initialLessonId && findLessonInCourse(course, initialLessonId)) {
@@ -169,29 +175,11 @@ export const CoursePlayerShell: React.FC<CoursePlayerShellProps> = ({
   };
 
   const handleTryInIde = (codeBlock: NotesCodeBlock) => {
-    if (typeof window !== 'undefined') {
-      try {
-        window.sessionStorage.setItem(
-          LEARN_PENDING_SNIPPET_KEY,
-          JSON.stringify({
-            code: codeBlock.code,
-            language: codeBlock.language,
-            filename: codeBlock.filename,
-            courseId: course.id,
-            lessonId: activeItem?.id ?? '',
-          })
-        );
-      } catch {
-        // Ignore storage errors
-      }
-    }
-    router.push(
-      `/ide?snippet=1&course=${encodeURIComponent(course.id)}&lesson=${encodeURIComponent(
-        activeItem?.id ?? ''
-      )}&lang=${encodeURIComponent(codeBlock.language)}&filename=${encodeURIComponent(
-        codeBlock.filename
-      )}`
-    );
+    setSandboxSnippet({
+      code: codeBlock.code,
+      language: codeBlock.language,
+      filename: codeBlock.filename,
+    });
   };
 
   if (!activeItem || !activeInfo) {
@@ -223,8 +211,8 @@ export const CoursePlayerShell: React.FC<CoursePlayerShellProps> = ({
         isDarkMode ? 'dark' : ''
       }`}
     >
-      {/* 58px Full-Screen Course Player Top Bar */}
-      <header className="h-[58px] shrink-0 px-4 sm:px-6 flex items-center justify-between gap-3 border-b border-[#E2E8F0] dark:border-white/[0.07] bg-white dark:bg-[#21242B]">
+      {/* 58px Glassy Course Player Top Bar */}
+      <header className="h-[58px] shrink-0 px-4 sm:px-6 flex items-center justify-between gap-3 border-b border-slate-200/80 dark:border-white/[0.08] bg-white/80 dark:bg-[#21242B]/80 backdrop-blur-xl">
         <div className="flex items-center gap-2.5 min-w-0">
           {!isExamActive && (
             <button
@@ -281,16 +269,10 @@ export const CoursePlayerShell: React.FC<CoursePlayerShellProps> = ({
 
           <button
             type="button"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              toggleTheme({
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2,
-              });
-            }}
+            onClick={(e) => toggleTheme(e)}
             aria-label="Toggle Light and Dark Mode"
             data-testid="player-theme-toggle"
-            className="h-8 w-8 rounded-lg inline-flex items-center justify-center bg-[#F1F5F9] dark:bg-[#1A1D24] border border-[#E2E8F0] dark:border-white/[0.12] text-[#0F172A] dark:text-zinc-200 hover:border-[#F3912E] transition-colors"
+            className="theme-glass-btn h-8 w-8 rounded-lg inline-flex items-center justify-center bg-[#F1F5F9]/90 dark:bg-[#1A1D24]/90 border border-slate-300 dark:border-white/[0.14] text-[#0F172A] dark:text-zinc-200"
           >
             {isDarkMode ? (
               <Sun className="w-4 h-4 text-[#F3912E]" />
@@ -308,7 +290,7 @@ export const CoursePlayerShell: React.FC<CoursePlayerShellProps> = ({
           <aside
             data-testid="syllabus-drawer"
             style={{ width: sidebarOpen ? 290 : 0 }}
-            className={`h-full shrink-0 overflow-hidden bg-white dark:bg-[#21242B] transition-[width,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            className={`h-full shrink-0 overflow-hidden bg-white dark:bg-[#21242B] transition-[width,opacity] duration-[210ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
               sidebarOpen
                 ? 'opacity-100 border-r border-[#E2E8F0] dark:border-white/[0.07]'
                 : 'opacity-0 border-r-0'
@@ -493,6 +475,15 @@ export const CoursePlayerShell: React.FC<CoursePlayerShellProps> = ({
           </div>
         </main>
       </div>
+
+      <SandboxDrawer
+        open={Boolean(sandboxSnippet)}
+        initialCode={sandboxSnippet?.code}
+        initialLanguage={sandboxSnippet?.language}
+        initialFilename={sandboxSnippet?.filename}
+        isDarkMode={isDarkMode}
+        onClose={() => setSandboxSnippet(null)}
+      />
     </div>
   );
 };

@@ -314,6 +314,15 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
     const isFilesRoute = pathname === '/ide' || pathname.startsWith('/ide');
     dismissTooltip(item.id);
 
+    if (item.id === 'learn') {
+      try {
+        if (localStorage.getItem('cortex_active_sidebar_tab') === 'learn') {
+          localStorage.setItem('cortex_active_sidebar_tab', 'files');
+        }
+      } catch {}
+      return;
+    }
+
     if (isFilesRoute) {
       e.preventDefault();
       window.dispatchEvent(
@@ -335,7 +344,7 @@ export const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
     { id: 'search', name: 'Search', href: '/ide?tab=search', icon: Search },
     { id: 'practice', name: 'Practice Hub', href: '/challenges', icon: Swords },
     { id: 'benchmark', name: 'Telemetry', href: '/compare', icon: BarChart3 },
-    { id: 'learn', name: 'Reference', href: '/learn', icon: BookOpen },
+    { id: 'learn', name: 'CortexLearn', href: '/learn', icon: BookOpen },
   ];
 
   return (

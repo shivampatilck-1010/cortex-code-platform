@@ -48,7 +48,7 @@ export interface CommandPaletteItem {
 export interface CortexIdeShellProps {
   workspaceName?: string;
   isDarkMode: boolean;
-  onToggleDarkMode: (coords?: { x: number; y: number }) => void;
+  onToggleDarkMode: (origin?: { x: number; y: number } | React.MouseEvent<HTMLElement>) => void;
   currentLanguage: LanguageConfig;
   onLanguageChange?: (lang: LanguageConfig) => void;
   isExecutable?: boolean;
@@ -549,22 +549,16 @@ export const CortexIdeShell: React.FC<CortexIdeShellProps> = ({
             )}
           </div>
 
-          {/* Minimal 28px Theme Icon Button */}
+          {/* Frosted Glass Theme Icon Button */}
           <button
             type="button"
             data-testid="ide-theme-toggle"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              onToggleDarkMode({
-                x: e.clientX || rect.left + rect.width / 2,
-                y: e.clientY || rect.top + rect.height / 2,
-              });
-            }}
+            onClick={(e) => onToggleDarkMode(e)}
             title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            className="h-7 w-7 rounded-md inline-flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-colors"
+            className="theme-glass-btn h-7 w-7 rounded-md inline-flex items-center justify-center border border-black/[0.08] dark:border-white/[0.12] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]"
           >
-            {isDarkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            {isDarkMode ? <Sun className="w-3.5 h-3.5 text-[#F3912E]" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
         </div>
       </header>

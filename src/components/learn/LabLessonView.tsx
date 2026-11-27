@@ -160,10 +160,10 @@ export const LabLessonView: React.FC<LabLessonViewProps> = ({
         </div>
       </div>
 
-      {/* Split-Pane Lab Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+      {/* Split-Pane Lab Workspace (39% Left Checklist / 61% Live IDE Editor) */}
+      <div className="flex flex-col lg:flex-row gap-5 items-stretch">
         {/* Left Column: Objective & Checkable Checklist */}
-        <div className="lg:col-span-5 space-y-4 flex flex-col">
+        <div className="w-full lg:w-[39%] shrink-0 space-y-4 flex flex-col">
           <div className="rounded-xl border border-[#E2E8F0] dark:border-white/[0.07] bg-white dark:bg-[#22252C] p-4 space-y-2">
             <div className="text-[11px] font-mono uppercase tracking-wider text-[#F3912E] font-semibold">
               Objective
@@ -227,7 +227,7 @@ export const LabLessonView: React.FC<LabLessonViewProps> = ({
         </div>
 
         {/* Right Column: Embedded Monaco Editor + Reset / Run Tests + Test Results */}
-        <div className="lg:col-span-7 rounded-xl overflow-hidden border border-[#E2E8F0] dark:border-white/[0.08] bg-white dark:bg-[#22252C] flex flex-col min-h-[540px]">
+        <div className="flex-1 min-w-0 rounded-xl overflow-hidden border border-[#E2E8F0] dark:border-white/[0.08] bg-white dark:bg-[#22252C] flex flex-col min-h-[540px]">
           {/* Editor Action Toolbar */}
           <div className="h-11 px-3.5 bg-slate-100 dark:bg-[#21242B] border-b border-[#E2E8F0] dark:border-white/[0.07] flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
@@ -272,7 +272,7 @@ export const LabLessonView: React.FC<LabLessonViewProps> = ({
               onCloseFile={() => {}}
               onContentChange={handleCodeChange}
               language={langConfig.monacoLang}
-              theme={isDarkMode ? 'cortex-dark' : 'cortex-light'}
+              theme={isDarkMode ? 'cs-dark' : 'cortex-light'}
               fontSize={13}
               breakpoints={[]}
               onToggleBreakpoint={() => {}}
